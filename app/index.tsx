@@ -23,7 +23,7 @@ const Stack = createNativeStackNavigator();
 
 export default function App() {
   const [cargando, setCargando] = useState(true);
-  const [rutaInicial, setRutaInicial] = useState('PerfilEmpresa');
+  const [rutaInicial, setRutaInicial] = useState('Ingresar');
   const [paramsIniciales, setParamsIniciales] = useState(undefined);
 
   useEffect(() => {
@@ -32,12 +32,11 @@ export default function App() {
 
   const revisarSesion = async () => {
     try {
-      const sesionGuardada = await AsyncStorage.getItem('sesion');
-      if (sesionGuardada) {
-        setRutaInicial('Ingresar');
-      } else {
-        setRutaInicial('PerfilEmpresa');
-      }
+      // Tanto si hay sesión guardada como si no, siempre arrancamos en "Ingresar":
+      // - Si hay sesión guardada, el celular ya viene prellenado y puede entrar directo.
+      // - Si no hay sesión (primera vez, o reinstalación), puede iniciar sesión con una
+      //   cuenta existente o tocar "Crear perfil de empresa" si es realmente nuevo.
+      setRutaInicial('Ingresar');
     } catch (error) {
       console.error('Error revisando sesión:', error);
     } finally {

@@ -1,8 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import InputCelular, { detectarPaisPorDispositivo } from '../components/InputCelular';
+import InputCelular, { detectarPaisPorDispositivo, PAISES } from '../components/InputCelular';
 
 export default function IngresarScreen({ navigation }) {
   const [celular, setCelular] = useState('');
@@ -11,6 +11,30 @@ export default function IngresarScreen({ navigation }) {
   const [requiereContraseña, setRequiereContraseña] = useState(false);
   const [verificado, setVerificado] = useState(false);
   const [cargando, setCargando] = useState(false);
+
+  // Si el celular ya inició sesión antes en este dispositivo, prellenamos su número
+  // para que solo tenga que confirmar (no volver a escribirlo desde cero).
+  useEffect(() => {
+    precargarUltimoCelular();
+  }, []);
+
+  const precargarUltimoCelular = async () => {
+    try {
+      const sesionGuardada = await AsyncStorage.getItem('sesion');
+      if (!sesionGuardada) return;
+      const sesion = JSON.parse(sesionGuardada);
+      const celularCompleto = sesion?.usuario?.celular;
+      if (!celularCompleto) return;
+
+      const paisEncontrado = PAISES.find((p) => celularCompleto.startsWith(p.prefijo));
+      if (paisEncontrado) {
+        setPaisCelular(paisEncontrado);
+        setCelular(celularCompleto.replace(paisEncontrado.prefijo, '').trim());
+      }
+    } catch (error) {
+      console.error('Error precargando último celular:', error);
+    }
+  };
 
   const verificarCelular = async () => {
     if (!celular.trim()) {
