@@ -6,6 +6,7 @@ import * as Sharing from 'expo-sharing';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Image, KeyboardAvoidingView, Modal, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { storage } from '../../firebaseConfig';
 import EncabezadoLogo from '../components/EncabezadoLogo';
 import ImagenZoom from '../components/ImagenZoom';
@@ -129,7 +130,7 @@ export default function AreaProyectoScreen({ route }) {
       Alert.alert('¡Listo!', 'La foto se guardó en la galería de tu celular.');
     } catch (error) {
       console.error('Error descargando foto:', error);
-      Alert.alert('Error', 'No se pudo guardar la foto.');
+      Alert.alert('Error', `No se pudo guardar la foto.\n${error?.message || error}`);
     } finally {
       setGuardandoFoto(false);
     }
@@ -149,7 +150,7 @@ export default function AreaProyectoScreen({ route }) {
       await Sharing.shareAsync(uri);
     } catch (error) {
       console.error('Error compartiendo foto:', error);
-      Alert.alert('Error', 'No se pudo compartir la foto.');
+      Alert.alert('Error', `No se pudo compartir la foto.\n${error?.message || error}`);
     } finally {
       setGuardandoFoto(false);
     }
@@ -339,33 +340,36 @@ export default function AreaProyectoScreen({ route }) {
       )}
 
       <Modal visible={!!fotoAmpliada} animationType="fade" transparent>
-        <View style={styles.fotoAmpliadaOverlay}>
-          {fotoAmpliada && (
-            <>
-              <View style={styles.fotoAmpliadaImagenContainer}>
-                <ImagenZoom uri={fotoAmpliada.foto_url} />
-              </View>
-              <Text style={styles.fotoAmpliadaAyuda}>Pellizca para hacer zoom · doble toque para volver al tamaño normal</Text>
-              <Text style={styles.fotoAmpliadaInfo}>
-                {fotoAmpliada.usuario_nombre} · {formatearFechaFoto(fotoAmpliada.created_at)}
-              </Text>
-              <View style={styles.fotoAmpliadaBotones}>
-                <TouchableOpacity style={styles.fotoAmpliadaBoton} onPress={() => descargarFoto(fotoAmpliada)} disabled={guardandoFoto}>
-                  <Text style={styles.fotoAmpliadaBotonTexto}>⬇️ Descargar</Text>
+        <GestureHandlerRootView style={{ flex: 1 }}>
+          <View style={styles.fotoAmpliadaOverlay}>
+            {fotoAmpliada && (
+              <>
+                <View style={styles.fotoAmpliadaImagenContainer}>
+                  <ImagenZoom uri={fotoAmpliada.foto_url} />
+                </View>
+                <Text style={styles.fotoAmpliadaAyuda}>Pellizca para hacer zoom · doble toque para volver al tamaño normal</Text>
+                <Text style={styles.fotoAmpliadaInfo}>
+                  {fotoAmpliada.usuario_nombre} · {formatearFechaFoto(fotoAmpliada.created_at)}
+                </Text>
+                {guardandoFoto && <ActivityIndicator color="#fff" style={{ marginTop: 10 }} />}
+                <View style={styles.fotoAmpliadaBotones}>
+                  <TouchableOpacity style={styles.fotoAmpliadaBoton} onPress={() => descargarFoto(fotoAmpliada)} disabled={guardandoFoto}>
+                    <Text style={styles.fotoAmpliadaBotonTexto}>⬇️ Descargar</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.fotoAmpliadaBoton} onPress={() => compartirFoto(fotoAmpliada)} disabled={guardandoFoto}>
+                    <Text style={styles.fotoAmpliadaBotonTexto}>📤 Compartir</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.fotoAmpliadaBoton} onPress={() => confirmarEliminarFoto(fotoAmpliada)}>
+                    <Text style={styles.fotoAmpliadaBotonTexto}>🗑️ Eliminar</Text>
+                  </TouchableOpacity>
+                </View>
+                <TouchableOpacity style={styles.fotoAmpliadaCerrar} onPress={() => setFotoAmpliada(null)}>
+                  <Text style={styles.fotoAmpliadaBotonTexto}>Cerrar</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.fotoAmpliadaBoton} onPress={() => compartirFoto(fotoAmpliada)} disabled={guardandoFoto}>
-                  <Text style={styles.fotoAmpliadaBotonTexto}>📤 Compartir</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.fotoAmpliadaBoton} onPress={() => confirmarEliminarFoto(fotoAmpliada)}>
-                  <Text style={styles.fotoAmpliadaBotonTexto}>🗑️ Eliminar</Text>
-                </TouchableOpacity>
-              </View>
-              <TouchableOpacity style={styles.fotoAmpliadaCerrar} onPress={() => setFotoAmpliada(null)}>
-                <Text style={styles.fotoAmpliadaBotonTexto}>Cerrar</Text>
-              </TouchableOpacity>
-            </>
-          )}
-        </View>
+              </>
+            )}
+          </View>
+        </GestureHandlerRootView>
       </Modal>
 
       <Modal visible={modalAsignarVisible} animationType="slide">
