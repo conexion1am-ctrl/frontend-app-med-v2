@@ -10,9 +10,11 @@
     "newArchEnabled": true,
     "main": "app.js",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.cydmanager.app"
     },
     "android": {
+      "package": "com.cydmanager.app",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
