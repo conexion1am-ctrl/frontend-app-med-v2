@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "frontend-app-med-v2",
+    "name": "C&D Manager",
     "slug": "frontend-app-med-v2",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -22,7 +22,15 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_VISUAL_USER_SELECTED",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.READ_MEDIA_AUDIO"
+      ]
     },
     "web": {
       "output": "static",
@@ -38,6 +46,11 @@
           "isAccessMediaLocationEnabled": false
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "2118cf40-e521-46ed-931e-f3b1dd5aa16f"
+      }
+    }
   }
 }
