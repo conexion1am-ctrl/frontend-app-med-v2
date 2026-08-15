@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import AceptarInvitacionScreen from './screens/AceptarInvitacionScreen';
 import AreaProyectoScreen from './screens/AreaProyectoScreen';
 import BienvenidaScreen from './screens/BienvenidaScreen';
@@ -53,6 +54,7 @@ export default function App() {
   }
 
   return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
     <Stack.Navigator initialRouteName={rutaInicial} screenOptions={{ headerShown: false }}>
       <Stack.Screen name="PerfilEmpresa" component={PerfilEmpresaScreen} />
       <Stack.Screen name="Ingresar" component={IngresarScreen} />
@@ -106,5 +108,6 @@ export default function App() {
         options={{ headerShown: true, title: 'Estadísticas' }}
       />
     </Stack.Navigator>
+    </GestureHandlerRootView>
   );
 }

@@ -1,10 +1,14 @@
 import axios from 'axios';
+import * as FileSystem from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
+import * as MediaLibrary from 'expo-media-library';
+import * as Sharing from 'expo-sharing';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Image, KeyboardAvoidingView, Modal, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { storage } from '../../firebaseConfig';
 import EncabezadoLogo from '../components/EncabezadoLogo';
+import ImagenZoom from '../components/ImagenZoom';
 
 const formatearFechaFoto = (fecha) => {
   if (!fecha) return '';
@@ -106,6 +110,49 @@ export default function AreaProyectoScreen({ route }) {
       { text: 'Cámara', onPress: () => elegirYSubirFoto(true) },
       { text: 'Galería', onPress: () => elegirYSubirFoto(false) },
     ]);
+  };
+
+  const [guardandoFoto, setGuardandoFoto] = useState(false);
+
+  const descargarFoto = async (foto) => {
+    setGuardandoFoto(true);
+    try {
+      const permiso = await MediaLibrary.requestPermissionsAsync();
+      if (!permiso.granted) {
+        Alert.alert('Permiso necesario', 'Necesitamos acceso a tus fotos para poder guardarla.');
+        return;
+      }
+      const nombreArchivo = `avance_${Date.now()}.jpg`;
+      const rutaLocal = `${FileSystem.cacheDirectory}${nombreArchivo}`;
+      const { uri } = await FileSystem.downloadAsync(foto.foto_url, rutaLocal);
+      await MediaLibrary.saveToLibraryAsync(uri);
+      Alert.alert('¡Listo!', 'La foto se guardó en la galería de tu celular.');
+    } catch (error) {
+      console.error('Error descargando foto:', error);
+      Alert.alert('Error', 'No se pudo guardar la foto.');
+    } finally {
+      setGuardandoFoto(false);
+    }
+  };
+
+  const compartirFoto = async (foto) => {
+    setGuardandoFoto(true);
+    try {
+      const disponible = await Sharing.isAvailableAsync();
+      if (!disponible) {
+        Alert.alert('No disponible', 'Compartir no está disponible en este dispositivo.');
+        return;
+      }
+      const nombreArchivo = `avance_${Date.now()}.jpg`;
+      const rutaLocal = `${FileSystem.cacheDirectory}${nombreArchivo}`;
+      const { uri } = await FileSystem.downloadAsync(foto.foto_url, rutaLocal);
+      await Sharing.shareAsync(uri);
+    } catch (error) {
+      console.error('Error compartiendo foto:', error);
+      Alert.alert('Error', 'No se pudo compartir la foto.');
+    } finally {
+      setGuardandoFoto(false);
+    }
   };
 
   const confirmarEliminarFoto = (foto) => {
@@ -295,18 +342,27 @@ export default function AreaProyectoScreen({ route }) {
         <View style={styles.fotoAmpliadaOverlay}>
           {fotoAmpliada && (
             <>
-              <Image source={{ uri: fotoAmpliada.foto_url }} style={styles.fotoAmpliadaImagen} resizeMode="contain" />
+              <View style={styles.fotoAmpliadaImagenContainer}>
+                <ImagenZoom uri={fotoAmpliada.foto_url} />
+              </View>
+              <Text style={styles.fotoAmpliadaAyuda}>Pellizca para hacer zoom · doble toque para volver al tamaño normal</Text>
               <Text style={styles.fotoAmpliadaInfo}>
                 {fotoAmpliada.usuario_nombre} · {formatearFechaFoto(fotoAmpliada.created_at)}
               </Text>
               <View style={styles.fotoAmpliadaBotones}>
+                <TouchableOpacity style={styles.fotoAmpliadaBoton} onPress={() => descargarFoto(fotoAmpliada)} disabled={guardandoFoto}>
+                  <Text style={styles.fotoAmpliadaBotonTexto}>⬇️ Descargar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.fotoAmpliadaBoton} onPress={() => compartirFoto(fotoAmpliada)} disabled={guardandoFoto}>
+                  <Text style={styles.fotoAmpliadaBotonTexto}>📤 Compartir</Text>
+                </TouchableOpacity>
                 <TouchableOpacity style={styles.fotoAmpliadaBoton} onPress={() => confirmarEliminarFoto(fotoAmpliada)}>
                   <Text style={styles.fotoAmpliadaBotonTexto}>🗑️ Eliminar</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.fotoAmpliadaBoton} onPress={() => setFotoAmpliada(null)}>
-                  <Text style={styles.fotoAmpliadaBotonTexto}>Cerrar</Text>
-                </TouchableOpacity>
               </View>
+              <TouchableOpacity style={styles.fotoAmpliadaCerrar} onPress={() => setFotoAmpliada(null)}>
+                <Text style={styles.fotoAmpliadaBotonTexto}>Cerrar</Text>
+              </TouchableOpacity>
             </>
           )}
         </View>
@@ -440,9 +496,11 @@ const styles = StyleSheet.create({
   fotoMiniatura: { flex: 1 / 3, aspectRatio: 1, margin: 4, borderRadius: 8, overflow: 'hidden', backgroundColor: '#eee' },
   fotoMiniaturaImagen: { width: '100%', height: '100%' },
   fotoAmpliadaOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'center', alignItems: 'center', padding: 16 },
-  fotoAmpliadaImagen: { width: '100%', height: '70%' },
-  fotoAmpliadaInfo: { color: '#fff', fontSize: 13, marginTop: 12, textAlign: 'center' },
-  fotoAmpliadaBotones: { flexDirection: 'row', gap: 16, marginTop: 20 },
-  fotoAmpliadaBoton: { backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 8, paddingVertical: 10, paddingHorizontal: 18 },
+  fotoAmpliadaImagenContainer: { width: '100%', height: '62%', overflow: 'hidden' },
+  fotoAmpliadaAyuda: { color: 'rgba(255,255,255,0.6)', fontSize: 11, marginTop: 10, textAlign: 'center' },
+  fotoAmpliadaInfo: { color: '#fff', fontSize: 13, marginTop: 6, textAlign: 'center' },
+  fotoAmpliadaBotones: { flexDirection: 'row', gap: 10, marginTop: 20, flexWrap: 'wrap', justifyContent: 'center' },
+  fotoAmpliadaBoton: { backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 8, paddingVertical: 10, paddingHorizontal: 14 },
   fotoAmpliadaBotonTexto: { color: '#fff', fontSize: 14, fontWeight: '600' },
+  fotoAmpliadaCerrar: { marginTop: 16, paddingVertical: 10, paddingHorizontal: 24, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)' },
 });

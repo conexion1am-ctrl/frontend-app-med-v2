@@ -27,7 +27,14 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
-      "expo-localization"
+      "expo-localization",
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Permite guardar las fotos de avance de obra en tu galería.",
+          "savePhotosPermission": "Permite guardar las fotos de avance de obra en tu galería."
+        }
+      ]
     ]
   }
 }
