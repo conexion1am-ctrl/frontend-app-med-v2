@@ -32,7 +32,8 @@
         "expo-media-library",
         {
           "photosPermission": "Permite guardar las fotos de avance de obra en tu galería.",
-          "savePhotosPermission": "Permite guardar las fotos de avance de obra en tu galería."
+          "savePhotosPermission": "Permite guardar las fotos de avance de obra en tu galería.",
+          "isAccessMediaLocationEnabled": false
         }
       ]
     ]
