@@ -191,7 +191,10 @@ export default function AreaProyectoScreen({ route }) {
   const abrirAsignar = async () => {
     try {
       const response = await axios.get(`https://backend-app-mediterraneo.onrender.com/api/areas/personal/${empresa.id}`);
-      const delArea = response.data.personal.filter((p) => p.area_id === area.id);
+      // Solo se puede asignar personal ya VINCULADO (con usuario_id real).
+      // Las personas "pendientes" (invitadas pero que aún no aceptaron) no tienen usuario_id
+      // todavía y no pueden ser asignadas a un proyecto hasta que acepten la invitación.
+      const delArea = response.data.personal.filter((p) => p.area_id === area.id && p.estado === 'vinculado' && p.usuario_id);
       setPersonalDisponible(delArea);
       setModalAsignarVisible(true);
     } catch (error) {
@@ -377,14 +380,18 @@ export default function AreaProyectoScreen({ route }) {
           <Text style={styles.modalTitulo}>Asignar a {area.nombre}</Text>
           <FlatList
             data={personalDisponible}
-            keyExtractor={(item) => item.usuario_id.toString()}
+            keyExtractor={(item, index) => (item.usuario_id != null ? item.usuario_id.toString() : `sin-id-${index}`)}
             renderItem={({ item }) => (
               <TouchableOpacity style={styles.opcionPersona} onPress={() => asignarPersona(item.usuario_id)}>
                 <Text style={styles.opcionPersonaTexto}>{item.nombre}</Text>
                 <Text style={styles.opcionPersonaCelular}>{item.celular}</Text>
               </TouchableOpacity>
             )}
-            ListEmptyComponent={<Text style={styles.vacioTexto}>No hay personal en esta área todavía. Agrégalo en Grupo de Trabajo.</Text>}
+            ListEmptyComponent={
+              <Text style={styles.vacioTexto}>
+                No hay personal vinculado en esta área todavía. Ve a Grupo de Trabajo para agregar o invitar personas (las personas invitadas aparecerán aquí solo después de aceptar).
+              </Text>
+            }
           />
           <TouchableOpacity style={styles.botonCancelar} onPress={() => setModalAsignarVisible(false)}>
             <Text style={styles.botonCancelarTexto}>Cerrar</Text>
