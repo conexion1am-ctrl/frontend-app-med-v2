@@ -45,6 +45,13 @@
           "savePhotosPermission": "Permite guardar las fotos de avance de obra en tu galería.",
           "isAccessMediaLocationEnabled": false
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#1E90FF"
+        }
       ]
     ],
     "extra": {

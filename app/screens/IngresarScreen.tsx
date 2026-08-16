@@ -4,12 +4,15 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import InputCelular, { detectarPaisPorDispositivo, PAISES } from '../components/InputCelular';
 import InputContraseña from '../components/InputContraseña';
+import { registrarNotificacionesPush } from '../utils/notificacionesPush';
 
 export default function IngresarScreen({ navigation }) {
   const [celular, setCelular] = useState('');
   const [paisCelular, setPaisCelular] = useState(detectarPaisPorDispositivo());
   const [contraseña, setContraseña] = useState('');
+  const [confirmarContraseña, setConfirmarContraseña] = useState('');
   const [requiereContraseña, setRequiereContraseña] = useState(false);
+  const [debeCrearContraseña, setDebeCrearContraseña] = useState(false);
   const [verificado, setVerificado] = useState(false);
   const [cargando, setCargando] = useState(false);
 
@@ -48,6 +51,7 @@ export default function IngresarScreen({ navigation }) {
       const celularCompleto = `${paisCelular.prefijo} ${celular}`;
       const response = await axios.post('https://backend-app-mediterraneo.onrender.com/api/auth/verificar', { celular: celularCompleto });
       setRequiereContraseña(response.data.requiere_contraseña);
+      setDebeCrearContraseña(!!response.data.debe_crear_contraseña);
       setVerificado(true);
       if (!response.data.requiere_contraseña) {
         await hacerLogin();
@@ -59,6 +63,20 @@ export default function IngresarScreen({ navigation }) {
     } finally {
       setCargando(false);
     }
+  };
+
+  const intentarLogin = async () => {
+    if (debeCrearContraseña) {
+      if (!contraseña || contraseña.length < 6) {
+        Alert.alert('Contraseña requerida', 'Crea una contraseña de al menos 6 caracteres.');
+        return;
+      }
+      if (contraseña !== confirmarContraseña) {
+        Alert.alert('Las contraseñas no coinciden', 'Verifica que ambas contraseñas sean iguales.');
+        return;
+      }
+    }
+    await hacerLogin();
   };
 
   const hacerLogin = async (contraseñaValor) => {
@@ -75,6 +93,7 @@ export default function IngresarScreen({ navigation }) {
         empresas: response.data.empresas,
       };
       await AsyncStorage.setItem('sesion', JSON.stringify(sesion));
+      registrarNotificacionesPush(response.data.usuario.id);
 
       if (response.data.empresas.length > 1) {
         // Pertenece a varias empresas: que elija con cuál entrar
@@ -128,18 +147,30 @@ export default function IngresarScreen({ navigation }) {
 
         {verificado && requiereContraseña && (
           <>
-            <Text style={styles.label}>Contraseña</Text>
+            <Text style={styles.label}>{debeCrearContraseña ? 'Crea tu contraseña' : 'Contraseña'}</Text>
+            {debeCrearContraseña && (
+              <Text style={styles.notaTexto}>
+                Es la primera vez que ingresas con contraseña. Crea una de al menos 6 caracteres.
+              </Text>
+            )}
             <InputContraseña
               value={contraseña}
               onChangeText={setContraseña}
-              placeholder="Tu contraseña"
+              placeholder={debeCrearContraseña ? 'Crea tu contraseña (mínimo 6 caracteres)' : 'Tu contraseña'}
             />
+            {debeCrearContraseña && (
+              <InputContraseña
+                value={confirmarContraseña}
+                onChangeText={setConfirmarContraseña}
+                placeholder="Confirma tu contraseña"
+              />
+            )}
           </>
         )}
 
         <TouchableOpacity
           style={styles.boton}
-          onPress={verificado && requiereContraseña ? () => hacerLogin() : verificarCelular}
+          onPress={verificado && requiereContraseña ? () => intentarLogin() : verificarCelular}
           disabled={cargando}
         >
           {cargando ? <ActivityIndicator color="#fff" /> : <Text style={styles.botonTexto}>INGRESAR</Text>}
@@ -158,6 +189,7 @@ const styles = StyleSheet.create({
   titulo: { fontSize: 26, fontWeight: 'bold', marginBottom: 6, textAlign: 'center' },
   subtitulo: { fontSize: 14, color: '#666', marginBottom: 30, textAlign: 'center' },
   label: { fontSize: 13, fontWeight: '600', color: '#333', marginBottom: 6, marginTop: 14 },
+  notaTexto: { fontSize: 12, color: '#888', marginBottom: 8 },
   input: {
     backgroundColor: '#fff',
     borderRadius: 8,

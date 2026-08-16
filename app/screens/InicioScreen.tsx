@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useEffect, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import EncabezadoLogo from '../components/EncabezadoLogo';
+import { setNavigationGlobal } from '../utils/navigationGlobal';
 
 const BOTONES_INICIO = [
   { id: 'editar_perfil', titulo: 'Editar perfil', ruta: 'EditarPerfil' },
@@ -20,7 +21,10 @@ export default function InicioScreen({ route, navigation }) {
 
   useEffect(() => {
     revisarSiTieneVariasEmpresas();
-  }, []);
+    // Guardamos "navigation" para poder abrir pantallas desde fuera (ej. al tocar una
+    // notificación push), ya que Inicio siempre está montada mientras hay sesión activa.
+    setNavigationGlobal(navigation);
+  }, [navigation]);
 
   const revisarSiTieneVariasEmpresas = async () => {
     try {

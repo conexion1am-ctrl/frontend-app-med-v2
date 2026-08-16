@@ -6,7 +6,7 @@ import { Image, StyleSheet, Text, View } from 'react-native';
 // Uso en la pantalla de Inicio (logo + nombre empresa + usuario):
 //   <EncabezadoLogo empresa={empresa} usuario={usuario} completo />
 //
-// Uso en el resto de pantallas (solo el logo centrado arriba):
+// Uso en el resto de pantallas (logo + nombre de la empresa centrados arriba):
 //   <EncabezadoLogo empresa={empresa} />
 
 export default function EncabezadoLogo({ empresa, usuario, completo = false }) {
@@ -24,13 +24,10 @@ export default function EncabezadoLogo({ empresa, usuario, completo = false }) {
         </View>
       )}
 
-      {completo && (
-        <>
-          <Text style={styles.nombreEmpresa}>{empresa.nombre}</Text>
-          {usuario && (
-            <Text style={styles.nombreUsuario}>{usuario.nombre}</Text>
-          )}
-        </>
+      {/* El nombre de la empresa aparece siempre bajo el logo. El nombre del usuario solo en Inicio. */}
+      <Text style={styles.nombreEmpresa}>{empresa.nombre}</Text>
+      {completo && usuario && (
+        <Text style={styles.nombreUsuario}>{usuario.nombre}</Text>
       )}
     </View>
   );

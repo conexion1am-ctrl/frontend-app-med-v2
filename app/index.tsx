@@ -1,8 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import * as Notifications from 'expo-notifications';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { getNavigationGlobal } from './utils/navigationGlobal';
+import { registrarNotificacionesPush } from './utils/notificacionesPush';
 import AceptarInvitacionScreen from './screens/AceptarInvitacionScreen';
 import AreaProyectoScreen from './screens/AreaProyectoScreen';
 import BienvenidaScreen from './screens/BienvenidaScreen';
@@ -30,6 +33,42 @@ export default function App() {
     revisarSesion();
   }, []);
 
+  // Cuando el usuario toca una notificación de mensaje nuevo, lo llevamos directo al área del
+  // proyecto donde está ese chat. Reconstruimos los datos de empresa/usuario desde la sesión
+  // guardada en el celular (el push solo trae los ids/nombres del proyecto y área).
+  useEffect(() => {
+    const suscripcion = Notifications.addNotificationResponseReceivedListener(async (respuesta) => {
+      try {
+        const data = respuesta.notification.request.content.data;
+        const navigation = getNavigationGlobal();
+        if (data?.tipo !== 'mensaje' || !navigation) return;
+
+        const sesionGuardada = await AsyncStorage.getItem('sesion');
+        if (!sesionGuardada) return;
+        const sesion = JSON.parse(sesionGuardada);
+        const usuario = sesion?.usuario;
+        const empresaSesion = (sesion?.empresas || []).find((e) => e.empresa_id === data.empresa_id);
+        if (!usuario || !empresaSesion) return;
+
+        navigation.navigate('AreaProyecto', {
+          empresa: {
+            id: empresaSesion.empresa_id,
+            nombre: empresaSesion.empresa_nombre,
+            logo_url: empresaSesion.logo_url,
+            color_hex: empresaSesion.color_hex,
+            sitio_web: empresaSesion.sitio_web,
+          },
+          proyecto: { id: data.proyecto_id, nombre: data.proyecto_nombre },
+          area: { id: data.area_id, nombre: data.area_nombre },
+          usuario,
+        });
+      } catch (error) {
+        console.error('Error abriendo chat desde notificación:', error);
+      }
+    });
+    return () => suscripcion.remove();
+  }, []);
+
   const revisarSesion = async () => {
     try {
       const sesionGuardada = await AsyncStorage.getItem('sesion');
@@ -47,6 +86,8 @@ export default function App() {
         setRutaInicial('Ingresar');
         return;
       }
+
+      registrarNotificacionesPush(usuario.id);
 
       if (empresas.length > 1) {
         // Pertenece a varias empresas: que elija con cuál entrar, sin pedir contraseña de nuevo.

@@ -3,8 +3,6 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import InputContraseña from '../components/InputContraseña';
 
-const AREAS_ADMINISTRATIVAS = ['GERENCIA', 'AREA ADMINISTRATIVA', 'AREA DE LOGISTICA'];
-
 // Pantalla que se abre cuando alguien toca el link de invitación que le mandaron por WhatsApp.
 export default function AceptarInvitacionScreen({ route, navigation }) {
   const { token } = route.params;
@@ -35,29 +33,25 @@ export default function AceptarInvitacionScreen({ route, navigation }) {
     }
   };
 
-  const esAdministrativa = invitacion ? AREAS_ADMINISTRATIVAS.includes(invitacion.area_nombre) : false;
-
   const aceptarInvitacion = async () => {
-    if (esAdministrativa) {
-      if (!contraseña || contraseña.length < 6) {
-        Alert.alert('Contraseña requerida', 'Tu área requiere una contraseña de al menos 6 caracteres para poder ingresar desde cualquier dispositivo.');
-        return;
-      }
-      if (contraseña !== confirmarContraseña) {
-        Alert.alert('Las contraseñas no coinciden', 'Verifica que ambas contraseñas sean iguales.');
-        return;
-      }
+    if (!contraseña || contraseña.length < 6) {
+      Alert.alert('Contraseña requerida', 'Crea una contraseña de al menos 6 caracteres para poder ingresar desde cualquier dispositivo.');
+      return;
+    }
+    if (contraseña !== confirmarContraseña) {
+      Alert.alert('Las contraseñas no coinciden', 'Verifica que ambas contraseñas sean iguales.');
+      return;
     }
 
     setAceptando(true);
     try {
       await axios.post(`https://backend-app-mediterraneo.onrender.com/api/invitaciones/aceptar/${token}`, {
-        contraseña: esAdministrativa ? contraseña : undefined,
+        contraseña,
       });
 
       Alert.alert(
         '¡Bienvenido a ' + invitacion.empresa_nombre + '!',
-        'Tu cuenta quedó vinculada exitosamente. Ahora puedes ingresar con tu número de celular' + (esAdministrativa ? ' y tu contraseña.' : '.'),
+        'Tu cuenta quedó vinculada exitosamente. Ahora puedes ingresar con tu número de celular y tu contraseña.',
         [{ text: 'Ingresar ahora', onPress: () => navigation.replace('Ingresar') }]
       );
     } catch (error) {
@@ -104,27 +98,25 @@ export default function AceptarInvitacionScreen({ route, navigation }) {
         <Text style={styles.areaTexto}>Área: {invitacion.area_nombre}</Text>
         <Text style={styles.nombreTexto}>{invitacion.nombre_invitado}</Text>
 
-        {esAdministrativa && (
-          <View style={styles.formulario}>
-            <Text style={styles.label}>Tu área requiere contraseña</Text>
-            <Text style={styles.notaTexto}>
-              Así podrás ingresar desde tu celular u otro dispositivo con tu número y esta contraseña.
-            </Text>
+        <View style={styles.formulario}>
+          <Text style={styles.label}>Crea tu contraseña</Text>
+          <Text style={styles.notaTexto}>
+            Así podrás ingresar desde tu celular u otro dispositivo con tu número y esta contraseña.
+          </Text>
 
-            <InputContraseña
-              value={contraseña}
-              onChangeText={setContraseña}
-              placeholder="Crea tu contraseña (mínimo 6 caracteres)"
-              style={styles.input}
-            />
-            <InputContraseña
-              value={confirmarContraseña}
-              onChangeText={setConfirmarContraseña}
-              placeholder="Confirma tu contraseña"
-              style={styles.input}
-            />
-          </View>
-        )}
+          <InputContraseña
+            value={contraseña}
+            onChangeText={setContraseña}
+            placeholder="Crea tu contraseña (mínimo 6 caracteres)"
+            style={styles.input}
+          />
+          <InputContraseña
+            value={confirmarContraseña}
+            onChangeText={setConfirmarContraseña}
+            placeholder="Confirma tu contraseña"
+            style={styles.input}
+          />
+        </View>
 
         <TouchableOpacity style={styles.boton} onPress={aceptarInvitacion} disabled={aceptando}>
           {aceptando ? <ActivityIndicator color="#fff" /> : <Text style={styles.botonTexto}>ACEPTAR Y UNIRME</Text>}
