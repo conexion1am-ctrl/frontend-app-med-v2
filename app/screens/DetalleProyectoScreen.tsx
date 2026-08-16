@@ -2,9 +2,11 @@ import axios from 'axios';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import EncabezadoLogo from '../components/EncabezadoLogo';
+import { permisosDe } from '../utils/roles';
 
 export default function DetalleProyectoScreen({ route, navigation }) {
   const { empresa, proyecto, usuario } = route.params;
+  const puedeGestionar = permisosDe(empresa).gestionarProyectos;
   const [detalle, setDetalle] = useState(null);
   const [areas, setAreas] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -134,17 +136,19 @@ export default function DetalleProyectoScreen({ route, navigation }) {
         {detalle.direccion ? <Text style={styles.info}>{detalle.direccion}</Text> : null}
         {detalle.area_m2 ? <Text style={styles.info}>{detalle.area_m2} m²</Text> : null}
 
-        <View style={styles.accionesFila}>
-          <TouchableOpacity style={styles.botonAccion} onPress={() => setModalEditar(true)}>
-            <Text style={styles.botonAccionTexto}>Editar</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.botonAccion} onPress={abrirModalActividades}>
-            <Text style={styles.botonAccionTexto}>+ Actividad</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.botonEliminar} onPress={eliminarProyecto}>
-            <Text style={styles.botonEliminarTexto}>Eliminar</Text>
-          </TouchableOpacity>
-        </View>
+        {puedeGestionar && (
+          <View style={styles.accionesFila}>
+            <TouchableOpacity style={styles.botonAccion} onPress={() => setModalEditar(true)}>
+              <Text style={styles.botonAccionTexto}>Editar</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.botonAccion} onPress={abrirModalActividades}>
+              <Text style={styles.botonAccionTexto}>+ Actividad</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.botonEliminar} onPress={eliminarProyecto}>
+              <Text style={styles.botonEliminarTexto}>Eliminar</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         <Text style={styles.seccionTitulo}>Actividades</Text>
         <View style={styles.actividadesLista}>

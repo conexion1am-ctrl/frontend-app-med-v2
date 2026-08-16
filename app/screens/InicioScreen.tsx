@@ -3,21 +3,40 @@ import React, { useEffect, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import EncabezadoLogo from '../components/EncabezadoLogo';
 import { setNavigationGlobal } from '../utils/navigationGlobal';
+import { esAccesoReducido, permisosDe, usaPerfilCompleto } from '../utils/roles';
 
-const BOTONES_INICIO = [
-  { id: 'editar_perfil', titulo: 'Editar perfil', ruta: 'EditarPerfil' },
-  { id: 'grupo_trabajo', titulo: 'Grupo de trabajo', ruta: 'GrupoTrabajo' },
-  { id: 'proyectos', titulo: 'Proyectos', ruta: 'Proyectos' },
-  { id: 'cotizaciones', titulo: 'Cotizaciones', ruta: 'Cotizaciones' },
-  { id: 'contratos', titulo: 'Contratos', ruta: 'Contratos' },
-  { id: 'clientes', titulo: 'Clientes', ruta: 'Clientes' },
-  { id: 'estadisticas', titulo: 'Estadísticas', ruta: 'Estadisticas' },
-];
+// Arma el menú de Inicio según los permisos del área del usuario. Cada botón se muestra
+// solo si el permiso correspondiente está en true (o, para "editar_perfil", solo si tiene
+// AL MENOS un permiso de gestión de empresa o es un área con permisos definidos).
+function construirBotones(empresa) {
+  const permisos = permisosDe(empresa);
+
+  if (esAccesoReducido(empresa)) {
+    // Mano de obra (oficio) y áreas especiales (proveedores/clientes): solo su perfil
+    // reducido y los proyectos donde están asignados.
+    return [
+      { id: 'mi_perfil', titulo: 'Mi perfil', ruta: 'MiPerfil' },
+      { id: 'proyectos', titulo: 'Proyectos', ruta: 'Proyectos' },
+    ];
+  }
+
+  const botones = usaPerfilCompleto(empresa)
+    ? [{ id: 'editar_perfil', titulo: 'Editar perfil', ruta: 'EditarPerfil' }]
+    : [{ id: 'mi_perfil', titulo: 'Mi perfil', ruta: 'MiPerfil' }];
+  if (permisos.verProyectos) botones.push({ id: 'proyectos', titulo: 'Proyectos', ruta: 'Proyectos' });
+  if (permisos.verGrupoTrabajo) botones.push({ id: 'grupo_trabajo', titulo: 'Grupo de trabajo', ruta: 'GrupoTrabajo' });
+  if (permisos.verCotizaciones) botones.push({ id: 'cotizaciones', titulo: 'Cotizaciones', ruta: 'Cotizaciones' });
+  if (permisos.verContratos) botones.push({ id: 'contratos', titulo: 'Contratos', ruta: 'Contratos' });
+  if (permisos.verClientes) botones.push({ id: 'clientes', titulo: 'Clientes', ruta: 'Clientes' });
+  if (permisos.verEstadisticas) botones.push({ id: 'estadisticas', titulo: 'Estadísticas', ruta: 'Estadisticas' });
+  return botones;
+}
 
 export default function InicioScreen({ route, navigation }) {
   const { empresa, usuario } = route.params;
   const colorEmpresa = empresa.color_hex || '#1E90FF';
   const [tieneVariasEmpresas, setTieneVariasEmpresas] = useState(false);
+  const BOTONES_INICIO = construirBotones(empresa);
 
   useEffect(() => {
     revisarSiTieneVariasEmpresas();

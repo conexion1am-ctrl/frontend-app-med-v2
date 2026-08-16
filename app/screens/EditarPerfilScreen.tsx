@@ -5,11 +5,13 @@ import React, { useState } from 'react';
 import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { storage } from '../../firebaseConfig';
 import InputContraseña from '../components/InputContraseña';
+import { permisosDe } from '../utils/roles';
 
 const COLORES = ['#1E90FF', '#FF6347', '#32CD32', '#FFD700', '#8A2BE2', '#FF69B4', '#20B2AA', '#DC143C', '#A8C69F', '#C9B79C', '#9CAF88', '#D4B896', '#87A96B', '#000000', '#808080', '#FFFFFF'];
 
 export default function EditarPerfilScreen({ route, navigation }) {
   const { empresa, usuario } = route.params;
+  const puedeEditarEmpresa = permisosDe(empresa).editarPerfilEmpresa;
 
   // Datos de empresa
   const [nombreEmpresa, setNombreEmpresa] = useState(empresa.nombre || '');
@@ -57,7 +59,7 @@ export default function EditarPerfilScreen({ route, navigation }) {
   };
 
   const guardarCambios = async () => {
-    if (!nombreEmpresa.trim()) {
+    if (puedeEditarEmpresa && !nombreEmpresa.trim()) {
       Alert.alert('Campo obligatorio', 'El nombre de la empresa es obligatorio.');
       return;
     }
@@ -76,21 +78,27 @@ export default function EditarPerfilScreen({ route, navigation }) {
 
     setGuardando(true);
     try {
-      // 1. Si eligió un logo nuevo, subirlo primero
+      // 1. Si eligió un logo nuevo, subirlo primero (solo si puede editar datos de empresa)
       let logoUrlFinal = logoUrlActual;
-      if (logoUri) {
+      if (puedeEditarEmpresa && logoUri) {
         setSubiendoLogo(true);
         logoUrlFinal = await subirLogoAFirebase(logoUri);
         setSubiendoLogo(false);
       }
 
-      // 2. Actualizar datos de la empresa
-      const respuestaEmpresa = await axios.put(`https://backend-app-mediterraneo.onrender.com/api/empresas/${empresa.id}`, {
-        nombre_empresa: nombreEmpresa,
-        logo_url: logoUrlFinal,
-        sitio_web: sitioWeb || null,
-        color_hex: colorSeleccionado,
-      });
+      // 2. Actualizar datos de la empresa: solo Gerencia puede (logo/color/nombre/sitio web).
+      // Áreas administrativas sin este permiso solo actualizan su propio usuario.
+      let empresaFinal = empresa;
+      if (puedeEditarEmpresa) {
+        const respuestaEmpresa = await axios.put(`https://backend-app-mediterraneo.onrender.com/api/empresas/${empresa.id}`, {
+          nombre_empresa: nombreEmpresa,
+          logo_url: logoUrlFinal,
+          sitio_web: sitioWeb || null,
+          color_hex: colorSeleccionado,
+          solicitante_id: usuario.id,
+        });
+        empresaFinal = { ...empresa, ...respuestaEmpresa.data.empresa };
+      }
 
       // 3. Actualizar datos del usuario
       const respuestaUsuario = await axios.put(`https://backend-app-mediterraneo.onrender.com/api/auth/usuario/${usuario.id}`, {
@@ -104,7 +112,7 @@ export default function EditarPerfilScreen({ route, navigation }) {
           text: 'OK',
           onPress: () => {
             navigation.navigate('Inicio', {
-              empresa: respuestaEmpresa.data.empresa,
+              empresa: empresaFinal,
               usuario: respuestaUsuario.data.usuario,
             });
           },
@@ -129,41 +137,45 @@ export default function EditarPerfilScreen({ route, navigation }) {
       <ScrollView style={[styles.container, { backgroundColor: empresa.color_hex || '#1E90FF' }]} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         <Text style={styles.titulo}>Editar Perfil</Text>
 
-        {/* SECCIÓN EMPRESA */}
-        <Text style={styles.seccionTitulo}>Datos de la Empresa</Text>
+        {/* SECCIÓN EMPRESA: solo Gerencia puede editar logo/nombre/sitio web/color */}
+        {puedeEditarEmpresa && (
+          <>
+            <Text style={styles.seccionTitulo}>Datos de la Empresa</Text>
 
-        <Text style={styles.label}>Logo de la empresa</Text>
-        <View style={styles.logoContainer}>
-          <TouchableOpacity style={styles.logoCirculo} onPress={elegirLogo}>
-            {logoUri ? (
-              <Image source={{ uri: logoUri }} style={styles.logoImagen} />
-            ) : logoUrlActual ? (
-              <Image source={{ uri: logoUrlActual }} style={styles.logoImagen} />
-            ) : (
-              <Text style={styles.logoPlaceholder}>+{'\n'}Logo</Text>
-            )}
-          </TouchableOpacity>
-          <TouchableOpacity onPress={elegirLogo}>
-            <Text style={styles.logoCambiar}>Cambiar imagen</Text>
-          </TouchableOpacity>
-        </View>
+            <Text style={styles.label}>Logo de la empresa</Text>
+            <View style={styles.logoContainer}>
+              <TouchableOpacity style={styles.logoCirculo} onPress={elegirLogo}>
+                {logoUri ? (
+                  <Image source={{ uri: logoUri }} style={styles.logoImagen} />
+                ) : logoUrlActual ? (
+                  <Image source={{ uri: logoUrlActual }} style={styles.logoImagen} />
+                ) : (
+                  <Text style={styles.logoPlaceholder}>+{'\n'}Logo</Text>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity onPress={elegirLogo}>
+                <Text style={styles.logoCambiar}>Cambiar imagen</Text>
+              </TouchableOpacity>
+            </View>
 
-        <Text style={styles.label}>Nombre de la empresa *</Text>
-        <TextInput style={styles.input} value={nombreEmpresa} onChangeText={setNombreEmpresa} placeholderTextColor="#999" />
+            <Text style={styles.label}>Nombre de la empresa *</Text>
+            <TextInput style={styles.input} value={nombreEmpresa} onChangeText={setNombreEmpresa} placeholderTextColor="#999" />
 
-        <Text style={styles.label}>URL de la empresa</Text>
-        <TextInput style={styles.input} value={sitioWeb} onChangeText={setSitioWeb} placeholder="Ej: www.miempresa.com" placeholderTextColor="#999" />
+            <Text style={styles.label}>URL de la empresa</Text>
+            <TextInput style={styles.input} value={sitioWeb} onChangeText={setSitioWeb} placeholder="Ej: www.miempresa.com" placeholderTextColor="#999" />
 
-        <Text style={styles.label}>Color distintivo</Text>
-        <View style={styles.coloresContainer}>
-          {COLORES.map((color) => (
-            <TouchableOpacity
-              key={color}
-              style={[styles.colorCirculo, { backgroundColor: color }, colorSeleccionado === color && styles.colorSeleccionado]}
-              onPress={() => setColorSeleccionado(color)}
-            />
-          ))}
-        </View>
+            <Text style={styles.label}>Color distintivo</Text>
+            <View style={styles.coloresContainer}>
+              {COLORES.map((color) => (
+                <TouchableOpacity
+                  key={color}
+                  style={[styles.colorCirculo, { backgroundColor: color }, colorSeleccionado === color && styles.colorSeleccionado]}
+                  onPress={() => setColorSeleccionado(color)}
+                />
+              ))}
+            </View>
+          </>
+        )}
 
         {/* SECCIÓN USUARIO */}
         <Text style={[styles.seccionTitulo, { marginTop: 32 }]}>Datos de tu Usuario</Text>

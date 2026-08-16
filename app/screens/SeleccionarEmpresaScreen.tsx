@@ -18,6 +18,9 @@ export default function SeleccionarEmpresaScreen({ route, navigation }) {
         logo_url: empresaSeleccionada.logo_url,
         color_hex: empresaSeleccionada.color_hex,
         sitio_web: empresaSeleccionada.sitio_web,
+        area_id: empresaSeleccionada.area_id,
+        area_nombre: empresaSeleccionada.area_nombre,
+        area_tipo: empresaSeleccionada.area_tipo,
       },
       usuario,
     });

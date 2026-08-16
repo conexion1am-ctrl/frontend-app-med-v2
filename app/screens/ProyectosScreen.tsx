@@ -2,9 +2,12 @@ import axios from 'axios';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import EncabezadoLogo from '../components/EncabezadoLogo';
+import { esAccesoReducido, permisosDe } from '../utils/roles';
 
 export default function ProyectosScreen({ route, navigation }) {
   const { empresa, usuario } = route.params;
+  const accesoReducido = esAccesoReducido(empresa);
+  const puedeGestionar = permisosDe(empresa).gestionarProyectos;
   const [proyectos, setProyectos] = useState([]);
   const [areas, setAreas] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -23,17 +26,62 @@ export default function ProyectosScreen({ route, navigation }) {
   const cargarDatos = async () => {
     setCargando(true);
     try {
-      const [resProyectos, resAreas] = await Promise.all([
-        axios.get(`https://backend-app-mediterraneo.onrender.com/api/proyectos/listar/${empresa.id}`),
-        axios.get('https://backend-app-mediterraneo.onrender.com/api/areas'),
-      ]);
-      setProyectos(resProyectos.data.proyectos);
-      setAreas(resAreas.data.areas);
+      if (accesoReducido) {
+        // Mano de obra / áreas especiales: solo ven los proyectos y áreas donde están
+        // asignados, no el listado completo de la empresa.
+        const resAsignaciones = await axios.get(
+          `https://backend-app-mediterraneo.onrender.com/api/proyectos/asignaciones/${usuario.id}`
+        );
+        // Puede estar asignado a varias áreas del mismo proyecto: agrupamos por proyecto.
+        const proyectosMap = {};
+        resAsignaciones.data.asignaciones.forEach((asig) => {
+          if (!proyectosMap[asig.proyecto_id]) {
+            proyectosMap[asig.proyecto_id] = {
+              id: asig.proyecto_id,
+              nombre: asig.proyecto_nombre,
+              misAreas: [],
+            };
+          }
+          proyectosMap[asig.proyecto_id].misAreas.push({ id: asig.area_id, nombre: asig.area_nombre });
+        });
+        setProyectos(Object.values(proyectosMap));
+      } else {
+        const [resProyectos, resAreas] = await Promise.all([
+          axios.get(`https://backend-app-mediterraneo.onrender.com/api/proyectos/listar/${empresa.id}`),
+          axios.get('https://backend-app-mediterraneo.onrender.com/api/areas'),
+        ]);
+        setProyectos(resProyectos.data.proyectos);
+        setAreas(resAreas.data.areas);
+      }
     } catch (error) {
       console.error('Error cargando datos:', error);
       Alert.alert('Error', 'No se pudieron cargar los proyectos.');
     } finally {
       setCargando(false);
+    }
+  };
+
+  const abrirProyecto = (proyecto) => {
+    if (accesoReducido) {
+      if (proyecto.misAreas.length === 1) {
+        // Asignado a una sola área: entra directo a esa área (sin pasar por el detalle
+        // del proyecto, que tiene botones de editar/eliminar que no debe ver).
+        navigation.navigate('AreaProyecto', { empresa, proyecto, area: proyecto.misAreas[0], usuario });
+      } else {
+        // Asignado a varias áreas del mismo proyecto: deja elegir cuál abrir.
+        Alert.alert(
+          proyecto.nombre,
+          'Estás asignado a varias áreas de este proyecto. ¿Cuál quieres abrir?',
+          proyecto.misAreas
+            .map((area) => ({
+              text: area.nombre,
+              onPress: () => navigation.navigate('AreaProyecto', { empresa, proyecto, area, usuario }),
+            }))
+            .concat([{ text: 'Cancelar', style: 'cancel' }])
+        );
+      }
+    } else {
+      navigation.navigate('DetalleProyecto', { empresa, proyecto, usuario });
     }
   };
 
@@ -96,19 +144,26 @@ export default function ProyectosScreen({ route, navigation }) {
             <TouchableOpacity
               key={proyecto.id}
               style={styles.proyectoCard}
-              onPress={() => navigation.navigate('DetalleProyecto', { empresa, proyecto, usuario })}
+              onPress={() => abrirProyecto(proyecto)}
             >
               <Text style={styles.proyectoNombre}>{proyecto.nombre}</Text>
               {proyecto.direccion ? <Text style={styles.proyectoDireccion}>{proyecto.direccion}</Text> : null}
               {proyecto.area_m2 ? <Text style={styles.proyectoArea}>{proyecto.area_m2} m²</Text> : null}
+              {accesoReducido && proyecto.misAreas && (
+                <Text style={styles.proyectoDireccion}>
+                  {proyecto.misAreas.map((a) => a.nombre).join(', ')}
+                </Text>
+              )}
             </TouchableOpacity>
           ))
         )}
       </ScrollView>
 
-      <TouchableOpacity style={styles.botonAgregar} onPress={() => setModalVisible(true)}>
-        <Text style={styles.botonAgregarTexto}>NUEVO PROYECTO</Text>
-      </TouchableOpacity>
+      {puedeGestionar && (
+        <TouchableOpacity style={styles.botonAgregar} onPress={() => setModalVisible(true)}>
+          <Text style={styles.botonAgregarTexto}>NUEVO PROYECTO</Text>
+        </TouchableOpacity>
+      )}
 
       <Modal visible={modalVisible} animationType="slide">
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>

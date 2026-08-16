@@ -3,9 +3,11 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Linking, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import EncabezadoLogo from '../components/EncabezadoLogo';
 import InputCelular, { detectarPaisPorDispositivo, PAISES } from '../components/InputCelular';
+import { permisosDe } from '../utils/roles';
 
 export default function ClientesScreen({ route }) {
-  const { empresa } = route.params;
+  const { empresa, usuario } = route.params;
+  const permisos = permisosDe(empresa);
   const [clientes, setClientes] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
@@ -132,7 +134,9 @@ export default function ClientesScreen({ route }) {
         style: 'destructive',
         onPress: async () => {
           try {
-            await axios.delete(`https://backend-app-mediterraneo.onrender.com/api/clientes/${cliente.id}`);
+            await axios.delete(`https://backend-app-mediterraneo.onrender.com/api/clientes/${cliente.id}`, {
+              data: { usuario_id: usuario?.id },
+            });
             cargarDatos();
           } catch (error) {
             console.error('Error eliminando cliente:', error);
@@ -192,9 +196,11 @@ export default function ClientesScreen({ route }) {
             <TouchableOpacity style={styles.menuOpcion} onPress={() => abrirEditar(menuCliente)}>
               <Text style={styles.menuOpcionTexto}>✏️  Editar</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.menuOpcion} onPress={() => confirmarEliminar(menuCliente)}>
-              <Text style={[styles.menuOpcionTexto, { color: '#DC143C' }]}>🗑️  Eliminar</Text>
-            </TouchableOpacity>
+            {permisos.eliminarClientes && (
+              <TouchableOpacity style={styles.menuOpcion} onPress={() => confirmarEliminar(menuCliente)}>
+                <Text style={[styles.menuOpcionTexto, { color: '#DC143C' }]}>🗑️  Eliminar</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity style={styles.menuOpcion} onPress={cerrarMenu}>
               <Text style={[styles.menuOpcionTexto, { color: '#888' }]}>Cancelar</Text>
             </TouchableOpacity>

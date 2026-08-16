@@ -9,6 +9,17 @@ const formatearMoneda = (valor) => {
   return numero.toLocaleString('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
 };
 
+// Valores por defecto de los campos "estándar" de la carta: se precargan al crear una
+// cotización nueva, pero se pueden editar libremente antes de guardar.
+const PARRAFO_CONTEXTO_DEFECTO = 'Por solicitud efectuada paso a cotizar los precios del Kit de acabados completos para su casa';
+const TIEMPO_ENTREGA_DEFECTO = '12 - 14 Semanas';
+const condicionesPagoDefecto = () => [
+  { porcentaje: '25', descripcion: 'A la firma del contrato para el inicio de actividades' },
+  { porcentaje: '25', descripcion: 'A las 3-4 semanas con avance' },
+  { porcentaje: '25', descripcion: 'A la entrega de la obra blanca' },
+  { porcentaje: '25', descripcion: 'A la entrega final de la obra, incluyendo carpintería' },
+];
+
 export default function CotizacionesScreen({ route }) {
   const { empresa } = route.params;
   const [cotizaciones, setCotizaciones] = useState([]);
@@ -22,12 +33,27 @@ export default function CotizacionesScreen({ route }) {
   const [descuento, setDescuento] = useState('');
   const [guardando, setGuardando] = useState(false);
 
+  // Campos de la carta (propietario/ciudad/firmante son llenables; párrafo, condiciones de
+  // pago y tiempo de entrega vienen con un valor por defecto editable).
+  const [propietario, setPropietario] = useState('');
+  const [ciudad, setCiudad] = useState('');
+  const [parrafoContexto, setParrafoContexto] = useState(PARRAFO_CONTEXTO_DEFECTO);
+  const [condicionesPago, setCondicionesPago] = useState(condicionesPagoDefecto());
+  const [tiempoEntrega, setTiempoEntrega] = useState(TIEMPO_ENTREGA_DEFECTO);
+  const [firmante, setFirmante] = useState('');
+
   const [menuCotizacion, setMenuCotizacion] = useState(null);
   const [modalEditarVisible, setModalEditarVisible] = useState(false);
   const [editandoCotizacion, setEditandoCotizacion] = useState(null);
   const [editNumero, setEditNumero] = useState('');
   const [editItems, setEditItems] = useState([{ descripcion: '', cantidad: '', valor: '', seccion: '' }]);
   const [editDescuento, setEditDescuento] = useState('');
+  const [editPropietario, setEditPropietario] = useState('');
+  const [editCiudad, setEditCiudad] = useState('');
+  const [editParrafoContexto, setEditParrafoContexto] = useState(PARRAFO_CONTEXTO_DEFECTO);
+  const [editCondicionesPago, setEditCondicionesPago] = useState(condicionesPagoDefecto());
+  const [editTiempoEntrega, setEditTiempoEntrega] = useState(TIEMPO_ENTREGA_DEFECTO);
+  const [editFirmante, setEditFirmante] = useState('');
 
   const [modalAdicionalesVisible, setModalAdicionalesVisible] = useState(false);
   const [cotizacionAdicionales, setCotizacionAdicionales] = useState(null);
@@ -69,6 +95,34 @@ export default function CotizacionesScreen({ route }) {
     setNumero('');
     setItems([{ descripcion: '', cantidad: '', valor: '', seccion: '' }]);
     setDescuento('');
+    setPropietario('');
+    setCiudad('');
+    setParrafoContexto(PARRAFO_CONTEXTO_DEFECTO);
+    setCondicionesPago(condicionesPagoDefecto());
+    setTiempoEntrega(TIEMPO_ENTREGA_DEFECTO);
+    setFirmante('');
+  };
+
+  const actualizarCondicionPago = (index, campo, valor) => {
+    const nuevas = [...condicionesPago];
+    nuevas[index][campo] = valor;
+    setCondicionesPago(nuevas);
+  };
+  const agregarCondicionPago = () => setCondicionesPago([...condicionesPago, { porcentaje: '', descripcion: '' }]);
+  const quitarCondicionPago = (index) => {
+    if (condicionesPago.length === 1) return;
+    setCondicionesPago(condicionesPago.filter((_, i) => i !== index));
+  };
+
+  const actualizarEditCondicionPago = (index, campo, valor) => {
+    const nuevas = [...editCondicionesPago];
+    nuevas[index][campo] = valor;
+    setEditCondicionesPago(nuevas);
+  };
+  const agregarEditCondicionPago = () => setEditCondicionesPago([...editCondicionesPago, { porcentaje: '', descripcion: '' }]);
+  const quitarEditCondicionPago = (index) => {
+    if (editCondicionesPago.length === 1) return;
+    setEditCondicionesPago(editCondicionesPago.filter((_, i) => i !== index));
   };
 
   const actualizarItem = (index, campo, valor) => {
@@ -110,6 +164,12 @@ export default function CotizacionesScreen({ route }) {
         numero: numero || null,
         items: itemsValidos,
         descuento: descuento || 0,
+        propietario: propietario || null,
+        ciudad: ciudad || null,
+        parrafo_contexto: parrafoContexto || null,
+        condiciones_pago: condicionesPago.filter((c) => c.porcentaje || c.descripcion),
+        tiempo_entrega: tiempoEntrega || null,
+        firmante: firmante || null,
       });
       Alert.alert('¡Listo!', 'Cotización creada exitosamente.');
       setModalVisible(false);
@@ -134,6 +194,16 @@ export default function CotizacionesScreen({ route }) {
       setEditNumero(cot.numero || '');
       setEditItems(res.data.items.map((i) => ({ descripcion: i.descripcion, cantidad: i.cantidad != null ? String(i.cantidad) : '', valor: String(i.valor), seccion: i.seccion || '', adicional: i.adicional })));
       setEditDescuento(cot.descuento ? String(cot.descuento) : '');
+      setEditPropietario(res.data.propietario || '');
+      setEditCiudad(res.data.ciudad || '');
+      setEditParrafoContexto(res.data.parrafo_contexto || PARRAFO_CONTEXTO_DEFECTO);
+      setEditCondicionesPago(
+        res.data.condiciones_pago && res.data.condiciones_pago.length
+          ? res.data.condiciones_pago.map((c) => ({ porcentaje: String(c.porcentaje ?? ''), descripcion: c.descripcion || '' }))
+          : condicionesPagoDefecto()
+      );
+      setEditTiempoEntrega(res.data.tiempo_entrega || TIEMPO_ENTREGA_DEFECTO);
+      setEditFirmante(res.data.firmante || '');
       setModalEditarVisible(true);
     } catch (error) {
       console.error('Error cargando cotización:', error);
@@ -174,6 +244,12 @@ export default function CotizacionesScreen({ route }) {
           numero: editNumero || null,
           items: itemsValidos,
           descuento: editDescuento || 0,
+          propietario: editPropietario || null,
+          ciudad: editCiudad || null,
+          parrafo_contexto: editParrafoContexto || null,
+          condiciones_pago: editCondicionesPago.filter((c) => c.porcentaje || c.descripcion),
+          tiempo_entrega: editTiempoEntrega || null,
+          firmante: editFirmante || null,
         });
       }
       setModalEditarVisible(false);
@@ -232,16 +308,31 @@ export default function CotizacionesScreen({ route }) {
     }
   };
 
-  const abrirModalPdf = (cot) => {
+  const abrirModalPdf = async (cot) => {
     cerrarMenu();
     const cliente = clientes.find((c) => c.id === cot.cliente_id) || { nombre: cot.cliente_nombre };
     setCotizacionParaPdf(cot);
-    setPdfPropietario(cliente.nombre || '');
-    setPdfCiudad('');
-    setPdfParrafo('');
-    setPdfCondicionesPago('');
-    setPdfTiempoEntrega('');
-    setPdfFirmante('');
+    try {
+      const res = await axios.get(`https://backend-app-mediterraneo.onrender.com/api/cotizaciones/${cot.id}`);
+      setPdfPropietario(res.data.propietario || cliente.nombre || '');
+      setPdfCiudad(res.data.ciudad || '');
+      setPdfParrafo(res.data.parrafo_contexto || PARRAFO_CONTEXTO_DEFECTO);
+      setPdfCondicionesPago(
+        (res.data.condiciones_pago && res.data.condiciones_pago.length ? res.data.condiciones_pago : condicionesPagoDefecto())
+          .map((c) => `${c.porcentaje}% — ${c.descripcion}`)
+          .join('\n')
+      );
+      setPdfTiempoEntrega(res.data.tiempo_entrega || TIEMPO_ENTREGA_DEFECTO);
+      setPdfFirmante(res.data.firmante || '');
+    } catch (error) {
+      console.error('Error precargando datos del PDF:', error);
+      setPdfPropietario(cliente.nombre || '');
+      setPdfCiudad('');
+      setPdfParrafo(PARRAFO_CONTEXTO_DEFECTO);
+      setPdfCondicionesPago('');
+      setPdfTiempoEntrega(TIEMPO_ENTREGA_DEFECTO);
+      setPdfFirmante('');
+    }
     setModalPdfVisible(true);
   };
 
@@ -521,6 +612,50 @@ export default function CotizacionesScreen({ route }) {
 
             <Text style={styles.totalTexto}>Total: {formatearMoneda(totalCotizacion)}</Text>
 
+            <Text style={[styles.seccionTitulo, { marginTop: 20 }]}>Datos para la carta</Text>
+
+            <Text style={styles.label}>Propietario (a quién va dirigido)</Text>
+            <TextInput style={styles.input} value={propietario} onChangeText={setPropietario} placeholder="Nombre del propietario" placeholderTextColor="#999" />
+
+            <Text style={styles.label}>Ciudad</Text>
+            <TextInput style={styles.input} value={ciudad} onChangeText={setCiudad} placeholder="Ej: Medellín" placeholderTextColor="#999" />
+
+            <Text style={styles.label}>Párrafo de contexto</Text>
+            <TextInput style={[styles.input, styles.inputMultilinea]} value={parrafoContexto} onChangeText={setParrafoContexto} multiline placeholderTextColor="#999" />
+
+            <Text style={styles.label}>Condiciones de pago</Text>
+            {condicionesPago.map((cond, index) => (
+              <View key={index} style={styles.filaCondicionPago}>
+                <TextInput
+                  style={[styles.input, styles.inputPorcentaje]}
+                  value={cond.porcentaje}
+                  onChangeText={(texto) => actualizarCondicionPago(index, 'porcentaje', texto.replace(/[^0-9]/g, ''))}
+                  placeholder="%"
+                  placeholderTextColor="#999"
+                  keyboardType="numeric"
+                />
+                <TextInput
+                  style={[styles.input, styles.inputDescripcionCondicion]}
+                  value={cond.descripcion}
+                  onChangeText={(texto) => actualizarCondicionPago(index, 'descripcion', texto)}
+                  placeholder="Descripción"
+                  placeholderTextColor="#999"
+                />
+                <TouchableOpacity onPress={() => quitarCondicionPago(index)}>
+                  <Text style={styles.botonQuitarItem}>✕</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+            <TouchableOpacity style={styles.botonAgregarItem} onPress={agregarCondicionPago}>
+              <Text style={styles.botonAgregarItemTexto}>+ Agregar condición</Text>
+            </TouchableOpacity>
+
+            <Text style={styles.label}>Tiempo de entrega</Text>
+            <TextInput style={styles.input} value={tiempoEntrega} onChangeText={setTiempoEntrega} placeholderTextColor="#999" />
+
+            <Text style={styles.label}>Firmante</Text>
+            <TextInput style={styles.input} value={firmante} onChangeText={setFirmante} placeholder="Quién firma la carta" placeholderTextColor="#999" />
+
             <TouchableOpacity style={styles.botonGuardar} onPress={crearCotizacion} disabled={guardando}>
               {guardando ? <ActivityIndicator color="#fff" /> : <Text style={styles.botonAgregarTexto}>CREAR COTIZACIÓN</Text>}
             </TouchableOpacity>
@@ -613,6 +748,54 @@ export default function CotizacionesScreen({ route }) {
             />
 
             <Text style={styles.totalTexto}>Total: {formatearMoneda(totalEditCotizacion)}</Text>
+
+            {!editandoCotizacion?.aceptada && (
+              <>
+                <Text style={[styles.seccionTitulo, { marginTop: 20 }]}>Datos para la carta</Text>
+
+                <Text style={styles.label}>Propietario (a quién va dirigido)</Text>
+                <TextInput style={styles.input} value={editPropietario} onChangeText={setEditPropietario} placeholder="Nombre del propietario" placeholderTextColor="#999" />
+
+                <Text style={styles.label}>Ciudad</Text>
+                <TextInput style={styles.input} value={editCiudad} onChangeText={setEditCiudad} placeholder="Ej: Medellín" placeholderTextColor="#999" />
+
+                <Text style={styles.label}>Párrafo de contexto</Text>
+                <TextInput style={[styles.input, styles.inputMultilinea]} value={editParrafoContexto} onChangeText={setEditParrafoContexto} multiline placeholderTextColor="#999" />
+
+                <Text style={styles.label}>Condiciones de pago</Text>
+                {editCondicionesPago.map((cond, index) => (
+                  <View key={index} style={styles.filaCondicionPago}>
+                    <TextInput
+                      style={[styles.input, styles.inputPorcentaje]}
+                      value={cond.porcentaje}
+                      onChangeText={(texto) => actualizarEditCondicionPago(index, 'porcentaje', texto.replace(/[^0-9]/g, ''))}
+                      placeholder="%"
+                      placeholderTextColor="#999"
+                      keyboardType="numeric"
+                    />
+                    <TextInput
+                      style={[styles.input, styles.inputDescripcionCondicion]}
+                      value={cond.descripcion}
+                      onChangeText={(texto) => actualizarEditCondicionPago(index, 'descripcion', texto)}
+                      placeholder="Descripción"
+                      placeholderTextColor="#999"
+                    />
+                    <TouchableOpacity onPress={() => quitarEditCondicionPago(index)}>
+                      <Text style={styles.botonQuitarItem}>✕</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))}
+                <TouchableOpacity style={styles.botonAgregarItem} onPress={agregarEditCondicionPago}>
+                  <Text style={styles.botonAgregarItemTexto}>+ Agregar condición</Text>
+                </TouchableOpacity>
+
+                <Text style={styles.label}>Tiempo de entrega</Text>
+                <TextInput style={styles.input} value={editTiempoEntrega} onChangeText={setEditTiempoEntrega} placeholderTextColor="#999" />
+
+                <Text style={styles.label}>Firmante</Text>
+                <TextInput style={styles.input} value={editFirmante} onChangeText={setEditFirmante} placeholder="Quién firma la carta" placeholderTextColor="#999" />
+              </>
+            )}
 
             <TouchableOpacity style={styles.botonGuardar} onPress={guardarEdicion} disabled={guardando}>
               {guardando ? <ActivityIndicator color="#fff" /> : <Text style={styles.botonAgregarTexto}>GUARDAR CAMBIOS</Text>}
@@ -814,6 +997,11 @@ const styles = StyleSheet.create({
   botonAgregarItem: { marginTop: 10, padding: 8 },
   botonAgregarItemTexto: { color: '#1E90FF', fontSize: 14, fontWeight: '600' },
   totalTexto: { fontSize: 17, fontWeight: 'bold', color: '#222', marginTop: 20, textAlign: 'right' },
+  seccionTitulo: { fontSize: 15, fontWeight: 'bold', color: '#333', marginBottom: 4 },
+  inputMultilinea: { minHeight: 70, textAlignVertical: 'top' },
+  filaCondicionPago: { flexDirection: 'row', gap: 8, marginTop: 8, alignItems: 'center' },
+  inputPorcentaje: { width: 55, textAlign: 'center' },
+  inputDescripcionCondicion: { flex: 1 },
   botonGuardar: {
     backgroundColor: '#1E90FF',
     borderRadius: 8,

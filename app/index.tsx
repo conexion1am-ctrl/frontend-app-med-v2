@@ -18,6 +18,7 @@ import EstadisticasScreen from './screens/EstadisticasScreen';
 import GrupoTrabajoScreen from './screens/GrupoTrabajoScreen';
 import IngresarScreen from './screens/IngresarScreen';
 import InicioScreen from './screens/InicioScreen';
+import MiPerfilScreen from './screens/MiPerfilScreen';
 import PerfilEmpresaScreen from './screens/PerfilEmpresaScreen';
 import ProyectosScreen from './screens/ProyectosScreen';
 import SeleccionarEmpresaScreen from './screens/SeleccionarEmpresaScreen';
@@ -57,6 +58,9 @@ export default function App() {
             logo_url: empresaSesion.logo_url,
             color_hex: empresaSesion.color_hex,
             sitio_web: empresaSesion.sitio_web,
+            area_id: empresaSesion.area_id,
+            area_nombre: empresaSesion.area_nombre,
+            area_tipo: empresaSesion.area_tipo,
           },
           proyecto: { id: data.proyecto_id, nombre: data.proyecto_nombre },
           area: { id: data.area_id, nombre: data.area_nombre },
@@ -104,6 +108,9 @@ export default function App() {
             logo_url: primeraEmpresa.logo_url,
             color_hex: primeraEmpresa.color_hex,
             sitio_web: primeraEmpresa.sitio_web,
+            area_id: primeraEmpresa.area_id,
+            area_nombre: primeraEmpresa.area_nombre,
+            area_tipo: primeraEmpresa.area_tipo,
           },
           usuario,
         });
@@ -131,6 +138,7 @@ export default function App() {
       <Stack.Screen name="Ingresar" component={IngresarScreen} />
       <Stack.Screen name="Bienvenida" component={BienvenidaScreen} />
       <Stack.Screen name="Inicio" component={InicioScreen} initialParams={paramsIniciales} />
+      <Stack.Screen name="MiPerfil" component={MiPerfilScreen} />
       <Stack.Screen name="SeleccionarEmpresa" component={SeleccionarEmpresaScreen} initialParams={paramsIniciales} />
       <Stack.Screen name="AceptarInvitacion" component={AceptarInvitacionScreen} />
       <Stack.Screen

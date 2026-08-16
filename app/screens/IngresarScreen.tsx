@@ -111,6 +111,9 @@ export default function IngresarScreen({ navigation }) {
             logo_url: primeraEmpresa.logo_url,
             color_hex: primeraEmpresa.color_hex,
             sitio_web: primeraEmpresa.sitio_web,
+            area_id: primeraEmpresa.area_id,
+            area_nombre: primeraEmpresa.area_nombre,
+            area_tipo: primeraEmpresa.area_tipo,
           },
           usuario: response.data.usuario,
         });

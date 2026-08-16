@@ -7,14 +7,13 @@ import * as MediaLibrary from 'expo-media-library';
 import * as Sharing from 'expo-sharing';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Image, KeyboardAvoidingView, Modal, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Image, KeyboardAvoidingView, Linking, Modal, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { storage } from '../../firebaseConfig';
 import EncabezadoLogo from '../components/EncabezadoLogo';
 import ImagenZoom from '../components/ImagenZoom';
 import Visor3D from '../components/Visor3D';
-
-const AREAS_ADMINISTRATIVAS = ['GERENCIA', 'AREA ADMINISTRATIVA', 'AREA DE LOGISTICA'];
+import { areasVisiblesEnEquipo, pestanasAreaProyecto, permisosDe } from '../utils/roles';
 
 const formatearFechaFoto = (fecha) => {
   if (!fecha) return '';
@@ -27,12 +26,15 @@ const formatearFechaFoto = (fecha) => {
 
 export default function AreaProyectoScreen({ route }) {
   const { empresa, proyecto, area, usuario } = route.params;
-  const [tab, setTab] = useState('equipo'); // 'equipo' | 'fotos' | 'planos3d'
+  const permisos = permisosDe(empresa);
+  const pestanasVisibles = pestanasAreaProyecto(empresa); // ['equipo', 'fotos', 'planos3d'] o subconjunto
+  const [tab, setTab] = useState(pestanasVisibles[0]); // 'equipo' | 'fotos' | 'planos3d' | 'contrato'
   const [equipo, setEquipo] = useState([]);
+  const [contrato, setContrato] = useState(null);
+  const [cargandoContrato, setCargandoContrato] = useState(false);
   const [cargando, setCargando] = useState(true);
   const [modalAsignarVisible, setModalAsignarVisible] = useState(false);
   const [personalDisponible, setPersonalDisponible] = useState([]);
-  const [esAdministrativo, setEsAdministrativo] = useState(false);
 
   const [chatAbierto, setChatAbierto] = useState(null);
   const [mensajes, setMensajes] = useState([]);
@@ -52,28 +54,31 @@ export default function AreaProyectoScreen({ route }) {
 
   useEffect(() => {
     cargarEquipo();
-    revisarSiEsAdministrativo();
   }, []);
-
-  const revisarSiEsAdministrativo = async () => {
-    try {
-      const sesionGuardada = await AsyncStorage.getItem('sesion');
-      if (!sesionGuardada) return;
-      const sesion = JSON.parse(sesionGuardada);
-      const empresaActual = (sesion?.empresas || []).find((e) => e.empresa_id === empresa.id);
-      setEsAdministrativo(!!empresaActual && AREAS_ADMINISTRATIVAS.includes(empresaActual.area_nombre));
-    } catch (error) {
-      console.error('Error revisando rol administrativo:', error);
-    }
-  };
 
   useEffect(() => {
     if (tab === 'fotos') {
       cargarFotos();
     } else if (tab === 'planos3d') {
       cargarPlanos3d();
+    } else if (tab === 'contrato') {
+      cargarContrato();
     }
   }, [tab]);
+
+  const cargarContrato = async () => {
+    setCargandoContrato(true);
+    setContrato(null);
+    try {
+      const res = await axios.get(`https://backend-app-mediterraneo.onrender.com/api/cotizaciones/contratos/por-proyecto/${proyecto.id}`);
+      setContrato(res.data.contrato);
+    } catch (error) {
+      // 404 = todavía no hay contrato asociado a este proyecto; no es un error real.
+      setContrato(null);
+    } finally {
+      setCargandoContrato(false);
+    }
+  };
 
   const cargarFotos = async () => {
     setCargandoFotos(true);
@@ -284,7 +289,19 @@ export default function AreaProyectoScreen({ route }) {
     setCargando(true);
     try {
       const resEquipo = await axios.get(`https://backend-app-mediterraneo.onrender.com/api/proyectos/${proyecto.id}/equipo`);
-      setEquipo(resEquipo.data.equipo.filter((p) => p.area_id === area.id));
+      // Algunas áreas (Proveedores, Clientes) tienen visibilidad reducida: además de su
+      // propia área, solo pueden ver/hablar con ciertas áreas fijas (Gerencia, Administrativa,
+      // etc.), no con el resto del equipo del proyecto.
+      const areasPermitidas = areasVisiblesEnEquipo(empresa);
+      let personasVisibles;
+      if (areasPermitidas) {
+        personasVisibles = resEquipo.data.equipo.filter(
+          (p) => p.area_id === area.id || areasPermitidas.includes(p.area_nombre)
+        );
+      } else {
+        personasVisibles = resEquipo.data.equipo.filter((p) => p.area_id === area.id);
+      }
+      setEquipo(personasVisibles);
     } catch (error) {
       console.error('Error cargando equipo:', error);
     } finally {
@@ -381,24 +398,37 @@ export default function AreaProyectoScreen({ route }) {
       <EncabezadoLogo empresa={empresa} />
 
       <View style={styles.tabsContainer}>
-        <TouchableOpacity style={[styles.tabBoton, tab === 'equipo' && styles.tabBotonActivo]} onPress={() => setTab('equipo')}>
-          <Text style={[styles.tabBotonTexto, tab === 'equipo' && styles.tabBotonTextoActivo]}>Equipo</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.tabBoton, tab === 'fotos' && styles.tabBotonActivo]} onPress={() => setTab('fotos')}>
-          <Text style={[styles.tabBotonTexto, tab === 'fotos' && styles.tabBotonTextoActivo]}>Fotos</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.tabBoton, tab === 'planos3d' && styles.tabBotonActivo]} onPress={() => setTab('planos3d')}>
-          <Text style={[styles.tabBotonTexto, tab === 'planos3d' && styles.tabBotonTextoActivo]}>Planos 3D</Text>
-        </TouchableOpacity>
+        {pestanasVisibles.includes('equipo') && (
+          <TouchableOpacity style={[styles.tabBoton, tab === 'equipo' && styles.tabBotonActivo]} onPress={() => setTab('equipo')}>
+            <Text style={[styles.tabBotonTexto, tab === 'equipo' && styles.tabBotonTextoActivo]}>Equipo</Text>
+          </TouchableOpacity>
+        )}
+        {pestanasVisibles.includes('fotos') && (
+          <TouchableOpacity style={[styles.tabBoton, tab === 'fotos' && styles.tabBotonActivo]} onPress={() => setTab('fotos')}>
+            <Text style={[styles.tabBotonTexto, tab === 'fotos' && styles.tabBotonTextoActivo]}>Fotos</Text>
+          </TouchableOpacity>
+        )}
+        {pestanasVisibles.includes('planos3d') && (
+          <TouchableOpacity style={[styles.tabBoton, tab === 'planos3d' && styles.tabBotonActivo]} onPress={() => setTab('planos3d')}>
+            <Text style={[styles.tabBotonTexto, tab === 'planos3d' && styles.tabBotonTextoActivo]}>Planos 3D</Text>
+          </TouchableOpacity>
+        )}
+        {pestanasVisibles.includes('contrato') && (
+          <TouchableOpacity style={[styles.tabBoton, tab === 'contrato' && styles.tabBotonActivo]} onPress={() => setTab('contrato')}>
+            <Text style={[styles.tabBotonTexto, tab === 'contrato' && styles.tabBotonTextoActivo]}>Contrato</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {tab === 'equipo' ? (
         <>
           <View style={styles.header}>
             <Text style={styles.headerTitulo}>Personas en {area.nombre}</Text>
-            <TouchableOpacity style={styles.botonAsignar} onPress={abrirAsignar}>
-              <Text style={styles.botonAsignarTexto}>ASIGNAR</Text>
-            </TouchableOpacity>
+            {permisos.asignarPersonal && (
+              <TouchableOpacity style={styles.botonAsignar} onPress={abrirAsignar}>
+                <Text style={styles.botonAsignarTexto}>ASIGNAR</Text>
+              </TouchableOpacity>
+            )}
           </View>
 
           {equipo.length === 0 ? (
@@ -447,11 +477,31 @@ export default function AreaProyectoScreen({ route }) {
             />
           )}
         </>
+      ) : tab === 'contrato' ? (
+        <View style={{ flex: 1, padding: 20 }}>
+          <View style={styles.header}>
+            <Text style={styles.headerTitulo}>Contrato</Text>
+          </View>
+          {cargandoContrato ? (
+            <ActivityIndicator size="large" color={empresa.color_hex || '#1E90FF'} style={{ marginTop: 20 }} />
+          ) : contrato?.pdf_url ? (
+            <TouchableOpacity
+              style={styles.botonAsignar}
+              onPress={() => Linking.openURL(contrato.pdf_url)}
+            >
+              <Text style={styles.botonAsignarTexto}>ABRIR CONTRATO (PDF)</Text>
+            </TouchableOpacity>
+          ) : (
+            <Text style={styles.vacioTexto}>
+              Tu contrato todavía no está disponible. Cuando la empresa lo genere, aparecerá aquí.
+            </Text>
+          )}
+        </View>
       ) : (
         <>
           <View style={styles.header}>
             <Text style={styles.headerTitulo}>Planos 3D de {area.nombre}</Text>
-            {esAdministrativo && (
+            {permisos.gestionarPlanos3d && (
               <TouchableOpacity style={styles.botonAsignar} onPress={elegirYSubirPlano3d} disabled={subiendoPlano3d}>
                 <Text style={styles.botonAsignarTexto}>{subiendoPlano3d ? 'SUBIENDO...' : '+ PLANO .GLB'}</Text>
               </TouchableOpacity>
@@ -462,7 +512,7 @@ export default function AreaProyectoScreen({ route }) {
             <ActivityIndicator size="large" color={empresa.color_hex || '#1E90FF'} style={{ marginTop: 20 }} />
           ) : planos3d.length === 0 ? (
             <Text style={styles.vacioTexto}>
-              {esAdministrativo
+              {permisos.gestionarPlanos3d
                 ? 'Aún no hay planos 3D. Toca "+ Plano .glb" y elige un archivo exportado desde SketchUp como "Archivo binario glTF (.glb)".'
                 : 'Aún no hay planos 3D subidos para esta área.'}
             </Text>
@@ -527,7 +577,7 @@ export default function AreaProyectoScreen({ route }) {
               <Text style={styles.chatVolver}>‹ Volver</Text>
             </TouchableOpacity>
             <Text style={styles.chatTitulo} numberOfLines={1}>{plano3dAbierto?.nombre}</Text>
-            {esAdministrativo ? (
+            {permisos.gestionarPlanos3d ? (
               <TouchableOpacity onPress={() => confirmarEliminarPlano3d(plano3dAbierto)}>
                 <Text style={styles.plano3dEliminarTexto}>Eliminar</Text>
               </TouchableOpacity>

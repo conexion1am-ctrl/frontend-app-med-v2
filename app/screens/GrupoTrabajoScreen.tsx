@@ -7,8 +7,7 @@ import { ActivityIndicator, Alert, KeyboardAvoidingView, Linking, Modal, Platfor
 import { storage } from '../../firebaseConfig';
 import EncabezadoLogo from '../components/EncabezadoLogo';
 import InputCelular, { detectarPaisPorDispositivo, PAISES } from '../components/InputCelular';
-
-const AREAS_ADMINISTRATIVAS = ['GERENCIA', 'AREA ADMINISTRATIVA', 'AREA DE LOGISTICA'];
+import { esGerencia, permisosDe } from '../utils/roles';
 
 // Convierte "2026-08-15" a "15-08-26" (formato de fecha estándar de la app)
 const formatearFechaDdMmAa = (fecha) => {
@@ -36,11 +35,12 @@ const convertirADdMmAaAIso = (texto) => {
 
 export default function GrupoTrabajoScreen({ route }) {
   const { empresa, usuario } = route.params;
+  const permisos = permisosDe(empresa);
+  const puedeGestionarGerencia = esGerencia(empresa);
   const [personal, setPersonal] = useState([]);
   const [areas, setAreas] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
-  const [esAdministrativo, setEsAdministrativo] = useState(false);
 
   const [nombre, setNombre] = useState('');
   const [celular, setCelular] = useState('');
@@ -86,20 +86,7 @@ export default function GrupoTrabajoScreen({ route }) {
 
   useEffect(() => {
     cargarDatos();
-    revisarSiEsAdministrativo();
   }, []);
-
-  const revisarSiEsAdministrativo = async () => {
-    try {
-      const sesionGuardada = await AsyncStorage.getItem('sesion');
-      if (!sesionGuardada) return;
-      const sesion = JSON.parse(sesionGuardada);
-      const empresaActual = (sesion?.empresas || []).find((e) => e.empresa_id === empresa.id);
-      setEsAdministrativo(!!empresaActual && AREAS_ADMINISTRATIVAS.includes(empresaActual.area_nombre));
-    } catch (error) {
-      console.error('Error revisando rol administrativo:', error);
-    }
-  };
 
   const cargarDatos = async () => {
     setCargando(true);
@@ -415,6 +402,8 @@ export default function GrupoTrabajoScreen({ route }) {
       } else {
         await axios.put(`https://backend-app-mediterraneo.onrender.com/api/areas/personal/vinculado/${editandoPersona.usuario_id}/nombre`, {
           nombre: editNombre,
+          empresa_id: empresa.id,
+          solicitante_id: usuario.id,
         });
 
         const areasActuales = personal
@@ -429,11 +418,14 @@ export default function GrupoTrabajoScreen({ route }) {
           await axios.post(`https://backend-app-mediterraneo.onrender.com/api/areas/personal/vinculado/${editandoPersona.usuario_id}/areas`, {
             empresa_id: empresa.id,
             area_id: areaId,
+            solicitante_id: usuario.id,
           });
         }
 
         for (const areaQuitada of areasQuitadas) {
-          await axios.delete(`https://backend-app-mediterraneo.onrender.com/api/areas/personal/vinculado/${areaQuitada.rol_id}`);
+          await axios.delete(`https://backend-app-mediterraneo.onrender.com/api/areas/personal/vinculado/${areaQuitada.rol_id}`, {
+            data: { solicitante_id: usuario.id },
+          });
         }
       }
 
@@ -467,7 +459,9 @@ export default function GrupoTrabajoScreen({ route }) {
       if (persona.estado === 'pendiente') {
         await axios.delete(`https://backend-app-mediterraneo.onrender.com/api/invitaciones/${persona.rol_id}`);
       } else {
-        await axios.delete(`https://backend-app-mediterraneo.onrender.com/api/areas/personal/vinculado/${persona.rol_id}?todas=true`);
+        await axios.delete(`https://backend-app-mediterraneo.onrender.com/api/areas/personal/vinculado/${persona.rol_id}?todas=true`, {
+          data: { solicitante_id: usuario.id },
+        });
       }
       cargarDatos();
     } catch (error) {
@@ -563,12 +557,18 @@ export default function GrupoTrabajoScreen({ route }) {
         <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={cerrarMenu}>
           <View style={styles.menuBox}>
             <Text style={styles.menuTitulo}>{menuPersona?.nombre}</Text>
-            <TouchableOpacity style={styles.menuOpcion} onPress={() => abrirEditar(menuPersona)}>
-              <Text style={styles.menuOpcionTexto}>✏️  Editar</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.menuOpcion} onPress={() => confirmarEliminar(menuPersona)}>
-              <Text style={[styles.menuOpcionTexto, { color: '#DC143C' }]}>🗑️  Eliminar</Text>
-            </TouchableOpacity>
+            {menuPersona?.area_nombre === 'GERENCIA' && !puedeGestionarGerencia ? (
+              <Text style={styles.notaLinkTexto}>Solo Gerencia puede editar o eliminar a alguien de Gerencia.</Text>
+            ) : (
+              <>
+                <TouchableOpacity style={styles.menuOpcion} onPress={() => abrirEditar(menuPersona)}>
+                  <Text style={styles.menuOpcionTexto}>✏️  Editar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.menuOpcion} onPress={() => confirmarEliminar(menuPersona)}>
+                  <Text style={[styles.menuOpcionTexto, { color: '#DC143C' }]}>🗑️  Eliminar</Text>
+                </TouchableOpacity>
+              </>
+            )}
             <TouchableOpacity style={styles.menuOpcion} onPress={cerrarMenu}>
               <Text style={[styles.menuOpcionTexto, { color: '#888' }]}>Cancelar</Text>
             </TouchableOpacity>
@@ -682,7 +682,7 @@ export default function GrupoTrabajoScreen({ route }) {
               {guardando ? <ActivityIndicator color="#fff" /> : <Text style={styles.botonAgregarTexto}>GUARDAR CAMBIOS</Text>}
             </TouchableOpacity>
 
-            {editandoPersona?.estado === 'vinculado' && esAdministrativo && (
+            {editandoPersona?.estado === 'vinculado' && permisos.gestionarGrupoTrabajo && (
               <View style={styles.arlSeccion}>
                 <Text style={styles.arlTitulo}>Documento ARL (Riesgos Profesionales)</Text>
                 <Text style={styles.notaTexto}>
