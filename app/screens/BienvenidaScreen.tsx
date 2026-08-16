@@ -9,7 +9,7 @@ export default function BienvenidaScreen({ route, navigation }) {
   return (
     <View style={[styles.center, { backgroundColor: colorEmpresa }]}>
       <EncabezadoLogo empresa={empresa} />
-      <Text style={styles.bienvenidaTitulo}>¡Bienvenido a CyD Manager!</Text>
+      <Text style={styles.bienvenidaTitulo}>¡Bienvenido a C&D Manager!</Text>
       <Text style={styles.bienvenidaEmpresa}>{empresa.nombre}</Text>
       <Text style={styles.bienvenidaUsuario}>Gerencia: {usuario.nombre}</Text>
       <TouchableOpacity

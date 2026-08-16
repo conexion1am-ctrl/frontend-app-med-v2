@@ -88,7 +88,7 @@ export default function SeleccionarEmpresaScreen({ route, navigation }) {
   return (
     <View style={styles.container}>
       <Text style={styles.titulo}>¿Con cuál empresa quieres entrar?</Text>
-      <Text style={styles.subtitulo}>Perteneces a más de una empresa en CyD Manager</Text>
+      <Text style={styles.subtitulo}>Perteneces a más de una empresa en C&D Manager</Text>
 
       {empresasVisibles.map((empresa, index) => (
         <TouchableOpacity
