@@ -8,7 +8,6 @@
     "scheme": "frontendappmedv2",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-    "main": "app.js",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.cydmanager.app"
