@@ -1,6 +1,6 @@
 import axios from 'axios';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import EncabezadoLogo from '../components/EncabezadoLogo';
 import InputCelular, { detectarPaisPorDispositivo, PAISES } from '../components/InputCelular';
 
@@ -16,6 +16,9 @@ export default function GrupoTrabajoScreen({ route }) {
   const [paisCelular, setPaisCelular] = useState(detectarPaisPorDispositivo());
   const [areasSeleccionadas, setAreasSeleccionadas] = useState([]);
   const [guardando, setGuardando] = useState(false);
+  const [modalLinkVisible, setModalLinkVisible] = useState(false);
+  const [linkInvitacion, setLinkInvitacion] = useState('');
+  const [nombreInvitado, setNombreInvitado] = useState('');
 
   const [menuPersona, setMenuPersona] = useState(null);
 
@@ -84,23 +87,43 @@ export default function GrupoTrabajoScreen({ route }) {
     setGuardando(true);
     try {
       const celularCompleto = `${paisCelular.prefijo} ${celular}`;
+      let ultimoLink = null;
       for (const areaId of areasSeleccionadas) {
-        await axios.post('https://backend-app-mediterraneo.onrender.com/api/invitaciones/generar', {
+        const respuesta = await axios.post('https://backend-app-mediterraneo.onrender.com/api/invitaciones/generar', {
           empresa_id: empresa.id,
           area_id: areaId,
           nombre_invitado: nombre,
           celular_invitado: celularCompleto,
         });
+        ultimoLink = respuesta.data.link_whatsapp;
       }
-      Alert.alert('¡Listo!', `Invitación generada para ${nombre}. Cópiala y envíasela por WhatsApp.`);
       setModalVisible(false);
       limpiarFormulario();
       cargarDatos();
+
+      // Mostramos el enlace generado para que lo copie o lo comparta directo por WhatsApp.
+      if (ultimoLink) {
+        setLinkInvitacion(ultimoLink);
+        setNombreInvitado(nombre);
+        setModalLinkVisible(true);
+      } else {
+        Alert.alert('¡Listo!', `Invitación generada para ${nombre}.`);
+      }
     } catch (error) {
       console.error('Error agregando personal:', error);
       Alert.alert('Error', 'No se pudo agregar el personal. Intenta de nuevo.');
     } finally {
       setGuardando(false);
+    }
+  };
+
+  const compartirLinkInvitacion = async () => {
+    try {
+      await Share.share({
+        message: `¡Hola ${nombreInvitado}! Te invito a unirte a nuestro equipo en C&D Manager. Toca este enlace para aceptar la invitación: ${linkInvitacion}`,
+      });
+    } catch (error) {
+      console.error('Error compartiendo invitación:', error);
     }
   };
 
@@ -470,6 +493,25 @@ export default function GrupoTrabajoScreen({ route }) {
           </View>
         </View>
       </Modal>
+
+      {/* MODAL: Enlace de invitación generado */}
+      <Modal visible={modalLinkVisible} animationType="fade" transparent>
+        <View style={styles.linkOverlay}>
+          <View style={styles.linkBox}>
+            <Text style={styles.linkTitulo}>¡Invitación creada!</Text>
+            <Text style={styles.linkSubtitulo}>Envíale este enlace a {nombreInvitado} para que se una al equipo:</Text>
+            <View style={styles.linkTextoContainer}>
+              <Text style={styles.linkTexto} selectable>{linkInvitacion}</Text>
+            </View>
+            <TouchableOpacity style={styles.botonGuardar} onPress={compartirLinkInvitacion}>
+              <Text style={styles.botonAgregarTexto}>📤 Enviar por WhatsApp</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.botonCancelar} onPress={() => setModalLinkVisible(false)}>
+              <Text style={styles.botonCancelarTexto}>Cerrar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -555,4 +597,10 @@ const styles = StyleSheet.create({
   proyectoAsignadoCard: { backgroundColor: '#f5f5f5', borderRadius: 8, padding: 12, marginBottom: 8 },
   proyectoAsignadoNombre: { fontSize: 15, fontWeight: '600', color: '#222' },
   proyectoAsignadoArea: { fontSize: 13, color: '#777', marginTop: 2 },
+  linkOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 24 },
+  linkBox: { backgroundColor: '#fff', borderRadius: 12, padding: 22 },
+  linkTitulo: { fontSize: 19, fontWeight: 'bold', color: '#222', marginBottom: 8, textAlign: 'center' },
+  linkSubtitulo: { fontSize: 14, color: '#666', marginBottom: 14, textAlign: 'center' },
+  linkTextoContainer: { backgroundColor: '#f5f5f5', borderRadius: 8, padding: 12, borderWidth: 1, borderColor: '#ddd' },
+  linkTexto: { fontSize: 13, color: '#1E90FF' },
 });
