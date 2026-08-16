@@ -4,6 +4,7 @@ import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import React, { useState } from 'react';
 import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { storage } from '../../firebaseConfig';
+import InputContraseña from '../components/InputContraseña';
 
 const COLORES = ['#1E90FF', '#FF6347', '#32CD32', '#FFD700', '#8A2BE2', '#FF69B4', '#20B2AA', '#DC143C', '#A8C69F', '#C9B79C', '#9CAF88', '#D4B896', '#87A96B', '#000000', '#808080', '#FFFFFF'];
 
@@ -171,33 +172,24 @@ export default function EditarPerfilScreen({ route, navigation }) {
         <TextInput style={styles.input} value={nombreUsuario} onChangeText={setNombreUsuario} placeholderTextColor="#999" />
 
         <Text style={styles.label}>Contraseña actual</Text>
-        <TextInput
-          style={styles.input}
+        <InputContraseña
           value={contraseñaActual}
           onChangeText={setContraseñaActual}
           placeholder="Solo si vas a cambiar tu contraseña"
-          placeholderTextColor="#999"
-          secureTextEntry
         />
 
         <Text style={styles.label}>Contraseña nueva (opcional)</Text>
-        <TextInput
-          style={styles.input}
+        <InputContraseña
           value={contraseñaNueva}
           onChangeText={setContraseñaNueva}
           placeholder="Déjalo vacío si no quieres cambiarla"
-          placeholderTextColor="#999"
-          secureTextEntry
         />
 
         <Text style={styles.label}>Confirmar contraseña nueva</Text>
-        <TextInput
-          style={styles.input}
+        <InputContraseña
           value={confirmarContraseñaNueva}
           onChangeText={setConfirmarContraseñaNueva}
           placeholder="Repite la contraseña nueva"
-          placeholderTextColor="#999"
-          secureTextEntry
         />
 
         <TouchableOpacity style={styles.boton} onPress={guardarCambios} disabled={guardando}>

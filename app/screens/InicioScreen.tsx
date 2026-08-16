@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import EncabezadoLogo from '../components/EncabezadoLogo';
 
@@ -16,6 +16,33 @@ const BOTONES_INICIO = [
 export default function InicioScreen({ route, navigation }) {
   const { empresa, usuario } = route.params;
   const colorEmpresa = empresa.color_hex || '#1E90FF';
+  const [tieneVariasEmpresas, setTieneVariasEmpresas] = useState(false);
+
+  useEffect(() => {
+    revisarSiTieneVariasEmpresas();
+  }, []);
+
+  const revisarSiTieneVariasEmpresas = async () => {
+    try {
+      const sesionGuardada = await AsyncStorage.getItem('sesion');
+      if (!sesionGuardada) return;
+      const sesion = JSON.parse(sesionGuardada);
+      setTieneVariasEmpresas((sesion?.empresas?.length || 0) > 1);
+    } catch (error) {
+      console.error('Error revisando empresas de la sesión:', error);
+    }
+  };
+
+  const cambiarEmpresa = async () => {
+    try {
+      const sesionGuardada = await AsyncStorage.getItem('sesion');
+      if (!sesionGuardada) return;
+      const sesion = JSON.parse(sesionGuardada);
+      navigation.replace('SeleccionarEmpresa', { empresas: sesion.empresas, usuario: sesion.usuario });
+    } catch (error) {
+      console.error('Error cambiando de empresa:', error);
+    }
+  };
 
   const manejarBoton = (boton) => {
     if (boton.ruta) {
@@ -53,6 +80,12 @@ export default function InicioScreen({ route, navigation }) {
           </TouchableOpacity>
         ))}
 
+        {tieneVariasEmpresas && (
+          <TouchableOpacity style={styles.botonCambiarEmpresa} onPress={cambiarEmpresa}>
+            <Text style={styles.botonCambiarEmpresaTexto}>Cambiar de empresa</Text>
+          </TouchableOpacity>
+        )}
+
         <TouchableOpacity style={styles.botonCerrarSesion} onPress={cerrarSesion}>
           <Text style={styles.botonCerrarSesionTexto}>Cerrar sesión</Text>
         </TouchableOpacity>
@@ -78,4 +111,12 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   botonCerrarSesionTexto: { fontSize: 15, fontWeight: '600', color: '#fff' },
+  botonCambiarEmpresa: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  botonCambiarEmpresaTexto: { fontSize: 15, fontWeight: '600', color: '#fff' },
 });

@@ -3,6 +3,7 @@ import axios from 'axios';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import InputCelular, { detectarPaisPorDispositivo, PAISES } from '../components/InputCelular';
+import InputContraseña from '../components/InputContraseña';
 
 export default function IngresarScreen({ navigation }) {
   const [celular, setCelular] = useState('');
@@ -128,13 +129,10 @@ export default function IngresarScreen({ navigation }) {
         {verificado && requiereContraseña && (
           <>
             <Text style={styles.label}>Contraseña</Text>
-            <TextInput
-              style={styles.input}
+            <InputContraseña
               value={contraseña}
               onChangeText={setContraseña}
               placeholder="Tu contraseña"
-              placeholderTextColor="#999"
-              secureTextEntry
             />
           </>
         )}

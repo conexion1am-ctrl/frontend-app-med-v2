@@ -6,6 +6,7 @@ import React, { useState } from 'react';
 import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { storage } from '../../firebaseConfig';
 import InputCelular, { detectarPaisPorDispositivo } from '../components/InputCelular';
+import InputContraseña from '../components/InputContraseña';
 
 const COLORES = ['#1E90FF', '#FF6347', '#32CD32', '#FFD700', '#8A2BE2', '#FF69B4', '#20B2AA', '#DC143C', '#A8C69F', '#C9B79C', '#9CAF88', '#D4B896', '#87A96B', '#000000', '#808080', '#FFFFFF'];
 
@@ -197,23 +198,17 @@ export default function PerfilEmpresaScreen({ navigation }) {
         />
 
         <Text style={styles.label}>Contraseña *</Text>
-        <TextInput
-          style={styles.input}
+        <InputContraseña
           value={contraseña}
           onChangeText={setContraseña}
           placeholder="Mínimo 6 caracteres"
-          placeholderTextColor="#999"
-          secureTextEntry
         />
 
         <Text style={styles.label}>Confirmar contraseña *</Text>
-        <TextInput
-          style={styles.input}
+        <InputContraseña
           value={confirmarContraseña}
           onChangeText={setConfirmarContraseña}
           placeholder="Repite tu contraseña"
-          placeholderTextColor="#999"
-          secureTextEntry
         />
 
         <TouchableOpacity style={styles.boton} onPress={crearPerfil} disabled={cargando}>

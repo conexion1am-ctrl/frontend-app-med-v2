@@ -32,13 +32,44 @@ export default function App() {
 
   const revisarSesion = async () => {
     try {
-      // Tanto si hay sesión guardada como si no, siempre arrancamos en "Ingresar":
-      // - Si hay sesión guardada, el celular ya viene prellenado y puede entrar directo.
-      // - Si no hay sesión (primera vez, o reinstalación), puede iniciar sesión con una
-      //   cuenta existente o tocar "Crear perfil de empresa" si es realmente nuevo.
-      setRutaInicial('Ingresar');
+      const sesionGuardada = await AsyncStorage.getItem('sesion');
+      if (!sesionGuardada) {
+        // Sin sesión (primera vez, o reinstalación): mostrar login, con opción de crear empresa.
+        setRutaInicial('Ingresar');
+        return;
+      }
+
+      const sesion = JSON.parse(sesionGuardada);
+      const empresas = sesion?.empresas || [];
+      const usuario = sesion?.usuario;
+
+      if (!usuario || empresas.length === 0) {
+        setRutaInicial('Ingresar');
+        return;
+      }
+
+      if (empresas.length > 1) {
+        // Pertenece a varias empresas: que elija con cuál entrar, sin pedir contraseña de nuevo.
+        setRutaInicial('SeleccionarEmpresa');
+        setParamsIniciales({ empresas, usuario });
+      } else {
+        // Solo una empresa: entrar directo a Inicio.
+        const primeraEmpresa = empresas[0];
+        setRutaInicial('Inicio');
+        setParamsIniciales({
+          empresa: {
+            id: primeraEmpresa.empresa_id,
+            nombre: primeraEmpresa.empresa_nombre,
+            logo_url: primeraEmpresa.logo_url,
+            color_hex: primeraEmpresa.color_hex,
+            sitio_web: primeraEmpresa.sitio_web,
+          },
+          usuario,
+        });
+      }
     } catch (error) {
       console.error('Error revisando sesión:', error);
+      setRutaInicial('Ingresar');
     } finally {
       setCargando(false);
     }
@@ -58,8 +89,8 @@ export default function App() {
       <Stack.Screen name="PerfilEmpresa" component={PerfilEmpresaScreen} />
       <Stack.Screen name="Ingresar" component={IngresarScreen} />
       <Stack.Screen name="Bienvenida" component={BienvenidaScreen} />
-      <Stack.Screen name="Inicio" component={InicioScreen} />
-      <Stack.Screen name="SeleccionarEmpresa" component={SeleccionarEmpresaScreen} />
+      <Stack.Screen name="Inicio" component={InicioScreen} initialParams={paramsIniciales} />
+      <Stack.Screen name="SeleccionarEmpresa" component={SeleccionarEmpresaScreen} initialParams={paramsIniciales} />
       <Stack.Screen name="AceptarInvitacion" component={AceptarInvitacionScreen} />
       <Stack.Screen
         name="EditarPerfil"

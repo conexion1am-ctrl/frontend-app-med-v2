@@ -1,6 +1,7 @@
 import axios from 'axios';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import InputContraseña from '../components/InputContraseña';
 
 const AREAS_ADMINISTRATIVAS = ['GERENCIA', 'AREA ADMINISTRATIVA', 'AREA DE LOGISTICA'];
 
@@ -110,21 +111,17 @@ export default function AceptarInvitacionScreen({ route, navigation }) {
               Así podrás ingresar desde tu celular u otro dispositivo con tu número y esta contraseña.
             </Text>
 
-            <TextInput
-              style={styles.input}
+            <InputContraseña
               value={contraseña}
               onChangeText={setContraseña}
               placeholder="Crea tu contraseña (mínimo 6 caracteres)"
-              placeholderTextColor="#999"
-              secureTextEntry
-            />
-            <TextInput
               style={styles.input}
+            />
+            <InputContraseña
               value={confirmarContraseña}
               onChangeText={setConfirmarContraseña}
               placeholder="Confirma tu contraseña"
-              placeholderTextColor="#999"
-              secureTextEntry
+              style={styles.input}
             />
           </View>
         )}
