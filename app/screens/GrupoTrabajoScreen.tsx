@@ -1,15 +1,46 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
+import * as DocumentPicker from 'expo-document-picker';
+import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Linking, Modal, Platform, ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { storage } from '../../firebaseConfig';
 import EncabezadoLogo from '../components/EncabezadoLogo';
 import InputCelular, { detectarPaisPorDispositivo, PAISES } from '../components/InputCelular';
 
+const AREAS_ADMINISTRATIVAS = ['GERENCIA', 'AREA ADMINISTRATIVA', 'AREA DE LOGISTICA'];
+
+// Convierte "2026-08-15" a "15-08-26" (formato de fecha estándar de la app)
+const formatearFechaDdMmAa = (fecha) => {
+  if (!fecha) return '';
+  const d = new Date(fecha);
+  const dia = String(d.getUTCDate()).padStart(2, '0');
+  const mes = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const anio = String(d.getUTCFullYear()).slice(-2);
+  return `${dia}-${mes}-${anio}`;
+};
+
+// Convierte texto escrito como "15-08-26" a formato ISO "2026-08-15" para el backend
+const convertirADdMmAaAIso = (texto) => {
+  const partes = texto.trim().split('-');
+  if (partes.length !== 3) return null;
+  let [dia, mes, anio] = partes;
+  if (!dia || !mes || !anio) return null;
+  if (anio.length === 2) anio = `20${anio}`;
+  if (dia.length !== 2 || mes.length !== 2 || anio.length !== 4) return null;
+  const diaNum = parseInt(dia, 10);
+  const mesNum = parseInt(mes, 10);
+  if (diaNum < 1 || diaNum > 31 || mesNum < 1 || mesNum > 12) return null;
+  return `${anio}-${mes}-${dia}`;
+};
+
 export default function GrupoTrabajoScreen({ route }) {
-  const { empresa } = route.params;
+  const { empresa, usuario } = route.params;
   const [personal, setPersonal] = useState([]);
   const [areas, setAreas] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
+  const [esAdministrativo, setEsAdministrativo] = useState(false);
 
   const [nombre, setNombre] = useState('');
   const [celular, setCelular] = useState('');
@@ -19,6 +50,11 @@ export default function GrupoTrabajoScreen({ route }) {
   const [modalLinkVisible, setModalLinkVisible] = useState(false);
   const [linkInvitacion, setLinkInvitacion] = useState('');
   const [nombreInvitado, setNombreInvitado] = useState('');
+
+  const [archivoArlUri, setArchivoArlUri] = useState(null);
+  const [archivoArlNombre, setArchivoArlNombre] = useState(null);
+  const [arlVencimiento, setArlVencimiento] = useState('');
+  const [subiendoArl, setSubiendoArl] = useState(false);
 
   const [menuPersona, setMenuPersona] = useState(null);
 
@@ -45,7 +81,20 @@ export default function GrupoTrabajoScreen({ route }) {
 
   useEffect(() => {
     cargarDatos();
+    revisarSiEsAdministrativo();
   }, []);
+
+  const revisarSiEsAdministrativo = async () => {
+    try {
+      const sesionGuardada = await AsyncStorage.getItem('sesion');
+      if (!sesionGuardada) return;
+      const sesion = JSON.parse(sesionGuardada);
+      const empresaActual = (sesion?.empresas || []).find((e) => e.empresa_id === empresa.id);
+      setEsAdministrativo(!!empresaActual && AREAS_ADMINISTRATIVAS.includes(empresaActual.area_nombre));
+    } catch (error) {
+      console.error('Error revisando rol administrativo:', error);
+    }
+  };
 
   const cargarDatos = async () => {
     setCargando(true);
@@ -199,7 +248,117 @@ export default function GrupoTrabajoScreen({ route }) {
       .filter((p) => p.nombre === persona.nombre && p.celular === persona.celular && p.estado === persona.estado)
       .map((p) => p.area_id);
     setEditAreasSeleccionadas(areasDeEstaPersona);
+    setArchivoArlUri(null);
+    setArchivoArlNombre(null);
+    setArlVencimiento(persona.arl_vencimiento ? formatearFechaDdMmAa(persona.arl_vencimiento) : '');
     setModalEditarVisible(true);
+  };
+
+  // Calcula si el documento ARL está vencido, por vencer (30 días) o vigente
+  const estadoArl = (fechaVencimientoIso) => {
+    if (!fechaVencimientoIso) return null;
+    const hoy = new Date();
+    const vencimiento = new Date(fechaVencimientoIso);
+    const diasRestantes = Math.ceil((vencimiento.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
+    if (diasRestantes < 0) return 'vencido';
+    if (diasRestantes <= 5) return 'por_vencer';
+    return 'vigente';
+  };
+
+  const elegirArchivoArl = async () => {
+    try {
+      const resultado = await DocumentPicker.getDocumentAsync({
+        type: ['application/pdf', 'image/*'],
+        copyToCacheDirectory: true,
+      });
+      if (resultado.canceled) return;
+      const archivo = resultado.assets[0];
+      setArchivoArlUri(archivo.uri);
+      setArchivoArlNombre(archivo.name);
+    } catch (error) {
+      console.error('Error eligiendo archivo ARL:', error);
+      Alert.alert('Error', 'No se pudo abrir el selector de archivos.');
+    }
+  };
+
+  const subirArchivoArlAFirebase = async (uri, nombreArchivoOriginal) => {
+    const respuesta = await fetch(uri);
+    const blob = await respuesta.blob();
+    const extension = nombreArchivoOriginal?.split('.').pop() || 'pdf';
+    const nombreArchivo = `arl/${editandoPersona.usuario_id}_${Date.now()}.${extension}`;
+    const storageRef = ref(storage, nombreArchivo);
+    await uploadBytes(storageRef, blob);
+    return await getDownloadURL(storageRef);
+  };
+
+  const guardarDocumentoArl = async () => {
+    if (!archivoArlUri && !arlVencimiento) {
+      Alert.alert('Nada que guardar', 'Selecciona un documento o escribe una fecha de vencimiento.');
+      return;
+    }
+    let fechaIso = null;
+    if (arlVencimiento) {
+      fechaIso = convertirADdMmAaAIso(arlVencimiento);
+      if (!fechaIso) {
+        Alert.alert('Fecha inválida', 'Escribe la fecha de vencimiento en formato DD-MM-AA, por ejemplo: 15-08-27');
+        return;
+      }
+    }
+
+    setSubiendoArl(true);
+    try {
+      let urlDocumento = editandoPersona.arl_documento_url || null;
+      if (archivoArlUri) {
+        urlDocumento = await subirArchivoArlAFirebase(archivoArlUri, archivoArlNombre);
+      }
+
+      if (!urlDocumento) {
+        Alert.alert('Falta el documento', 'Debes seleccionar el archivo del documento ARL.');
+        return;
+      }
+
+      await axios.put(`https://backend-app-mediterraneo.onrender.com/api/areas/personal/vinculado/${editandoPersona.usuario_id}/arl`, {
+        arl_documento_url: urlDocumento,
+        arl_vencimiento: fechaIso,
+      });
+
+      Alert.alert('¡Listo!', 'Documento ARL guardado exitosamente.');
+      setArchivoArlUri(null);
+      setArchivoArlNombre(null);
+      cargarDatos();
+    } catch (error) {
+      console.error('Error guardando documento ARL:', error);
+      const mensaje = error.response?.data?.error || 'No se pudo guardar el documento ARL.';
+      Alert.alert('Error', mensaje);
+    } finally {
+      setSubiendoArl(false);
+    }
+  };
+
+  const eliminarDocumentoArl = () => {
+    Alert.alert('Eliminar documento ARL', '¿Seguro que quieres eliminar este documento?', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Eliminar',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await axios.delete(`https://backend-app-mediterraneo.onrender.com/api/areas/personal/vinculado/${editandoPersona.usuario_id}/arl`);
+            setArlVencimiento('');
+            cargarDatos();
+          } catch (error) {
+            console.error('Error eliminando documento ARL:', error);
+            Alert.alert('Error', 'No se pudo eliminar el documento ARL.');
+          }
+        },
+      },
+    ]);
+  };
+
+  const abrirDocumentoArl = (url) => {
+    Linking.openURL(url).catch(() => {
+      Alert.alert('Error', 'No se pudo abrir el documento.');
+    });
   };
 
   const guardarEdicion = async () => {
@@ -316,6 +475,22 @@ export default function GrupoTrabajoScreen({ route }) {
                   <View style={{ flex: 1 }}>
                     <Text style={styles.personaNombre}>{persona.nombre}</Text>
                     <Text style={styles.personaCelular}>{persona.celular}</Text>
+                    {persona.estado === 'vinculado' && estadoArl(persona.arl_vencimiento) && (
+                      <View
+                        style={[
+                          styles.etiquetaArl,
+                          estadoArl(persona.arl_vencimiento) === 'vencido' && styles.etiquetaArlVencido,
+                          estadoArl(persona.arl_vencimiento) === 'por_vencer' && styles.etiquetaArlPorVencer,
+                          estadoArl(persona.arl_vencimiento) === 'vigente' && styles.etiquetaArlVigente,
+                        ]}
+                      >
+                        <Text style={styles.etiquetaArlTexto}>
+                          {estadoArl(persona.arl_vencimiento) === 'vencido' && '⚠️ ARL vencida'}
+                          {estadoArl(persona.arl_vencimiento) === 'por_vencer' && '⏳ ARL por vencer'}
+                          {estadoArl(persona.arl_vencimiento) === 'vigente' && '✅ ARL vigente'}
+                        </Text>
+                      </View>
+                    )}
                   </View>
                   <View
                     style={[
@@ -464,6 +639,47 @@ export default function GrupoTrabajoScreen({ route }) {
               {guardando ? <ActivityIndicator color="#fff" /> : <Text style={styles.botonAgregarTexto}>GUARDAR CAMBIOS</Text>}
             </TouchableOpacity>
 
+            {editandoPersona?.estado === 'vinculado' && esAdministrativo && (
+              <View style={styles.arlSeccion}>
+                <Text style={styles.arlTitulo}>Documento ARL (Riesgos Profesionales)</Text>
+                <Text style={styles.notaTexto}>
+                  Sube el certificado de afiliación a riesgos profesionales de esta persona. Cualquier persona del área administrativa podrá consultarlo en caso de un accidente laboral.
+                </Text>
+
+                {editandoPersona?.arl_documento_url && (
+                  <TouchableOpacity style={styles.arlDocumentoActual} onPress={() => abrirDocumentoArl(editandoPersona.arl_documento_url)}>
+                    <Text style={styles.arlDocumentoActualTexto}>📄 Ver documento actual</Text>
+                  </TouchableOpacity>
+                )}
+
+                <TouchableOpacity style={styles.arlBotonSeleccionar} onPress={elegirArchivoArl}>
+                  <Text style={styles.arlBotonSeleccionarTexto}>
+                    {archivoArlNombre ? `📎 ${archivoArlNombre}` : '📎 Seleccionar documento (PDF o imagen)'}
+                  </Text>
+                </TouchableOpacity>
+
+                <Text style={styles.label}>Fecha de vencimiento (DD-MM-AA)</Text>
+                <TextInput
+                  style={styles.input}
+                  value={arlVencimiento}
+                  onChangeText={setArlVencimiento}
+                  placeholder="Ej: 15-08-27"
+                  placeholderTextColor="#999"
+                  keyboardType="numbers-and-punctuation"
+                />
+
+                <TouchableOpacity style={styles.botonGuardar} onPress={guardarDocumentoArl} disabled={subiendoArl}>
+                  {subiendoArl ? <ActivityIndicator color="#fff" /> : <Text style={styles.botonAgregarTexto}>GUARDAR DOCUMENTO ARL</Text>}
+                </TouchableOpacity>
+
+                {editandoPersona?.arl_documento_url && (
+                  <TouchableOpacity style={styles.arlBotonEliminar} onPress={eliminarDocumentoArl}>
+                    <Text style={styles.arlBotonEliminarTexto}>🗑️ Eliminar documento ARL</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+
             <TouchableOpacity style={styles.botonCancelar} onPress={() => setModalEditarVisible(false)}>
               <Text style={styles.botonCancelarTexto}>Cancelar</Text>
             </TouchableOpacity>
@@ -603,4 +819,17 @@ const styles = StyleSheet.create({
   linkSubtitulo: { fontSize: 14, color: '#666', marginBottom: 14, textAlign: 'center' },
   linkTextoContainer: { backgroundColor: '#f5f5f5', borderRadius: 8, padding: 12, borderWidth: 1, borderColor: '#ddd' },
   linkTexto: { fontSize: 13, color: '#1E90FF' },
+  etiquetaArl: { alignSelf: 'flex-start', borderRadius: 10, paddingVertical: 2, paddingHorizontal: 8, marginTop: 4 },
+  etiquetaArlVencido: { backgroundColor: '#ffcdd2' },
+  etiquetaArlPorVencer: { backgroundColor: '#ffe0b2' },
+  etiquetaArlVigente: { backgroundColor: '#c8e6c9' },
+  etiquetaArlTexto: { fontSize: 10, fontWeight: 'bold', color: '#333' },
+  arlSeccion: { marginTop: 24, paddingTop: 20, borderTopWidth: 1, borderTopColor: '#eee' },
+  arlTitulo: { fontSize: 15, fontWeight: 'bold', color: '#222', marginBottom: 4 },
+  arlDocumentoActual: { backgroundColor: '#e3f2fd', borderRadius: 8, padding: 12, marginTop: 12 },
+  arlDocumentoActualTexto: { color: '#1E90FF', fontSize: 14, fontWeight: '600', textAlign: 'center' },
+  arlBotonSeleccionar: { backgroundColor: '#f5f5f5', borderRadius: 8, padding: 14, marginTop: 12, borderWidth: 1, borderColor: '#ddd', borderStyle: 'dashed' },
+  arlBotonSeleccionarTexto: { fontSize: 13, color: '#555', textAlign: 'center' },
+  arlBotonEliminar: { alignItems: 'center', marginTop: 12, padding: 10 },
+  arlBotonEliminarTexto: { color: '#DC143C', fontSize: 13, fontWeight: '600' },
 });
