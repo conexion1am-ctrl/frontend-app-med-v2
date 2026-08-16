@@ -144,10 +144,18 @@ export default function CotizacionesScreen({ route }) {
     }
     setGuardando(true);
     try {
-      await axios.put(`https://backend-app-mediterraneo.onrender.com/api/cotizaciones/${editandoCotizacion.id}`, {
-        numero: editNumero || null,
-        items: itemsValidos,
-      });
+      if (editandoCotizacion.aceptada) {
+        // Cotización ya aceptada: usamos el endpoint que actualiza también el contrato.
+        await axios.put(`https://backend-app-mediterraneo.onrender.com/api/cotizaciones/${editandoCotizacion.id}/items-aceptada`, {
+          items: itemsValidos,
+        });
+        Alert.alert('¡Listo!', 'La cotización y el contrato se actualizaron con los nuevos ítems.');
+      } else {
+        await axios.put(`https://backend-app-mediterraneo.onrender.com/api/cotizaciones/${editandoCotizacion.id}`, {
+          numero: editNumero || null,
+          items: itemsValidos,
+        });
+      }
       setModalEditarVisible(false);
       cargarDatos();
     } catch (error) {
@@ -307,7 +315,10 @@ export default function CotizacionesScreen({ route }) {
             <Text style={styles.menuTitulo}>{menuCotizacion?.cliente_nombre}</Text>
             {menuCotizacion?.aceptada ? (
               <>
-                <Text style={styles.menuNotaTexto}>Esta cotización ya fue aceptada y no se puede editar ni eliminar.</Text>
+                <Text style={styles.menuNotaTexto}>Ya fue aceptada. Puedes editar sus ítems o agregar adicionales; el contrato se actualiza automáticamente.</Text>
+                <TouchableOpacity style={styles.menuOpcion} onPress={() => abrirEditar(menuCotizacion)}>
+                  <Text style={styles.menuOpcionTexto}>✏️  Editar ítems</Text>
+                </TouchableOpacity>
                 <TouchableOpacity style={styles.menuOpcion} onPress={() => abrirAdicionales(menuCotizacion)}>
                   <Text style={styles.menuOpcionTexto}>➕  Agregar adicionales</Text>
                 </TouchableOpacity>
@@ -411,9 +422,16 @@ export default function CotizacionesScreen({ route }) {
           <ScrollView style={styles.modalContainer} contentContainerStyle={{ padding: 20, paddingBottom: 60 }}>
             <Text style={styles.modalTitulo}>Editar Cotización</Text>
             <Text style={styles.notaTexto}>Cliente: {editandoCotizacion?.cliente_nombre}</Text>
+            {editandoCotizacion?.aceptada && (
+              <Text style={styles.notaTexto}>Esta cotización ya fue aceptada: al guardar, el contrato se actualizará con el nuevo total.</Text>
+            )}
 
-            <Text style={styles.label}>Número de cotización (opcional)</Text>
-            <TextInput style={styles.input} value={editNumero} onChangeText={setEditNumero} placeholder="Ej: COT-001" placeholderTextColor="#999" />
+            {!editandoCotizacion?.aceptada && (
+              <>
+                <Text style={styles.label}>Número de cotización (opcional)</Text>
+                <TextInput style={styles.input} value={editNumero} onChangeText={setEditNumero} placeholder="Ej: COT-001" placeholderTextColor="#999" />
+              </>
+            )}
 
             <Text style={styles.label}>Ítems de la cotización *</Text>
             {editItems.map((item, index) => (
