@@ -51,6 +51,11 @@ export default function GrupoTrabajoScreen({ route }) {
   const [linkInvitacion, setLinkInvitacion] = useState('');
   const [nombreInvitado, setNombreInvitado] = useState('');
 
+  const [modalPendienteVisible, setModalPendienteVisible] = useState(false);
+  const [personaPendiente, setPersonaPendiente] = useState(null);
+  const [linkPendiente, setLinkPendiente] = useState('');
+  const [cargandoLinkPendiente, setCargandoLinkPendiente] = useState(false);
+
   const [archivoArlUri, setArchivoArlUri] = useState(null);
   const [archivoArlNombre, setArchivoArlNombre] = useState(null);
   const [arlVencimiento, setArlVencimiento] = useState('');
@@ -169,11 +174,16 @@ export default function GrupoTrabajoScreen({ route }) {
   const compartirLinkInvitacion = async () => {
     try {
       await Share.share({
-        message: `¡Hola ${nombreInvitado}! Te invito a unirte a nuestro equipo en C&D Manager. Toca este enlace para aceptar la invitación: ${linkInvitacion}`,
+        message: `¡Hola ${nombreInvitado}! Te invito a unirte a nuestro equipo en C&D Manager.\n\n${linkInvitacion}\n\n(Si el enlace no abre al tocarlo, mantenlo presionado y elige "Abrir", o cópialo y pégalo en el navegador de tu celular. Necesitas tener la app C&D Manager ya instalada).`,
       });
     } catch (error) {
       console.error('Error compartiendo invitación:', error);
     }
+  };
+
+  const llamarPersona = (celular) => {
+    if (!celular) return;
+    Linking.openURL(`tel:${celular.replace(/\s/g, '')}`);
   };
 
   const agregarPersonal = async () => {
@@ -219,9 +229,35 @@ export default function GrupoTrabajoScreen({ route }) {
     setMenuPersona(null);
   };
 
+  const verFichaPendiente = async (persona) => {
+    setPersonaPendiente(persona);
+    setLinkPendiente('');
+    setModalPendienteVisible(true);
+    setCargandoLinkPendiente(true);
+    try {
+      const res = await axios.get(`https://backend-app-mediterraneo.onrender.com/api/invitaciones/id/${persona.rol_id}/link`);
+      setLinkPendiente(res.data.link_whatsapp);
+    } catch (error) {
+      console.error('Error obteniendo link de invitación:', error);
+      Alert.alert('Error', 'No se pudo obtener el enlace de invitación.');
+    } finally {
+      setCargandoLinkPendiente(false);
+    }
+  };
+
+  const compartirLinkPendiente = async () => {
+    try {
+      await Share.share({
+        message: `¡Hola ${personaPendiente?.nombre}! Te invito a unirte a nuestro equipo en C&D Manager.\n\n${linkPendiente}\n\n(Si el enlace no abre al tocarlo, mantenlo presionado y elige "Abrir", o cópialo y pégalo en el navegador de tu celular. Necesitas tener la app C&D Manager ya instalada).`,
+      });
+    } catch (error) {
+      console.error('Error compartiendo invitación:', error);
+    }
+  };
+
   const verProyectosAsignados = async (persona) => {
     if (persona.estado !== 'vinculado') {
-      Alert.alert('Sin proyectos todavía', 'Esta persona está pendiente de aceptar la invitación, por eso no puede estar asignada a proyectos aún.');
+      verFichaPendiente(persona);
       return;
     }
     setModalProyectosVisible(true);
@@ -474,7 +510,14 @@ export default function GrupoTrabajoScreen({ route }) {
                 >
                   <View style={{ flex: 1 }}>
                     <Text style={styles.personaNombre}>{persona.nombre}</Text>
-                    <Text style={styles.personaCelular}>{persona.celular}</Text>
+                    <TouchableOpacity
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        llamarPersona(persona.celular);
+                      }}
+                    >
+                      <Text style={styles.personaCelularLlamar}>📞 {persona.celular}</Text>
+                    </TouchableOpacity>
                     {persona.estado === 'vinculado' && estadoArl(persona.arl_vencimiento) && (
                       <View
                         style={[
@@ -719,10 +762,42 @@ export default function GrupoTrabajoScreen({ route }) {
             <View style={styles.linkTextoContainer}>
               <Text style={styles.linkTexto} selectable>{linkInvitacion}</Text>
             </View>
+            <Text style={styles.notaLinkTexto}>Si al invitado no le aparece como enlace tocable en WhatsApp, dile que lo mantenga presionado y elija "Abrir", o que lo copie y pegue en el navegador de su celular. Necesita tener la app ya instalada.</Text>
             <TouchableOpacity style={styles.botonGuardar} onPress={compartirLinkInvitacion}>
               <Text style={styles.botonAgregarTexto}>📤 Enviar por WhatsApp</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.botonCancelar} onPress={() => setModalLinkVisible(false)}>
+              <Text style={styles.botonCancelarTexto}>Cerrar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* MODAL: Ficha de persona pendiente (info + reenviar invitación) */}
+      <Modal visible={modalPendienteVisible} animationType="fade" transparent>
+        <View style={styles.linkOverlay}>
+          <View style={styles.linkBox}>
+            <Text style={styles.linkTitulo}>{personaPendiente?.nombre}</Text>
+            <Text style={styles.linkSubtitulo}>
+              {personaPendiente?.celular}{'\n'}
+              Área: {personaPendiente?.area_nombre}{'\n'}
+              Estado: pendiente de aceptar la invitación
+            </Text>
+            {cargandoLinkPendiente ? (
+              <ActivityIndicator size="large" color={empresa.color_hex || '#1E90FF'} style={{ marginVertical: 20 }} />
+            ) : linkPendiente ? (
+              <>
+                <Text style={styles.linkSubtitulo}>Enlace de invitación para reenviar:</Text>
+                <View style={styles.linkTextoContainer}>
+                  <Text style={styles.linkTexto} selectable>{linkPendiente}</Text>
+                </View>
+                <Text style={styles.notaLinkTexto}>Si al invitado no le aparece como enlace tocable en WhatsApp, dile que lo mantenga presionado y elija "Abrir", o que lo copie y pegue en el navegador de su celular. Necesita tener la app ya instalada.</Text>
+                <TouchableOpacity style={styles.botonGuardar} onPress={compartirLinkPendiente}>
+                  <Text style={styles.botonAgregarTexto}>📤 Reenviar por WhatsApp</Text>
+                </TouchableOpacity>
+              </>
+            ) : null}
+            <TouchableOpacity style={styles.botonCancelar} onPress={() => setModalPendienteVisible(false)}>
               <Text style={styles.botonCancelarTexto}>Cerrar</Text>
             </TouchableOpacity>
           </View>
@@ -751,7 +826,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   personaNombre: { fontSize: 15, fontWeight: '600', color: '#222' },
-  personaCelular: { fontSize: 13, color: '#777', marginTop: 2 },
+  personaCelularLlamar: { fontSize: 13, color: '#1E90FF', marginTop: 2, fontWeight: '600' },
   etiquetaEstado: { borderRadius: 12, paddingVertical: 4, paddingHorizontal: 10, marginLeft: 8 },
   etiquetaVinculado: { backgroundColor: '#c8e6c9' },
   etiquetaPendiente: { backgroundColor: '#ffe0b2' },
@@ -817,6 +892,7 @@ const styles = StyleSheet.create({
   linkBox: { backgroundColor: '#fff', borderRadius: 12, padding: 22 },
   linkTitulo: { fontSize: 19, fontWeight: 'bold', color: '#222', marginBottom: 8, textAlign: 'center' },
   linkSubtitulo: { fontSize: 14, color: '#666', marginBottom: 14, textAlign: 'center' },
+  notaLinkTexto: { fontSize: 12, color: '#999', marginBottom: 14, textAlign: 'center', fontStyle: 'italic' },
   linkTextoContainer: { backgroundColor: '#f5f5f5', borderRadius: 8, padding: 12, borderWidth: 1, borderColor: '#ddd' },
   linkTexto: { fontSize: 13, color: '#1E90FF' },
   etiquetaArl: { alignSelf: 'flex-start', borderRadius: 10, paddingVertical: 2, paddingHorizontal: 8, marginTop: 4 },

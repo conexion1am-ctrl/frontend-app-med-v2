@@ -1,4 +1,6 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
+import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
 import * as MediaLibrary from 'expo-media-library';
@@ -10,6 +12,9 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { storage } from '../../firebaseConfig';
 import EncabezadoLogo from '../components/EncabezadoLogo';
 import ImagenZoom from '../components/ImagenZoom';
+import Visor3D from '../components/Visor3D';
+
+const AREAS_ADMINISTRATIVAS = ['GERENCIA', 'AREA ADMINISTRATIVA', 'AREA DE LOGISTICA'];
 
 const formatearFechaFoto = (fecha) => {
   if (!fecha) return '';
@@ -22,11 +27,12 @@ const formatearFechaFoto = (fecha) => {
 
 export default function AreaProyectoScreen({ route }) {
   const { empresa, proyecto, area, usuario } = route.params;
-  const [tab, setTab] = useState('equipo'); // 'equipo' | 'fotos'
+  const [tab, setTab] = useState('equipo'); // 'equipo' | 'fotos' | 'planos3d'
   const [equipo, setEquipo] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [modalAsignarVisible, setModalAsignarVisible] = useState(false);
   const [personalDisponible, setPersonalDisponible] = useState([]);
+  const [esAdministrativo, setEsAdministrativo] = useState(false);
 
   const [chatAbierto, setChatAbierto] = useState(null);
   const [mensajes, setMensajes] = useState([]);
@@ -39,13 +45,33 @@ export default function AreaProyectoScreen({ route }) {
   const [subiendoFoto, setSubiendoFoto] = useState(false);
   const [fotoAmpliada, setFotoAmpliada] = useState(null);
 
+  const [planos3d, setPlanos3d] = useState([]);
+  const [cargandoPlanos3d, setCargandoPlanos3d] = useState(false);
+  const [subiendoPlano3d, setSubiendoPlano3d] = useState(false);
+  const [plano3dAbierto, setPlano3dAbierto] = useState(null);
+
   useEffect(() => {
     cargarEquipo();
+    revisarSiEsAdministrativo();
   }, []);
+
+  const revisarSiEsAdministrativo = async () => {
+    try {
+      const sesionGuardada = await AsyncStorage.getItem('sesion');
+      if (!sesionGuardada) return;
+      const sesion = JSON.parse(sesionGuardada);
+      const empresaActual = (sesion?.empresas || []).find((e) => e.empresa_id === empresa.id);
+      setEsAdministrativo(!!empresaActual && AREAS_ADMINISTRATIVAS.includes(empresaActual.area_nombre));
+    } catch (error) {
+      console.error('Error revisando rol administrativo:', error);
+    }
+  };
 
   useEffect(() => {
     if (tab === 'fotos') {
       cargarFotos();
+    } else if (tab === 'planos3d') {
+      cargarPlanos3d();
     }
   }, [tab]);
 
@@ -176,6 +202,84 @@ export default function AreaProyectoScreen({ route }) {
     ]);
   };
 
+  const cargarPlanos3d = async () => {
+    setCargandoPlanos3d(true);
+    try {
+      const res = await axios.get(`https://backend-app-mediterraneo.onrender.com/api/planos-3d/${proyecto.id}/${area.id}`);
+      setPlanos3d(res.data.planos);
+    } catch (error) {
+      console.error('Error cargando planos 3D:', error);
+      Alert.alert('Error', 'No se pudieron cargar los planos 3D.');
+    } finally {
+      setCargandoPlanos3d(false);
+    }
+  };
+
+  const subirPlano3dAFirebase = async (uri, nombreOriginal) => {
+    const respuesta = await fetch(uri);
+    const blob = await respuesta.blob();
+    const nombreArchivo = `planos3d/${proyecto.id}_${area.id}_${Date.now()}_${nombreOriginal || 'plano.glb'}`;
+    const storageRef = ref(storage, nombreArchivo);
+    await uploadBytes(storageRef, blob);
+    return await getDownloadURL(storageRef);
+  };
+
+  const elegirYSubirPlano3d = async () => {
+    const resultado = await DocumentPicker.getDocumentAsync({
+      type: ['model/gltf-binary', 'application/octet-stream', '*/*'],
+      copyToCacheDirectory: true,
+    });
+    if (resultado.canceled) return;
+
+    const archivo = resultado.assets[0];
+    if (!archivo.name?.toLowerCase().endsWith('.glb')) {
+      Alert.alert('Formato no válido', 'Solo se pueden subir archivos .glb (exportados desde SketchUp como "Archivo binario glTF").');
+      return;
+    }
+
+    setSubiendoPlano3d(true);
+    try {
+      const url = await subirPlano3dAFirebase(archivo.uri, archivo.name);
+      await axios.post('https://backend-app-mediterraneo.onrender.com/api/planos-3d/subir', {
+        proyecto_id: proyecto.id,
+        area_id: area.id,
+        usuario_id: usuario.id,
+        nombre: archivo.name,
+        url_glb: url,
+      });
+      cargarPlanos3d();
+    } catch (error) {
+      console.error('Error subiendo plano 3D:', error);
+      const mensaje = error.response?.data?.error || 'No se pudo subir el plano 3D.';
+      Alert.alert('Error', mensaje);
+    } finally {
+      setSubiendoPlano3d(false);
+    }
+  };
+
+  const confirmarEliminarPlano3d = (plano) => {
+    Alert.alert('Eliminar plano 3D', `¿Eliminar "${plano.nombre}"?`, [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Eliminar',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await axios.delete(`https://backend-app-mediterraneo.onrender.com/api/planos-3d/${plano.id}`, {
+              data: { usuario_id: usuario.id },
+            });
+            setPlano3dAbierto(null);
+            cargarPlanos3d();
+          } catch (error) {
+            console.error('Error eliminando plano 3D:', error);
+            const mensaje = error.response?.data?.error || 'No se pudo eliminar el plano 3D.';
+            Alert.alert('Error', mensaje);
+          }
+        },
+      },
+    ]);
+  };
+
   const cargarEquipo = async () => {
     setCargando(true);
     try {
@@ -281,7 +385,10 @@ export default function AreaProyectoScreen({ route }) {
           <Text style={[styles.tabBotonTexto, tab === 'equipo' && styles.tabBotonTextoActivo]}>Equipo</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.tabBoton, tab === 'fotos' && styles.tabBotonActivo]} onPress={() => setTab('fotos')}>
-          <Text style={[styles.tabBotonTexto, tab === 'fotos' && styles.tabBotonTextoActivo]}>Fotos de avance</Text>
+          <Text style={[styles.tabBotonTexto, tab === 'fotos' && styles.tabBotonTextoActivo]}>Fotos</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.tabBoton, tab === 'planos3d' && styles.tabBotonActivo]} onPress={() => setTab('planos3d')}>
+          <Text style={[styles.tabBotonTexto, tab === 'planos3d' && styles.tabBotonTextoActivo]}>Planos 3D</Text>
         </TouchableOpacity>
       </View>
 
@@ -313,7 +420,7 @@ export default function AreaProyectoScreen({ route }) {
             />
           )}
         </>
-      ) : (
+      ) : tab === 'fotos' ? (
         <>
           <View style={styles.header}>
             <Text style={styles.headerTitulo}>Avance de {area.nombre}</Text>
@@ -335,6 +442,44 @@ export default function AreaProyectoScreen({ route }) {
               renderItem={({ item }) => (
                 <TouchableOpacity style={styles.fotoMiniatura} onPress={() => setFotoAmpliada(item)}>
                   <Image source={{ uri: item.foto_url }} style={styles.fotoMiniaturaImagen} />
+                </TouchableOpacity>
+              )}
+            />
+          )}
+        </>
+      ) : (
+        <>
+          <View style={styles.header}>
+            <Text style={styles.headerTitulo}>Planos 3D de {area.nombre}</Text>
+            {esAdministrativo && (
+              <TouchableOpacity style={styles.botonAsignar} onPress={elegirYSubirPlano3d} disabled={subiendoPlano3d}>
+                <Text style={styles.botonAsignarTexto}>{subiendoPlano3d ? 'SUBIENDO...' : '+ PLANO .GLB'}</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {cargandoPlanos3d ? (
+            <ActivityIndicator size="large" color={empresa.color_hex || '#1E90FF'} style={{ marginTop: 20 }} />
+          ) : planos3d.length === 0 ? (
+            <Text style={styles.vacioTexto}>
+              {esAdministrativo
+                ? 'Aún no hay planos 3D. Toca "+ Plano .glb" y elige un archivo exportado desde SketchUp como "Archivo binario glTF (.glb)".'
+                : 'Aún no hay planos 3D subidos para esta área.'}
+            </Text>
+          ) : (
+            <FlatList
+              data={planos3d}
+              keyExtractor={(item) => item.id.toString()}
+              contentContainerStyle={styles.lista}
+              renderItem={({ item }) => (
+                <TouchableOpacity style={styles.personaCard} onPress={() => setPlano3dAbierto(item)}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.personaNombre}>{item.nombre}</Text>
+                    <Text style={styles.personaSubtexto}>
+                      Subido por {item.usuario_nombre} · {formatearFechaFoto(item.created_at)}
+                    </Text>
+                  </View>
+                  <Text style={styles.personaFlecha}>›</Text>
                 </TouchableOpacity>
               )}
             />
@@ -373,6 +518,25 @@ export default function AreaProyectoScreen({ route }) {
             )}
           </View>
         </GestureHandlerRootView>
+      </Modal>
+
+      <Modal visible={!!plano3dAbierto} animationType="slide">
+        <View style={styles.plano3dModalContainer}>
+          <View style={styles.plano3dHeader}>
+            <TouchableOpacity onPress={() => setPlano3dAbierto(null)}>
+              <Text style={styles.chatVolver}>‹ Volver</Text>
+            </TouchableOpacity>
+            <Text style={styles.chatTitulo} numberOfLines={1}>{plano3dAbierto?.nombre}</Text>
+            {esAdministrativo ? (
+              <TouchableOpacity onPress={() => confirmarEliminarPlano3d(plano3dAbierto)}>
+                <Text style={styles.plano3dEliminarTexto}>Eliminar</Text>
+              </TouchableOpacity>
+            ) : (
+              <View style={{ width: 60 }} />
+            )}
+          </View>
+          {plano3dAbierto && <Visor3D uri={plano3dAbierto.url_glb} />}
+        </View>
       </Modal>
 
       <Modal visible={modalAsignarVisible} animationType="slide">
@@ -514,4 +678,16 @@ const styles = StyleSheet.create({
   fotoAmpliadaBoton: { backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 8, paddingVertical: 10, paddingHorizontal: 14 },
   fotoAmpliadaBotonTexto: { color: '#fff', fontSize: 14, fontWeight: '600' },
   fotoAmpliadaCerrar: { marginTop: 16, paddingVertical: 10, paddingHorizontal: 24, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)' },
+  plano3dModalContainer: { flex: 1, backgroundColor: '#1c1c1c' },
+  plano3dHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    paddingTop: Platform.OS === 'ios' ? 50 : 16,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  plano3dEliminarTexto: { color: '#DC143C', fontSize: 14, fontWeight: '600' },
 });
