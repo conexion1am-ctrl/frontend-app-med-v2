@@ -1,31 +1,44 @@
 import { GLView } from 'expo-gl';
 import { Renderer } from 'expo-three';
 import React, { useRef, useState } from 'react';
-import { ActivityIndicator, PanResponder, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
 
-// Visor de modelos 3D (.glb) con rotar (arrastrar), zoom (pellizcar con dos dedos) y un modo
-// "medir" donde el usuario toca dos puntos sobre el modelo y se calcula la distancia real entre
-// ellos usando raycasting. Pensado para planos exportados desde SketchUp con escala real (metros).
+// Visor de modelos 3D (.glb) con rotar (arrastrar con 1 dedo), mover (arrastrar con 2 dedos),
+// zoom (pellizcar con 2 dedos) y un modo "medir" donde el usuario toca dos puntos sobre el
+// modelo y se calcula la distancia real entre ellos usando raycasting. Pensado para planos
+// exportados desde SketchUp con escala real (metros).
+//
+// Los gestos se manejan con react-native-gesture-handler (Pinch + Pan simultáneos) en vez de
+// PanResponder manual: PanResponder leía evt.nativeEvent.touches directamente, cuyo orden puede
+// cambiar entre frames al usar 2 dedos, causando saltos falsos de zoom. gesture-handler resuelve
+// esto de forma nativa y confiable.
 export default function Visor3D({ uri }) {
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
   const [modoMedir, setModoMedir] = useState(false);
   const [puntosMedicion, setPuntosMedicion] = useState([]); // hasta 2 puntos THREE.Vector3
   const [distanciaMedida, setDistanciaMedida] = useState(null);
+  const modoMedirRef = useRef(false); // espejo síncrono de modoMedir, legible dentro de los gestos
 
   const escenaRef = useRef(null);
   const camaraRef = useRef(null);
   const rendererRef = useRef(null);
   const modeloRef = useRef(null);
-  const glRef = useRef(null);
   const marcadoresRef = useRef([]); // esferas rojas que marcan los puntos tocados
-  const vistaRef = useRef({ width: 1, height: 1 });
+  // Tamaño EN PUNTOS (no píxeles físicos) del área donde se dibuja el modelo, usado para
+  // convertir toques de pantalla a coordenadas normalizadas para el raycasting. Se lee del
+  // layout real de la View (onLayout), no del drawingBuffer del GLView, que está en píxeles
+  // físicos y queda desalineado en celulares con pixelRatio distinto de 1.
+  const layoutRef = useRef({ width: 1, height: 1 });
 
-  // Estado de orbit/zoom manual (sin librería externa, controlado con PanResponder)
+  // Estado de orbit/pan/zoom manual (sin librería de cámara externa)
   const camState = useRef({ radio: 8, azimut: 0, elevacion: 0.5, centro: new THREE.Vector3(0, 0, 0) });
-  const gestoRef = useRef({ modo: null, ultimoX: 0, ultimoY: 0, distanciaInicial: 0, radioInicial: 8 });
+  // Snapshot del estado de cámara al INICIO de cada gesto, para calcular deltas limpios en vez
+  // de acumular pequeños errores frame a frame.
+  const inicioGestoRef = useRef({ radio: 8, azimut: 0, elevacion: 0.5, centro: new THREE.Vector3(0, 0, 0) });
 
   const actualizarCamara = () => {
     const cam = camaraRef.current;
@@ -39,21 +52,15 @@ export default function Visor3D({ uri }) {
     cam.lookAt(st.centro);
   };
 
-  const distanciaEntreToques = (toques) => {
-    const [a, b] = toques;
-    const dx = a.pageX - b.pageX;
-    const dy = a.pageY - b.pageY;
-    return Math.sqrt(dx * dx + dy * dy);
-  };
-
-  // Convierte un toque en pantalla a un punto real sobre la superficie del modelo (raycasting).
-  const tocarModelo = (pageX, pageY) => {
+  // Convierte un toque en coordenadas de pantalla (relativas al layout del visor) a un punto
+  // real sobre la superficie del modelo, usando raycasting.
+  const tocarModelo = (x, y) => {
     const cam = camaraRef.current;
     const modelo = modeloRef.current;
     if (!cam || !modelo) return null;
 
-    const { width, height } = vistaRef.current;
-    const mouse = new THREE.Vector2((pageX / width) * 2 - 1, -(pageY / height) * 2 + 1);
+    const { width, height } = layoutRef.current;
+    const mouse = new THREE.Vector2((x / width) * 2 - 1, -(y / height) * 2 + 1);
     const raycaster = new THREE.Raycaster();
     raycaster.setFromCamera(mouse, cam);
     const intersecciones = raycaster.intersectObject(modelo, true);
@@ -80,9 +87,8 @@ export default function Visor3D({ uri }) {
     marcadoresRef.current = [];
   };
 
-  const manejarToqueMedicion = (evt) => {
-    const { pageX, pageY } = evt.nativeEvent;
-    const punto = tocarModelo(pageX, pageY);
+  const manejarToqueMedicion = (x, y) => {
+    const punto = tocarModelo(x, y);
     if (!punto) return;
 
     setPuntosMedicion((anteriores) => {
@@ -104,64 +110,83 @@ export default function Visor3D({ uri }) {
     });
   };
 
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: (evt) => {
-        const toques = evt.nativeEvent.touches;
-        if (modoMedir && toques.length === 1) {
-          manejarToqueMedicion(evt);
-          gestoRef.current.modo = null;
-          return;
-        }
-        if (toques.length === 2) {
-          gestoRef.current.modo = 'zoom';
-          gestoRef.current.distanciaInicial = distanciaEntreToques(toques);
-          gestoRef.current.radioInicial = camState.current.radio;
-        } else {
-          gestoRef.current.modo = 'orbitar';
-          gestoRef.current.ultimoX = evt.nativeEvent.pageX;
-          gestoRef.current.ultimoY = evt.nativeEvent.pageY;
-        }
-      },
-      onPanResponderMove: (evt) => {
-        const toques = evt.nativeEvent.touches;
-        const gesto = gestoRef.current;
+  // Toque simple: en modo medir, marca un punto. Fuera de modo medir, no hace nada (rotar/mover
+  // se manejan con los gestos Pan/Pinch de abajo).
+  const gestoToque = Gesture.Tap()
+    .maxDuration(250)
+    .onEnd((evt, exitoso) => {
+      if (!exitoso || !modoMedirRef.current) return;
+      manejarToqueMedicion(evt.x, evt.y);
+    });
 
-        if (toques.length === 2) {
-          if (gesto.modo !== 'zoom') {
-            gesto.modo = 'zoom';
-            gesto.distanciaInicial = distanciaEntreToques(toques);
-            gesto.radioInicial = camState.current.radio;
-          }
-          const distanciaActual = distanciaEntreToques(toques);
-          const factor = gesto.distanciaInicial / Math.max(distanciaActual, 1);
-          const nuevoRadio = Math.max(0.5, Math.min(60, gesto.radioInicial * factor));
-          camState.current.radio = nuevoRadio;
-          actualizarCamara();
-        } else if (gesto.modo === 'orbitar') {
-          const dx = evt.nativeEvent.pageX - gesto.ultimoX;
-          const dy = evt.nativeEvent.pageY - gesto.ultimoY;
-          camState.current.azimut -= dx * 0.008;
-          camState.current.elevacion += dy * 0.008;
-          gesto.ultimoX = evt.nativeEvent.pageX;
-          gesto.ultimoY = evt.nativeEvent.pageY;
-          actualizarCamara();
-        }
-      },
-      onPanResponderRelease: () => {
-        gestoRef.current.modo = null;
-      },
+  // Un dedo: orbita la cámara alrededor del modelo. Dos dedos: mueve el centro de la cámara
+  // (paneo), como en cualquier visor 3D estándar. Se distingue por minPointers/maxPointers en
+  // dos gestos Pan separados corriendo en simultáneo con el pellizco de zoom.
+  const gestoOrbitar = Gesture.Pan()
+    .minPointers(1)
+    .maxPointers(1)
+    .onStart(() => {
+      inicioGestoRef.current = { ...camState.current, centro: camState.current.centro.clone() };
     })
-  ).current;
+    .onUpdate((evt) => {
+      if (modoMedirRef.current) return; // en modo medir, un dedo solo marca puntos, no orbita
+      const inicio = inicioGestoRef.current;
+      camState.current.azimut = inicio.azimut - evt.translationX * 0.008;
+      camState.current.elevacion = inicio.elevacion + evt.translationY * 0.008;
+      actualizarCamara();
+    });
+
+  const gestoMover = Gesture.Pan()
+    .minPointers(2)
+    .maxPointers(2)
+    .onStart(() => {
+      inicioGestoRef.current = { ...camState.current, centro: camState.current.centro.clone() };
+    })
+    .onUpdate((evt) => {
+      const cam = camaraRef.current;
+      if (!cam) return;
+      const inicio = inicioGestoRef.current;
+      // Movemos el centro de la cámara en el plano de la vista (ejes derecha/arriba de la
+      // cámara), escalado por el radio actual para que el paneo se sienta igual de rápido sin
+      // importar qué tan alejados o cerca estemos del modelo.
+      const direccionCamara = new THREE.Vector3();
+      cam.getWorldDirection(direccionCamara);
+      const derecha = new THREE.Vector3().crossVectors(direccionCamara, new THREE.Vector3(0, 1, 0)).normalize();
+      const arribaCamara = new THREE.Vector3().crossVectors(derecha, direccionCamara).normalize();
+
+      const escala = camState.current.radio * 0.0015;
+      const desplazamiento = new THREE.Vector3()
+        .addScaledVector(derecha, -evt.translationX * escala)
+        .addScaledVector(arribaCamara, evt.translationY * escala);
+
+      camState.current.centro = inicio.centro.clone().add(desplazamiento);
+      actualizarCamara();
+    });
+
+  const gestoZoom = Gesture.Pinch()
+    .onStart(() => {
+      inicioGestoRef.current = { ...camState.current, centro: camState.current.centro.clone() };
+    })
+    .onUpdate((evt) => {
+      const inicio = inicioGestoRef.current;
+      const nuevoRadio = Math.max(0.5, Math.min(60, inicio.radio / evt.scale));
+      camState.current.radio = nuevoRadio;
+      actualizarCamara();
+    });
+
+  // Pan de 1 dedo (orbitar) y Pan de 2 dedos (mover) son mutuamente excluyentes por
+  // minPointers/maxPointers, así que se combinan con Race; el zoom (Pinch) corre en simultáneo
+  // con el paneo de 2 dedos para que pellizcar-y-arrastrar funcione en el mismo gesto, como en
+  // cualquier visor 3D o mapa.
+  const gestoCompuesto = Gesture.Simultaneous(
+    gestoToque,
+    Gesture.Race(gestoOrbitar, Gesture.Simultaneous(gestoMover, gestoZoom))
+  );
 
   const onContextCreate = async (gl) => {
     try {
-      glRef.current = gl;
       const width = gl.drawingBufferWidth;
       const height = gl.drawingBufferHeight;
-      vistaRef.current = { width, height };
 
       const renderer = new Renderer({ gl });
       renderer.setSize(width, height);
@@ -239,6 +264,7 @@ export default function Visor3D({ uri }) {
   const alternarModoMedir = () => {
     setModoMedir((actual) => {
       const nuevo = !actual;
+      modoMedirRef.current = nuevo;
       if (!nuevo) {
         limpiarMarcadores();
         setPuntosMedicion([]);
@@ -250,9 +276,17 @@ export default function Visor3D({ uri }) {
 
   return (
     <View style={{ flex: 1 }}>
-      <View style={{ flex: 1 }} {...panResponder.panHandlers}>
-        <GLView style={{ flex: 1 }} onContextCreate={onContextCreate} />
-      </View>
+      <GestureDetector gesture={gestoCompuesto}>
+        <View
+          style={{ flex: 1 }}
+          onLayout={(evt) => {
+            const { width, height } = evt.nativeEvent.layout;
+            layoutRef.current = { width, height };
+          }}
+        >
+          <GLView style={{ flex: 1 }} onContextCreate={onContextCreate} />
+        </View>
+      </GestureDetector>
 
       {cargando && (
         <View style={styles.overlayCentro} pointerEvents="none">
@@ -269,7 +303,7 @@ export default function Visor3D({ uri }) {
 
       {!cargando && !error && (
         <>
-          <View style={styles.barraSuperior}>
+          <View style={styles.barraSuperior} pointerEvents="box-none">
             <TouchableOpacity style={styles.botonChico} onPress={reiniciarVista}>
               <Text style={styles.botonChicoTexto}>⟲ Restablecer</Text>
             </TouchableOpacity>
@@ -283,8 +317,14 @@ export default function Visor3D({ uri }) {
             </TouchableOpacity>
           </View>
 
+          {!modoMedir && (
+            <View style={styles.avisoAyuda} pointerEvents="none">
+              <Text style={styles.avisoAyudaTexto}>1 dedo: rotar · 2 dedos: mover / zoom</Text>
+            </View>
+          )}
+
           {modoMedir && (
-            <View style={styles.avisoMedicion}>
+            <View style={styles.avisoMedicion} pointerEvents="none">
               <Text style={styles.avisoMedicionTexto}>
                 {distanciaMedida != null
                   ? `Distancia aproximada: ${Math.round(distanciaMedida * 1000)} mm`
@@ -324,6 +364,22 @@ const styles = StyleSheet.create({
   botonChicoActivo: { backgroundColor: '#1E90FF' },
   botonChicoTexto: { color: '#fff', fontSize: 12, fontWeight: '600' },
   botonChicoTextoActivo: { color: '#fff' },
+  avisoAyuda: {
+    position: 'absolute',
+    bottom: 16,
+    left: 16,
+    right: 16,
+    alignItems: 'center',
+  },
+  avisoAyudaTexto: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 12,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    overflow: 'hidden',
+  },
   avisoMedicion: {
     position: 'absolute',
     bottom: 16,
