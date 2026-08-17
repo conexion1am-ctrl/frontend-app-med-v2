@@ -2,6 +2,7 @@ import axios from 'axios';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Linking, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import EncabezadoLogo from '../components/EncabezadoLogo';
+import { esGerencia } from '../utils/roles';
 
 const formatearMoneda = (valor) => {
   const numero = parseFloat(valor) || 0;
@@ -19,6 +20,7 @@ const formatearFecha = (fecha) => {
 
 export default function ContratosScreen({ route, navigation }) {
   const { empresa, usuario } = route.params;
+  const puedeEliminarContratos = esGerencia(empresa);
   const [contratos, setContratos] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [menuContrato, setMenuContrato] = useState(null);
@@ -103,6 +105,37 @@ export default function ContratosScreen({ route, navigation }) {
     }
   };
 
+  // Eliminar contrato: solo Gerencia. Borra también el proyecto asociado con todo lo que
+  // tenga (fotos, planos 3D, chat, equipo asignado, estadísticas) y la cotización que lo
+  // originó, igual que al eliminar un cliente.
+  const confirmarEliminarContrato = () => {
+    const contrato = menuContrato;
+    cerrarMenu();
+    Alert.alert(
+      'Eliminar contrato',
+      `¿Eliminar el contrato de "${contrato.proyecto_nombre || 'este proyecto'}"? Esto borra también el proyecto completo (fotos, planos 3D, chat, equipo asignado) y la cotización que lo originó. Esta acción no se puede deshacer.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await axios.delete(`https://backend-app-mediterraneo.onrender.com/api/cotizaciones/contratos/${contrato.id}`, {
+                data: { solicitante_id: usuario?.id },
+              });
+              cargarContratos();
+            } catch (error) {
+              console.error('Error eliminando contrato:', error);
+              const mensaje = error.response?.data?.error || 'No se pudo eliminar el contrato.';
+              Alert.alert('Error', mensaje);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   if (cargando) {
     return (
       <View style={styles.center}>
@@ -153,11 +186,9 @@ export default function ContratosScreen({ route, navigation }) {
                   )}
                   {contrato.proyecto_id && <Text style={styles.contratoVerMas}>Ver estadísticas del proyecto ›</Text>}
                 </TouchableOpacity>
-                {contrato.proyecto_id && (
-                  <TouchableOpacity style={styles.botonMenu} onPress={() => abrirMenu(contrato)}>
-                    <Text style={styles.botonMenuTexto}>⋮</Text>
-                  </TouchableOpacity>
-                )}
+                <TouchableOpacity style={styles.botonMenu} onPress={() => abrirMenu(contrato)}>
+                  <Text style={styles.botonMenuTexto}>⋮</Text>
+                </TouchableOpacity>
               </View>
             );
           })
@@ -167,19 +198,26 @@ export default function ContratosScreen({ route, navigation }) {
       <Modal visible={!!menuContrato} animationType="fade" transparent>
         <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={cerrarMenu}>
           <View style={styles.menuBox}>
-            <Text style={styles.menuTitulo}>{menuContrato?.proyecto_nombre}</Text>
-            {menuContrato?.proyecto_estado === 'finalizado' ? (
-              <TouchableOpacity style={styles.menuOpcion} onPress={reactivarProyecto}>
-                <Text style={styles.menuOpcionTexto}>↩️  Reactivar proyecto</Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity style={styles.menuOpcion} onPress={finalizarProyecto}>
-                <Text style={styles.menuOpcionTexto}>✅  Marcar como finalizado</Text>
-              </TouchableOpacity>
+            <Text style={styles.menuTitulo}>{menuContrato?.proyecto_nombre || 'Contrato'}</Text>
+            {menuContrato?.proyecto_id && (
+              menuContrato?.proyecto_estado === 'finalizado' ? (
+                <TouchableOpacity style={styles.menuOpcion} onPress={reactivarProyecto}>
+                  <Text style={styles.menuOpcionTexto}>↩️  Reactivar proyecto</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity style={styles.menuOpcion} onPress={finalizarProyecto}>
+                  <Text style={styles.menuOpcionTexto}>✅  Marcar como finalizado</Text>
+                </TouchableOpacity>
+              )
             )}
             <TouchableOpacity style={styles.menuOpcion} onPress={verPdf} disabled={generandoPdf}>
               <Text style={styles.menuOpcionTexto}>{generandoPdf ? 'Generando PDF...' : '📄  Ver contrato (PDF)'}</Text>
             </TouchableOpacity>
+            {puedeEliminarContratos && (
+              <TouchableOpacity style={styles.menuOpcion} onPress={confirmarEliminarContrato}>
+                <Text style={[styles.menuOpcionTexto, { color: '#DC143C' }]}>🗑️  Eliminar</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity style={styles.menuOpcion} onPress={cerrarMenu}>
               <Text style={[styles.menuOpcionTexto, { color: '#888' }]}>Cancelar</Text>
             </TouchableOpacity>
