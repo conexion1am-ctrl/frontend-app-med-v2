@@ -1,6 +1,6 @@
 import axios from 'axios';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Linking, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import EncabezadoLogo from '../components/EncabezadoLogo';
 import { permisosDe } from '../utils/roles';
 
@@ -128,12 +128,33 @@ export default function DetalleProyectoScreen({ route, navigation }) {
 
   const idsActuales = detalle.actividades.map((a) => a.id);
 
+  // Abre Google Maps (o el navegador si no está instalada) buscando la dirección como texto.
+  // No usamos coordenadas guardadas: Maps ubica la dirección escrita directamente.
+  const abrirEnMaps = (direccionTexto) => {
+    const query = encodeURIComponent(direccionTexto);
+    const url = Platform.select({
+      ios: `maps:0,0?q=${query}`,
+      android: `geo:0,0?q=${query}`,
+      default: `https://www.google.com/maps/search/?api=1&query=${query}`,
+    });
+    Linking.openURL(url).catch(() => {
+      Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${query}`);
+    });
+  };
+
   return (
     <View style={{ flex: 1 }}>
       <EncabezadoLogo empresa={empresa} />
       <ScrollView style={[styles.container, { backgroundColor: empresa.color_hex || '#1E90FF' }]} contentContainerStyle={styles.scrollContent}>
         <Text style={styles.nombre}>{detalle.nombre}</Text>
-        {detalle.direccion ? <Text style={styles.info}>{detalle.direccion}</Text> : null}
+        {detalle.direccion ? (
+          <View style={styles.direccionFila}>
+            <Text style={[styles.info, { flex: 1 }]}>{detalle.direccion}</Text>
+            <TouchableOpacity style={styles.botonMaps} onPress={() => abrirEnMaps(detalle.direccion)}>
+              <Text style={styles.botonMapsTexto}>📍 Ver en Maps</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
         {detalle.area_m2 ? <Text style={styles.info}>{detalle.area_m2} m²</Text> : null}
 
         {puedeGestionar && (
@@ -250,6 +271,9 @@ const styles = StyleSheet.create({
   scrollContent: { padding: 20, paddingBottom: 60 },
   nombre: { fontSize: 22, fontWeight: 'bold', color: '#222', marginBottom: 6 },
   info: { fontSize: 14, color: '#666', marginBottom: 2 },
+  direccionFila: { flexDirection: 'row', alignItems: 'center', marginBottom: 2, gap: 8 },
+  botonMaps: { backgroundColor: '#1E90FF', borderRadius: 6, paddingVertical: 4, paddingHorizontal: 8 },
+  botonMapsTexto: { color: '#fff', fontSize: 12, fontWeight: '600' },
   accionesFila: { flexDirection: 'row', gap: 8, marginTop: 16 },
   botonAccion: { flex: 1, backgroundColor: '#1E90FF', borderRadius: 8, padding: 10, alignItems: 'center' },
   botonAccionTexto: { color: '#fff', fontSize: 13, fontWeight: 'bold' },

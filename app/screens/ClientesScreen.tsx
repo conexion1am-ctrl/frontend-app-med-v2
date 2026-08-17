@@ -103,6 +103,20 @@ export default function ClientesScreen({ route }) {
     Linking.openURL(`tel:${celularCompleto.replace(/\s/g, '')}`);
   };
 
+  // Abre Google Maps (o el navegador si no está instalada) buscando la dirección como texto.
+  // No usamos coordenadas guardadas: Maps ubica la dirección escrita directamente.
+  const abrirEnMaps = (direccionTexto) => {
+    const query = encodeURIComponent(direccionTexto);
+    const url = Platform.select({
+      ios: `maps:0,0?q=${query}`,
+      android: `geo:0,0?q=${query}`,
+      default: `https://www.google.com/maps/search/?api=1&query=${query}`,
+    });
+    Linking.openURL(url).catch(() => {
+      Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${query}`);
+    });
+  };
+
   const abrirMenu = (cliente) => setMenuCliente(cliente);
   const cerrarMenu = () => setMenuCliente(null);
 
@@ -194,6 +208,14 @@ export default function ClientesScreen({ route }) {
                   <TouchableOpacity onPress={() => llamarCliente(cliente.celular)}>
                     <Text style={styles.clienteCelular}>📞 {cliente.celular}</Text>
                   </TouchableOpacity>
+                ) : null}
+                {cliente.direccion ? (
+                  <View style={styles.direccionFila}>
+                    <Text style={styles.clienteDireccion}>📌 {cliente.direccion}</Text>
+                    <TouchableOpacity style={styles.botonMaps} onPress={() => abrirEnMaps(cliente.direccion)}>
+                      <Text style={styles.botonMapsTexto}>Ver en Maps</Text>
+                    </TouchableOpacity>
+                  </View>
                 ) : null}
               </View>
               <TouchableOpacity style={styles.botonMenu} onPress={() => abrirMenu(cliente)}>
@@ -337,6 +359,10 @@ const styles = StyleSheet.create({
   clienteProyectoNombre: { fontSize: 16, fontWeight: 'bold', color: '#1E90FF' },
   clienteNombre: { fontSize: 15, fontWeight: '600', color: '#222', marginTop: 4 },
   clienteCelular: { fontSize: 13, color: '#2e7d32', marginTop: 4, fontWeight: '600' },
+  direccionFila: { flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 8, flexWrap: 'wrap' },
+  clienteDireccion: { fontSize: 12, color: '#666', flexShrink: 1 },
+  botonMaps: { backgroundColor: '#1E90FF', borderRadius: 6, paddingVertical: 3, paddingHorizontal: 8 },
+  botonMapsTexto: { color: '#fff', fontSize: 11, fontWeight: '600' },
   botonMenu: { paddingHorizontal: 10, paddingVertical: 4 },
   botonMenuTexto: { fontSize: 20, color: '#999', fontWeight: 'bold' },
   botonAgregar: {
