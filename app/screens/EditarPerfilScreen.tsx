@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import * as ImagePicker from 'expo-image-picker';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
@@ -19,6 +20,12 @@ export default function EditarPerfilScreen({ route, navigation }) {
   const [colorSeleccionado, setColorSeleccionado] = useState(empresa.color_hex || COLORES[0]);
   const [logoUri, setLogoUri] = useState<string | null>(null);
   const [logoUrlActual, setLogoUrlActual] = useState(empresa.logo_url || null);
+  const [cedulaRepresentante, setCedulaRepresentante] = useState(empresa.cedula_representante || '');
+  const [nit, setNit] = useState(empresa.nit || '');
+  const [bancoNombre, setBancoNombre] = useState(empresa.banco_nombre || '');
+  const [bancoTipoCuenta, setBancoTipoCuenta] = useState(empresa.banco_tipo_cuenta || '');
+  const [bancoNumero, setBancoNumero] = useState(empresa.banco_numero || '');
+  const [bancoTitular, setBancoTitular] = useState(empresa.banco_titular || '');
 
   // Datos de usuario
   const [nombreUsuario, setNombreUsuario] = useState(usuario.nombre || '');
@@ -96,6 +103,12 @@ export default function EditarPerfilScreen({ route, navigation }) {
           sitio_web: sitioWeb || null,
           color_hex: colorSeleccionado,
           solicitante_id: usuario.id,
+          cedula_representante: cedulaRepresentante || null,
+          nit: nit || null,
+          banco_nombre: bancoNombre || null,
+          banco_tipo_cuenta: bancoTipoCuenta || null,
+          banco_numero: bancoNumero || null,
+          banco_titular: bancoTitular || null,
         });
         empresaFinal = { ...empresa, ...respuestaEmpresa.data.empresa };
       }
@@ -106,6 +119,34 @@ export default function EditarPerfilScreen({ route, navigation }) {
         contraseña_actual: contraseñaActual || undefined,
         contraseña_nueva: contraseñaNueva || undefined,
       });
+
+      // 4. Actualizar la sesión guardada en el dispositivo con los datos nuevos. Sin este paso,
+      // los cambios (logo, nombre, color, etc.) solo se ven mientras la app sigue abierta: al
+      // cerrarla y reabrirla, la pantalla de Inicio se arma con la sesión vieja guardada en el
+      // celular (que no pide contraseña de nuevo) y muestra otra vez los datos anteriores.
+      try {
+        const sesionGuardada = await AsyncStorage.getItem('sesion');
+        if (sesionGuardada) {
+          const sesion = JSON.parse(sesionGuardada);
+          sesion.usuario = respuestaUsuario.data.usuario;
+          if (Array.isArray(sesion.empresas)) {
+            sesion.empresas = sesion.empresas.map((e) =>
+              e.empresa_id === empresaFinal.id
+                ? {
+                    ...e,
+                    empresa_nombre: empresaFinal.nombre,
+                    logo_url: empresaFinal.logo_url,
+                    color_hex: empresaFinal.color_hex,
+                    sitio_web: empresaFinal.sitio_web,
+                  }
+                : e
+            );
+          }
+          await AsyncStorage.setItem('sesion', JSON.stringify(sesion));
+        }
+      } catch (errorSesion) {
+        console.error('Error actualizando sesión guardada:', errorSesion);
+      }
 
       Alert.alert('¡Listo!', 'Perfil actualizado exitosamente.', [
         {
@@ -174,6 +215,27 @@ export default function EditarPerfilScreen({ route, navigation }) {
                 />
               ))}
             </View>
+
+            <Text style={styles.seccionTitulo2}>Datos para contratos</Text>
+            <Text style={styles.ayudaTexto}>Estos datos aparecen automáticamente en los contratos que genera la app.</Text>
+
+            <Text style={styles.label}>Cédula del representante legal</Text>
+            <TextInput style={styles.input} value={cedulaRepresentante} onChangeText={setCedulaRepresentante} placeholder="Ej: 1.152.442.156" placeholderTextColor="#999" keyboardType="number-pad" />
+
+            <Text style={styles.label}>NIT de la empresa</Text>
+            <TextInput style={styles.input} value={nit} onChangeText={setNit} placeholder="Ej: 900990917-1" placeholderTextColor="#999" />
+
+            <Text style={styles.label}>Banco</Text>
+            <TextInput style={styles.input} value={bancoNombre} onChangeText={setBancoNombre} placeholder="Ej: Bancolombia" placeholderTextColor="#999" />
+
+            <Text style={styles.label}>Tipo de cuenta</Text>
+            <TextInput style={styles.input} value={bancoTipoCuenta} onChangeText={setBancoTipoCuenta} placeholder="Ej: Ahorros" placeholderTextColor="#999" />
+
+            <Text style={styles.label}>Número de cuenta</Text>
+            <TextInput style={styles.input} value={bancoNumero} onChangeText={setBancoNumero} placeholder="Ej: 93363300004" placeholderTextColor="#999" keyboardType="number-pad" />
+
+            <Text style={styles.label}>Titular de la cuenta</Text>
+            <TextInput style={styles.input} value={bancoTitular} onChangeText={setBancoTitular} placeholder="Ej: Inversiones Obra Blanca S.A.S" placeholderTextColor="#999" />
           </>
         )}
 
@@ -225,6 +287,8 @@ const styles = StyleSheet.create({
   scrollContent: { padding: 20, paddingBottom: 60 },
   titulo: { fontSize: 24, fontWeight: 'bold', marginBottom: 8 },
   seccionTitulo: { fontSize: 16, fontWeight: 'bold', color: '#1E90FF', marginTop: 8, marginBottom: 4, textTransform: 'uppercase' },
+  seccionTitulo2: { fontSize: 14, fontWeight: 'bold', color: '#1E90FF', marginTop: 28, marginBottom: 4, textTransform: 'uppercase' },
+  ayudaTexto: { fontSize: 12, color: '#888', marginBottom: 4 },
   label: { fontSize: 13, fontWeight: '600', color: '#333', marginBottom: 6, marginTop: 16 },
   input: {
     backgroundColor: '#fff',

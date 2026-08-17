@@ -2,6 +2,7 @@ import axios from 'axios';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import EncabezadoLogo from '../components/EncabezadoLogo';
+import InputMoneda from '../components/InputMoneda';
 import { compartirPdfDocumento, descargarPdfDocumento, generarPdfDocumento } from '../utils/generarPdfCotizacion';
 
 const formatearMoneda = (valor) => {
@@ -579,13 +580,11 @@ export default function CotizacionesScreen({ route }) {
                     placeholderTextColor="#999"
                     keyboardType="numeric"
                   />
-                  <TextInput
+                  <InputMoneda
                     style={[styles.input, { flex: 1 }]}
                     value={item.valor}
-                    onChangeText={(texto) => actualizarItem(index, 'valor', texto.replace(/[^0-9.]/g, ''))}
+                    onChangeValor={(texto) => actualizarItem(index, 'valor', texto)}
                     placeholder="Valor"
-                    placeholderTextColor="#999"
-                    keyboardType="numeric"
                   />
                   {items.length > 1 && (
                     <TouchableOpacity onPress={() => quitarItem(index)} style={styles.botonQuitarItem}>
@@ -601,13 +600,11 @@ export default function CotizacionesScreen({ route }) {
             </TouchableOpacity>
 
             <Text style={styles.label}>Descuento (opcional)</Text>
-            <TextInput
+            <InputMoneda
               style={styles.input}
               value={descuento}
-              onChangeText={(texto) => setDescuento(texto.replace(/[^0-9.]/g, ''))}
+              onChangeValor={(texto) => setDescuento(texto)}
               placeholder="Ej: 1680000"
-              placeholderTextColor="#999"
-              keyboardType="numeric"
             />
 
             <Text style={styles.totalTexto}>Total: {formatearMoneda(totalCotizacion)}</Text>
@@ -716,13 +713,11 @@ export default function CotizacionesScreen({ route }) {
                     placeholderTextColor="#999"
                     keyboardType="numeric"
                   />
-                  <TextInput
+                  <InputMoneda
                     style={[styles.input, { flex: 1 }]}
                     value={item.valor}
-                    onChangeText={(texto) => actualizarEditItem(index, 'valor', texto.replace(/[^0-9.]/g, ''))}
+                    onChangeValor={(texto) => actualizarEditItem(index, 'valor', texto)}
                     placeholder="Valor"
-                    placeholderTextColor="#999"
-                    keyboardType="numeric"
                   />
                   {editItems.length > 1 && (
                     <TouchableOpacity onPress={() => quitarEditItem(index)} style={styles.botonQuitarItem}>
@@ -738,13 +733,11 @@ export default function CotizacionesScreen({ route }) {
             </TouchableOpacity>
 
             <Text style={styles.label}>Descuento (opcional)</Text>
-            <TextInput
+            <InputMoneda
               style={styles.input}
               value={editDescuento}
-              onChangeText={(texto) => setEditDescuento(texto.replace(/[^0-9.]/g, ''))}
+              onChangeValor={(texto) => setEditDescuento(texto)}
               placeholder="Ej: 1680000"
-              placeholderTextColor="#999"
-              keyboardType="numeric"
             />
 
             <Text style={styles.totalTexto}>Total: {formatearMoneda(totalEditCotizacion)}</Text>
@@ -844,13 +837,11 @@ export default function CotizacionesScreen({ route }) {
                     placeholderTextColor="#999"
                     keyboardType="numeric"
                   />
-                  <TextInput
+                  <InputMoneda
                     style={[styles.input, { flex: 1 }]}
                     value={item.valor}
-                    onChangeText={(texto) => actualizarItemAdicional(index, 'valor', texto.replace(/[^0-9.]/g, ''))}
+                    onChangeValor={(texto) => actualizarItemAdicional(index, 'valor', texto)}
                     placeholder="Valor"
-                    placeholderTextColor="#999"
-                    keyboardType="numeric"
                   />
                   {itemsAdicionales.length > 1 && (
                     <TouchableOpacity onPress={() => quitarItemAdicional(index)} style={styles.botonQuitarItem}>

@@ -1,8 +1,7 @@
 import axios from 'axios';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Linking, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import EncabezadoLogo from '../components/EncabezadoLogo';
-import { compartirPdfDocumento, descargarPdfDocumento, generarPdfDocumento } from '../utils/generarPdfCotizacion';
 
 const formatearMoneda = (valor) => {
   const numero = parseFloat(valor) || 0;
@@ -24,14 +23,6 @@ export default function ContratosScreen({ route, navigation }) {
   const [cargando, setCargando] = useState(true);
   const [menuContrato, setMenuContrato] = useState(null);
   const [generandoPdf, setGenerandoPdf] = useState(false);
-  const [modalPdfVisible, setModalPdfVisible] = useState(false);
-  const [contratoParaPdf, setContratoParaPdf] = useState(null);
-  const [pdfCiudad, setPdfCiudad] = useState('');
-  const [pdfPropietario, setPdfPropietario] = useState('');
-  const [pdfParrafo, setPdfParrafo] = useState('');
-  const [pdfCondicionesPago, setPdfCondicionesPago] = useState('');
-  const [pdfTiempoEntrega, setPdfTiempoEntrega] = useState('');
-  const [pdfFirmante, setPdfFirmante] = useState('');
 
   useEffect(() => {
     cargarContratos();
@@ -79,81 +70,34 @@ export default function ContratosScreen({ route, navigation }) {
     }
   };
 
-  const abrirModalPdf = () => {
+  // El PDF del contrato se genera automáticamente en el servidor al aceptar la cotización
+  // (tomando todos sus datos). Aquí solo lo abrimos; si por algún motivo todavía no existe
+  // (falló la primera vez, o es un contrato antiguo), lo regeneramos en el servidor sin pedir
+  // nada al usuario, usando los datos ya guardados.
+  const verPdf = async () => {
     const contrato = menuContrato;
     cerrarMenu();
     if (!contrato?.cotizacion_id) {
       Alert.alert('No disponible', 'Este contrato no tiene una cotización asociada para generar el PDF.');
       return;
     }
-    setContratoParaPdf(contrato);
-    setPdfCiudad('');
-    setPdfPropietario('');
-    setPdfParrafo('');
-    setPdfCondicionesPago('');
-    setPdfTiempoEntrega('');
-    setPdfFirmante('');
-    setModalPdfVisible(true);
-  };
-
-  const generarYCompartirPdf = async () => {
-    const contrato = contratoParaPdf;
-    setModalPdfVisible(false);
+    if (contrato.pdf_url) {
+      Linking.openURL(contrato.pdf_url);
+      return;
+    }
     setGenerandoPdf(true);
     try {
-      const resCot = await axios.get(`https://backend-app-mediterraneo.onrender.com/api/cotizaciones/${contrato.cotizacion_id}`);
-      const cotizacion = resCot.data;
-      const resClientes = await axios.get(`https://backend-app-mediterraneo.onrender.com/api/clientes/listar/${empresa.id}`);
-      const cliente = resClientes.data.clientes.find((c) => c.id === cotizacion.cliente_id) || {};
-
-      const uriPdf = await generarPdfDocumento({
-        tipoDocumento: 'contrato',
-        empresa,
-        cliente,
-        numero: cotizacion.numero,
-        fecha: contrato.created_at,
-        fechaEntrega: contrato.fecha_entrega,
-        items: cotizacion.items,
-        total: contrato.valor_total,
-        descuento: cotizacion.descuento,
-        ciudad: pdfCiudad,
-        propietario: pdfPropietario || cliente.nombre,
-        parrafo: pdfParrafo,
-        condicionesPago: pdfCondicionesPago,
-        tiempoEntrega: pdfTiempoEntrega,
-        firmante: pdfFirmante,
-      });
-      const nombreArchivo = `Contrato_${(contrato.proyecto_nombre || cliente.nombre || 'proyecto').replace(/\s+/g, '_')}.pdf`;
-
-      Alert.alert('PDF generado', '¿Qué deseas hacer con el documento?', [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Descargar',
-          onPress: async () => {
-            try {
-              await descargarPdfDocumento(uriPdf, nombreArchivo);
-              Alert.alert('¡Listo!', 'El PDF se guardó en tu celular.');
-            } catch (error) {
-              console.error('Error descargando PDF:', error);
-              Alert.alert('No se guardó', error?.message || 'No se pudo guardar el PDF.');
-            }
-          },
-        },
-        {
-          text: 'Compartir',
-          onPress: async () => {
-            try {
-              await compartirPdfDocumento(uriPdf, nombreArchivo);
-            } catch (error) {
-              console.error('Error compartiendo PDF:', error);
-              Alert.alert('Error', error?.message || 'No se pudo compartir el PDF.');
-            }
-          },
-        },
-      ]);
+      const res = await axios.post(`https://backend-app-mediterraneo.onrender.com/api/cotizaciones/contratos/${contrato.id}/regenerar-pdf`);
+      const url = res.data?.contrato?.pdf_url;
+      if (url) {
+        Linking.openURL(url);
+        cargarContratos();
+      } else {
+        Alert.alert('Error', 'No se pudo generar el PDF. Intenta de nuevo en unos minutos.');
+      }
     } catch (error) {
       console.error('Error generando PDF del contrato:', error);
-      Alert.alert('Error', 'No se pudo generar el PDF del contrato.');
+      Alert.alert('Error', 'No se pudo generar el PDF. Intenta de nuevo en unos minutos.');
     } finally {
       setGenerandoPdf(false);
     }
@@ -233,8 +177,8 @@ export default function ContratosScreen({ route, navigation }) {
                 <Text style={styles.menuOpcionTexto}>✅  Marcar como finalizado</Text>
               </TouchableOpacity>
             )}
-            <TouchableOpacity style={styles.menuOpcion} onPress={abrirModalPdf} disabled={generandoPdf}>
-              <Text style={styles.menuOpcionTexto}>{generandoPdf ? 'Generando PDF...' : '📄  Generar PDF'}</Text>
+            <TouchableOpacity style={styles.menuOpcion} onPress={verPdf} disabled={generandoPdf}>
+              <Text style={styles.menuOpcionTexto}>{generandoPdf ? 'Generando PDF...' : '📄  Ver contrato (PDF)'}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.menuOpcion} onPress={cerrarMenu}>
               <Text style={[styles.menuOpcionTexto, { color: '#888' }]}>Cancelar</Text>
@@ -243,55 +187,6 @@ export default function ContratosScreen({ route, navigation }) {
         </TouchableOpacity>
       </Modal>
 
-      {/* MODAL: Datos para el PDF (carta, condiciones de pago, firma) */}
-      <Modal visible={modalPdfVisible} animationType="slide">
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-          <ScrollView style={styles.modalContainer} contentContainerStyle={{ padding: 20, paddingBottom: 60 }}>
-            <Text style={styles.modalTitulo}>Datos para el PDF</Text>
-            <Text style={styles.notaTexto}>Estos datos se usan solo para armar el documento; puedes dejarlos en blanco si no aplican.</Text>
-
-            <Text style={styles.label}>Ciudad (opcional)</Text>
-            <TextInput style={styles.input} value={pdfCiudad} onChangeText={setPdfCiudad} placeholder="Ej: Girardota" placeholderTextColor="#999" />
-
-            <Text style={styles.label}>Dirigido a (propietario)</Text>
-            <TextInput style={styles.input} value={pdfPropietario} onChangeText={setPdfPropietario} placeholder="Ej: Propietario Llano Azul" placeholderTextColor="#999" />
-
-            <Text style={styles.label}>Párrafo de contexto (opcional)</Text>
-            <TextInput
-              style={[styles.input, { minHeight: 70, textAlignVertical: 'top' }]}
-              value={pdfParrafo}
-              onChangeText={setPdfParrafo}
-              placeholder="Ej: Por solicitud efectuada paso a cotizar los precios de..."
-              placeholderTextColor="#999"
-              multiline
-            />
-
-            <Text style={styles.label}>Condiciones de pago (opcional)</Text>
-            <TextInput
-              style={[styles.input, { minHeight: 90, textAlignVertical: 'top' }]}
-              value={pdfCondicionesPago}
-              onChangeText={setPdfCondicionesPago}
-              placeholder={'Ej: 25% a la firma del contrato\n25% a la 3-4 semanas con avance\n25% a la entrega de obra blanca\n25% a la entrega final'}
-              placeholderTextColor="#999"
-              multiline
-            />
-
-            <Text style={styles.label}>Tiempo de entrega (opcional)</Text>
-            <TextInput style={styles.input} value={pdfTiempoEntrega} onChangeText={setPdfTiempoEntrega} placeholder="Ej: 12 - 14 semanas" placeholderTextColor="#999" />
-
-            <Text style={styles.label}>Firma (nombre de quien envía)</Text>
-            <TextInput style={styles.input} value={pdfFirmante} onChangeText={setPdfFirmante} placeholder="Ej: Juliana María Villa Flórez" placeholderTextColor="#999" />
-
-            <TouchableOpacity style={styles.botonGuardar} onPress={generarYCompartirPdf} disabled={generandoPdf}>
-              {generandoPdf ? <ActivityIndicator color="#fff" /> : <Text style={styles.botonAgregarTexto}>GENERAR PDF</Text>}
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.botonCancelar} onPress={() => setModalPdfVisible(false)}>
-              <Text style={styles.botonCancelarTexto}>Cancelar</Text>
-            </TouchableOpacity>
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </Modal>
     </View>
   );
 }

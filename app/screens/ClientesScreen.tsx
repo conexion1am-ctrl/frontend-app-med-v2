@@ -16,6 +16,9 @@ export default function ClientesScreen({ route }) {
   const [nombre, setNombre] = useState('');
   const [celular, setCelular] = useState('');
   const [paisCelular, setPaisCelular] = useState(detectarPaisPorDispositivo());
+  const [mts2, setMts2] = useState('');
+  const [direccion, setDireccion] = useState('');
+  const [cedula, setCedula] = useState('');
   const [guardando, setGuardando] = useState(false);
 
   const [menuCliente, setMenuCliente] = useState(null);
@@ -25,6 +28,9 @@ export default function ClientesScreen({ route }) {
   const [editNombre, setEditNombre] = useState('');
   const [editCelular, setEditCelular] = useState('');
   const [editPaisCelular, setEditPaisCelular] = useState(detectarPaisPorDispositivo());
+  const [editMts2, setEditMts2] = useState('');
+  const [editDireccion, setEditDireccion] = useState('');
+  const [editCedula, setEditCedula] = useState('');
 
   useEffect(() => {
     cargarDatos();
@@ -56,6 +62,9 @@ export default function ClientesScreen({ route }) {
     setNombre('');
     setCelular('');
     setPaisCelular(detectarPaisPorDispositivo());
+    setMts2('');
+    setDireccion('');
+    setCedula('');
   };
 
   const crearCliente = async () => {
@@ -71,6 +80,9 @@ export default function ClientesScreen({ route }) {
         nombre,
         nombre_proyecto: nombreProyecto || null,
         celular: celular ? `${paisCelular.prefijo} ${celular}` : null,
+        mts2: mts2 || null,
+        direccion: direccion || null,
+        cedula: cedula || null,
       });
       Alert.alert('¡Listo!', 'Cliente creado exitosamente.');
       setModalVisible(false);
@@ -100,6 +112,9 @@ export default function ClientesScreen({ route }) {
     const { pais, numero } = separarCelular(cliente.celular);
     setEditPaisCelular(pais);
     setEditCelular(numero);
+    setEditMts2(cliente.mts2 != null ? String(cliente.mts2) : '');
+    setEditDireccion(cliente.direccion || '');
+    setEditCedula(cliente.cedula || '');
     setModalEditarVisible(true);
   };
 
@@ -114,6 +129,9 @@ export default function ClientesScreen({ route }) {
         nombre: editNombre,
         nombre_proyecto: editNombreProyecto || null,
         celular: editCelular ? `${editPaisCelular.prefijo} ${editCelular}` : null,
+        mts2: editMts2 || null,
+        direccion: editDireccion || null,
+        cedula: editCedula || null,
       });
       setModalEditarVisible(false);
       cargarDatos();
@@ -229,6 +247,15 @@ export default function ClientesScreen({ route }) {
             <Text style={styles.label}>Número de celular (opcional)</Text>
             <InputCelular numero={celular} onChangeNumero={setCelular} pais={paisCelular} onChangePais={setPaisCelular} />
 
+            <Text style={styles.label}>Cédula (opcional)</Text>
+            <TextInput style={styles.input} value={cedula} onChangeText={setCedula} placeholder="Ej: 1.017.133.852" placeholderTextColor="#999" keyboardType="number-pad" />
+
+            <Text style={styles.label}>Metros cuadrados (opcional)</Text>
+            <TextInput style={styles.input} value={mts2} onChangeText={setMts2} placeholder="Ej: 180" placeholderTextColor="#999" keyboardType="number-pad" />
+
+            <Text style={styles.label}>Dirección (opcional)</Text>
+            <TextInput style={styles.input} value={direccion} onChangeText={setDireccion} placeholder="Ej: Carrera 14 N12a-60 Girardota" placeholderTextColor="#999" />
+
             <TouchableOpacity style={styles.botonGuardar} onPress={crearCliente} disabled={guardando}>
               {guardando ? <ActivityIndicator color="#fff" /> : <Text style={styles.botonAgregarTexto}>CREAR CLIENTE</Text>}
             </TouchableOpacity>
@@ -266,6 +293,15 @@ export default function ClientesScreen({ route }) {
 
             <Text style={styles.label}>Número de celular (opcional)</Text>
             <InputCelular numero={editCelular} onChangeNumero={setEditCelular} pais={editPaisCelular} onChangePais={setEditPaisCelular} />
+
+            <Text style={styles.label}>Cédula (opcional)</Text>
+            <TextInput style={styles.input} value={editCedula} onChangeText={setEditCedula} placeholder="Ej: 1.017.133.852" placeholderTextColor="#999" keyboardType="number-pad" />
+
+            <Text style={styles.label}>Metros cuadrados (opcional)</Text>
+            <TextInput style={styles.input} value={editMts2} onChangeText={setEditMts2} placeholder="Ej: 180" placeholderTextColor="#999" keyboardType="number-pad" />
+
+            <Text style={styles.label}>Dirección (opcional)</Text>
+            <TextInput style={styles.input} value={editDireccion} onChangeText={setEditDireccion} placeholder="Ej: Carrera 14 N12a-60 Girardota" placeholderTextColor="#999" />
 
             <TouchableOpacity style={styles.botonGuardar} onPress={guardarEdicion} disabled={guardando}>
               {guardando ? <ActivityIndicator color="#fff" /> : <Text style={styles.botonAgregarTexto}>GUARDAR CAMBIOS</Text>}

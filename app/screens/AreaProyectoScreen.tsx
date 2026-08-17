@@ -361,8 +361,9 @@ export default function AreaProyectoScreen({ route }) {
     setNuevoMensaje('');
   };
 
-  const enviarMensaje = async () => {
-    if (!nuevoMensaje.trim() || !chatAbierto) return;
+  const enviarMensaje = async (archivo) => {
+    if (!chatAbierto) return;
+    if (!nuevoMensaje.trim() && !archivo) return;
     setEnviando(true);
     try {
       await axios.post('https://backend-app-mediterraneo.onrender.com/api/mensajes/enviar', {
@@ -371,6 +372,7 @@ export default function AreaProyectoScreen({ route }) {
         usuario_id: usuario.id,
         destinatario_usuario_id: chatAbierto.usuario_id,
         contenido: nuevoMensaje,
+        archivo: archivo || undefined,
       });
       setNuevoMensaje('');
       const resMensajes = await axios.get(
@@ -380,6 +382,68 @@ export default function AreaProyectoScreen({ route }) {
     } catch (error) {
       console.error('Error enviando mensaje:', error);
       Alert.alert('Error', 'No se pudo enviar el mensaje.');
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  // Adjuntar archivo al chat, estilo WhatsApp: elegir imagen o documento, subirlo a Firebase
+  // Storage y enviarlo como mensaje (con o sin texto acompañante).
+  const elegirYAdjuntarArchivo = async () => {
+    Alert.alert('Adjuntar', '¿Qué quieres enviar?', [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Foto', onPress: adjuntarImagen },
+      { text: 'Documento', onPress: adjuntarDocumento },
+    ]);
+  };
+
+  const subirArchivoChatAFirebase = async (uri, nombreArchivo, contentType) => {
+    const respuesta = await fetch(uri);
+    const blob = await respuesta.blob();
+    const rutaDestino = `chat/${proyecto.id}_${area.id}_${Date.now()}_${nombreArchivo}`;
+    const storageRef = ref(storage, rutaDestino);
+    await uploadBytes(storageRef, blob, contentType ? { contentType } : undefined);
+    return await getDownloadURL(storageRef);
+  };
+
+  const adjuntarImagen = async () => {
+    const permiso = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permiso.granted) {
+      Alert.alert('Permiso necesario', 'Necesitamos acceso a tus fotos para adjuntar una imagen.');
+      return;
+    }
+    const resultado = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.7,
+    });
+    if (resultado.canceled) return;
+
+    setEnviando(true);
+    try {
+      const asset = resultado.assets[0];
+      const nombreArchivo = asset.fileName || `foto_${Date.now()}.jpg`;
+      const url = await subirArchivoChatAFirebase(asset.uri, nombreArchivo, 'image/jpeg');
+      await enviarMensaje({ nombre_archivo: nombreArchivo, url_archivo: url, tipo_archivo: 'imagen' });
+    } catch (error) {
+      console.error('Error adjuntando imagen:', error);
+      Alert.alert('Error', 'No se pudo enviar la imagen.');
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  const adjuntarDocumento = async () => {
+    const resultado = await DocumentPicker.getDocumentAsync({ multiple: false });
+    if (resultado.canceled) return;
+
+    setEnviando(true);
+    try {
+      const asset = resultado.assets[0];
+      const url = await subirArchivoChatAFirebase(asset.uri, asset.name, asset.mimeType);
+      await enviarMensaje({ nombre_archivo: asset.name, url_archivo: url, tipo_archivo: 'documento' });
+    } catch (error) {
+      console.error('Error adjuntando documento:', error);
+      Alert.alert('Error', 'No se pudo enviar el documento.');
     } finally {
       setEnviando(false);
     }
@@ -635,7 +699,18 @@ export default function AreaProyectoScreen({ route }) {
                 renderItem={({ item }) => (
                   <View style={styles.mensajeCard}>
                     <Text style={styles.mensajeAutor}>{item.usuario_nombre}</Text>
-                    <Text style={styles.mensajeTexto}>{item.contenido}</Text>
+                    {item.archivos?.map((archivo) =>
+                      archivo.tipo_archivo === 'imagen' ? (
+                        <TouchableOpacity key={archivo.id} onPress={() => setFotoAmpliada({ foto_url: archivo.url_archivo, usuario_nombre: item.usuario_nombre, created_at: item.created_at })}>
+                          <Image source={{ uri: archivo.url_archivo }} style={styles.mensajeImagenAdjunta} />
+                        </TouchableOpacity>
+                      ) : (
+                        <TouchableOpacity key={archivo.id} style={styles.mensajeDocumentoAdjunto} onPress={() => Linking.openURL(archivo.url_archivo)}>
+                          <Text style={styles.mensajeDocumentoTexto}>📎 {archivo.nombre_archivo || 'Archivo adjunto'}</Text>
+                        </TouchableOpacity>
+                      )
+                    )}
+                    {!!item.contenido && <Text style={styles.mensajeTexto}>{item.contenido}</Text>}
                   </View>
                 )}
                 ListEmptyComponent={<Text style={styles.vacioTexto}>Sin mensajes todavía. Escribe el primero.</Text>}
@@ -643,6 +718,9 @@ export default function AreaProyectoScreen({ route }) {
             )}
 
             <View style={styles.chatInputContainer}>
+              <TouchableOpacity style={styles.chatAdjuntar} onPress={elegirYAdjuntarArchivo} disabled={enviando}>
+                <Text style={styles.chatAdjuntarTexto}>📎</Text>
+              </TouchableOpacity>
               <TextInput
                 style={styles.chatInput}
                 value={nuevoMensaje}
@@ -650,7 +728,7 @@ export default function AreaProyectoScreen({ route }) {
                 placeholder="Escribe un mensaje..."
                 placeholderTextColor="#999"
               />
-              <TouchableOpacity style={styles.chatEnviar} onPress={enviarMensaje} disabled={enviando}>
+              <TouchableOpacity style={styles.chatEnviar} onPress={() => enviarMensaje()} disabled={enviando}>
                 <Text style={styles.chatEnviarTexto}>{enviando ? '...' : 'Enviar'}</Text>
               </TouchableOpacity>
             </View>
@@ -708,7 +786,12 @@ const styles = StyleSheet.create({
   mensajeCard: { backgroundColor: '#fff', borderRadius: 8, padding: 10, marginBottom: 8, borderWidth: 1, borderColor: '#eee' },
   mensajeAutor: { fontSize: 12, fontWeight: 'bold', color: '#1E90FF' },
   mensajeTexto: { fontSize: 14, color: '#333', marginTop: 2 },
-  chatInputContainer: { flexDirection: 'row', gap: 8, padding: 12, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#eee' },
+  mensajeImagenAdjunta: { width: 180, height: 180, borderRadius: 8, marginTop: 6, backgroundColor: '#eee' },
+  mensajeDocumentoAdjunto: { backgroundColor: '#f0f6ff', borderRadius: 6, padding: 8, marginTop: 6 },
+  mensajeDocumentoTexto: { fontSize: 13, color: '#1E90FF', fontWeight: '600' },
+  chatInputContainer: { flexDirection: 'row', gap: 8, padding: 12, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#eee', alignItems: 'center' },
+  chatAdjuntar: { paddingHorizontal: 6, justifyContent: 'center', alignItems: 'center' },
+  chatAdjuntarTexto: { fontSize: 22 },
   chatInput: { flex: 1, backgroundColor: '#f5f5f5', borderRadius: 8, padding: 10, borderWidth: 1, borderColor: '#ddd' },
   chatEnviar: { backgroundColor: '#1E90FF', borderRadius: 8, paddingHorizontal: 16, justifyContent: 'center' },
   chatEnviarTexto: { color: '#fff', fontWeight: 'bold' },
