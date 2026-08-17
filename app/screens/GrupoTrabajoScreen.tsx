@@ -1,9 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
+import * as Contacts from 'expo-contacts';
 import * as DocumentPicker from 'expo-document-picker';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Linking, Modal, Platform, ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { storage } from '../../firebaseConfig';
 import EncabezadoLogo from '../components/EncabezadoLogo';
 import InputCelular, { detectarPaisPorDispositivo, PAISES } from '../components/InputCelular';
@@ -35,6 +37,7 @@ const convertirADdMmAaAIso = (texto) => {
 
 export default function GrupoTrabajoScreen({ route }) {
   const { empresa, usuario } = route.params;
+  const insets = useSafeAreaInsets();
   const permisos = permisosDe(empresa);
   const puedeGestionarGerencia = esGerencia(empresa);
   const [personal, setPersonal] = useState([]);
@@ -55,6 +58,9 @@ export default function GrupoTrabajoScreen({ route }) {
   const [personaPendiente, setPersonaPendiente] = useState(null);
   const [linkPendiente, setLinkPendiente] = useState('');
   const [cargandoLinkPendiente, setCargandoLinkPendiente] = useState(false);
+
+  const [modalContactosVisible, setModalContactosVisible] = useState(false);
+  const [contactosDisponibles, setContactosDisponibles] = useState([]);
 
   const [archivoArlUri, setArchivoArlUri] = useState(null);
   const [archivoArlNombre, setArchivoArlNombre] = useState(null);
@@ -122,6 +128,51 @@ export default function GrupoTrabajoScreen({ route }) {
     setCelular('');
     setPaisCelular(detectarPaisPorDispositivo());
     setAreasSeleccionadas([]);
+  };
+
+  // Interpreta un número tal como viene del directorio del celular (puede traer espacios,
+  // guiones, paréntesis y/o el símbolo "+" con el código de país). Devuelve { pais, numero }
+  // en el mismo formato que usa InputCelular, para autocompletar el formulario.
+  const interpretarNumeroContacto = (numeroCrudo) => {
+    const limpio = (numeroCrudo || '').replace(/[^0-9+]/g, '');
+    if (limpio.startsWith('+')) {
+      const encontrado = PAISES.find((p) => limpio.startsWith(p.prefijo));
+      if (encontrado) {
+        return { pais: encontrado, numero: limpio.replace(encontrado.prefijo, '') };
+      }
+    }
+    // Sin prefijo reconocible: asumimos el país detectado del dispositivo y dejamos solo dígitos.
+    return { pais: detectarPaisPorDispositivo(), numero: limpio.replace(/\+/g, '') };
+  };
+
+  // Abre el directorio de contactos del celular; al elegir uno, autocompleta nombre y celular
+  // en el formulario de "Agregar Personal" (sigue siendo una invitación normal después).
+  const elegirDesdeContactos = async () => {
+    const permiso = await Contacts.requestPermissionsAsync();
+    if (!permiso.granted) {
+      Alert.alert('Permiso necesario', 'Necesitamos acceso a tus contactos para elegir uno.');
+      return;
+    }
+
+    const { data } = await Contacts.getContactsAsync({
+      fields: [Contacts.Fields.PhoneNumbers],
+    });
+    const conTelefono = data.filter((c) => c.phoneNumbers && c.phoneNumbers.length > 0);
+    if (conTelefono.length === 0) {
+      Alert.alert('Sin contactos', 'No encontramos contactos con número de celular en tu directorio.');
+      return;
+    }
+
+    setContactosDisponibles(conTelefono);
+    setModalContactosVisible(true);
+  };
+
+  const elegirContacto = (contacto, numero) => {
+    const { pais, numero: numeroLimpio } = interpretarNumeroContacto(numero);
+    setNombre(contacto.name || '');
+    setPaisCelular(pais);
+    setCelular(numeroLimpio);
+    setModalContactosVisible(false);
   };
 
   const enviarInvitaciones = async () => {
@@ -549,7 +600,7 @@ export default function GrupoTrabajoScreen({ route }) {
         )}
       </ScrollView>
 
-      <TouchableOpacity style={styles.botonAgregar} onPress={() => setModalVisible(true)}>
+      <TouchableOpacity style={[styles.botonAgregar, { bottom: Math.max(insets.bottom, 20) }]} onPress={() => setModalVisible(true)}>
         <Text style={styles.botonAgregarTexto}>AGREGAR PERSONAL</Text>
       </TouchableOpacity>
 
@@ -583,6 +634,10 @@ export default function GrupoTrabajoScreen({ route }) {
         >
           <ScrollView style={styles.modalContainer} contentContainerStyle={{ padding: 20, paddingBottom: 60 }}>
             <Text style={styles.modalTitulo}>Agregar Personal</Text>
+
+            <TouchableOpacity style={styles.botonContactos} onPress={elegirDesdeContactos}>
+              <Text style={styles.botonContactosTexto}>📇  Elegir desde mis contactos</Text>
+            </TouchableOpacity>
 
             <Text style={styles.label}>Nombre *</Text>
             <TextInput style={styles.input} value={nombre} onChangeText={setNombre} placeholder="Nombre completo" placeholderTextColor="#999" />
@@ -803,6 +858,32 @@ export default function GrupoTrabajoScreen({ route }) {
           </View>
         </View>
       </Modal>
+
+      {/* MODAL: elegir contacto (y número, si tiene varios) del directorio del celular */}
+      <Modal visible={modalContactosVisible} animationType="slide">
+        <View style={styles.modalContainer}>
+          <Text style={styles.modalTitulo}>Elige un contacto</Text>
+          <ScrollView>
+            {contactosDisponibles.map((contacto) => (
+              <View key={contacto.id} style={styles.contactoGrupo}>
+                <Text style={styles.contactoNombre}>{contacto.name}</Text>
+                {contacto.phoneNumbers.map((tel, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    style={styles.contactoNumeroOpcion}
+                    onPress={() => elegirContacto(contacto, tel.number)}
+                  >
+                    <Text style={styles.contactoNumeroTexto}>{tel.number}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            ))}
+          </ScrollView>
+          <TouchableOpacity style={styles.botonCancelar} onPress={() => setModalContactosVisible(false)}>
+            <Text style={styles.botonCancelarTexto}>Cerrar</Text>
+          </TouchableOpacity>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -878,6 +959,12 @@ const styles = StyleSheet.create({
   },
   botonCancelar: { alignItems: 'center', marginTop: 12, padding: 10 },
   botonCancelarTexto: { color: '#888', fontSize: 14 },
+  botonContactos: { backgroundColor: '#f0f6ff', borderRadius: 8, padding: 12, alignItems: 'center', marginBottom: 10 },
+  botonContactosTexto: { color: '#1E90FF', fontSize: 14, fontWeight: '600' },
+  contactoGrupo: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
+  contactoNombre: { fontSize: 15, fontWeight: '600', color: '#222', marginBottom: 4 },
+  contactoNumeroOpcion: { backgroundColor: '#f5f5f5', borderRadius: 6, padding: 10, marginTop: 4 },
+  contactoNumeroTexto: { fontSize: 14, color: '#333' },
   menuOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
   menuBox: { backgroundColor: '#fff', borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 20, paddingBottom: 36 },
   menuTitulo: { fontSize: 15, fontWeight: 'bold', color: '#888', marginBottom: 12, textAlign: 'center' },

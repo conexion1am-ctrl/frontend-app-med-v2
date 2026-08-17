@@ -4,6 +4,7 @@ import * as Notifications from 'expo-notifications';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { getNavigationGlobal } from './utils/navigationGlobal';
 import { registrarNotificacionesPush } from './utils/notificacionesPush';
 import AceptarInvitacionScreen from './screens/AceptarInvitacionScreen';
@@ -132,6 +133,7 @@ export default function App() {
   }
 
   return (
+    <SafeAreaProvider>
     <GestureHandlerRootView style={{ flex: 1 }}>
     <Stack.Navigator initialRouteName={rutaInicial} screenOptions={{ headerShown: false }}>
       <Stack.Screen name="PerfilEmpresa" component={PerfilEmpresaScreen} />
@@ -188,5 +190,6 @@ export default function App() {
       />
     </Stack.Navigator>
     </GestureHandlerRootView>
+    </SafeAreaProvider>
   );
 }

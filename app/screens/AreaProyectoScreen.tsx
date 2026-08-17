@@ -9,6 +9,7 @@ import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Image, KeyboardAvoidingView, Linking, Modal, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { storage } from '../../firebaseConfig';
 import EncabezadoLogo from '../components/EncabezadoLogo';
 import ImagenZoom from '../components/ImagenZoom';
@@ -26,6 +27,7 @@ const formatearFechaFoto = (fecha) => {
 
 export default function AreaProyectoScreen({ route }) {
   const { empresa, proyecto, area, usuario } = route.params;
+  const insets = useSafeAreaInsets();
   const permisos = permisosDe(empresa);
   const pestanasVisibles = pestanasAreaProyecto(empresa); // ['equipo', 'fotos', 'planos3d'] o subconjunto
   const [tab, setTab] = useState(pestanasVisibles[0]); // 'equipo' | 'fotos' | 'planos3d' | 'contrato'
@@ -717,7 +719,7 @@ export default function AreaProyectoScreen({ route }) {
               />
             )}
 
-            <View style={styles.chatInputContainer}>
+            <View style={[styles.chatInputContainer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
               <TouchableOpacity style={styles.chatAdjuntar} onPress={elegirYAdjuntarArchivo} disabled={enviando}>
                 <Text style={styles.chatAdjuntarTexto}>📎</Text>
               </TouchableOpacity>

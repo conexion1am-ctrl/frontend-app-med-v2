@@ -1,11 +1,13 @@
 import axios from 'axios';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import EncabezadoLogo from '../components/EncabezadoLogo';
 import { esAccesoReducido, permisosDe } from '../utils/roles';
 
 export default function ProyectosScreen({ route, navigation }) {
   const { empresa, usuario } = route.params;
+  const insets = useSafeAreaInsets();
   const accesoReducido = esAccesoReducido(empresa);
   const puedeGestionar = permisosDe(empresa).gestionarProyectos;
   const [proyectos, setProyectos] = useState([]);
@@ -160,7 +162,7 @@ export default function ProyectosScreen({ route, navigation }) {
       </ScrollView>
 
       {puedeGestionar && (
-        <TouchableOpacity style={styles.botonAgregar} onPress={() => setModalVisible(true)}>
+        <TouchableOpacity style={[styles.botonAgregar, { bottom: Math.max(insets.bottom, 20) }]} onPress={() => setModalVisible(true)}>
           <Text style={styles.botonAgregarTexto}>NUEVO PROYECTO</Text>
         </TouchableOpacity>
       )}

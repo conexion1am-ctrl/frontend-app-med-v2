@@ -34,6 +34,7 @@
     "expo-notifications": "~0.32.13",
     "expo-print": "~15.0.7",
     "expo-asset": "~12.0.13",
+    "expo-contacts": "~15.0.9",
     "expo-router": "~6.0.24",
     "expo-sharing": "~14.0.7",
     "expo-splash-screen": "~31.0.13",

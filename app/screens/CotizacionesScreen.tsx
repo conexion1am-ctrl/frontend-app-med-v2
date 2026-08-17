@@ -1,9 +1,11 @@
 import axios from 'axios';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import EncabezadoLogo from '../components/EncabezadoLogo';
 import InputMoneda from '../components/InputMoneda';
 import { compartirPdfDocumento, descargarPdfDocumento, generarPdfDocumento } from '../utils/generarPdfCotizacion';
+import { esGerencia } from '../utils/roles';
 
 const formatearMoneda = (valor) => {
   const numero = parseFloat(valor) || 0;
@@ -22,7 +24,9 @@ const condicionesPagoDefecto = () => [
 ];
 
 export default function CotizacionesScreen({ route }) {
-  const { empresa } = route.params;
+  const { empresa, usuario } = route.params;
+  const puedeEliminarCotizaciones = esGerencia(empresa);
+  const insets = useSafeAreaInsets();
   const [cotizaciones, setCotizaciones] = useState([]);
   const [clientes, setClientes] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -399,7 +403,7 @@ export default function CotizacionesScreen({ route }) {
   const confirmarEliminar = (cot) => {
     cerrarMenu();
     if (cot.aceptada) {
-      Alert.alert('No se puede eliminar', 'Esta cotización ya fue aceptada y generó un contrato.');
+      Alert.alert('No se puede eliminar todavía', 'Esta cotización ya fue aceptada y generó un contrato. Elimina primero el contrato desde la pantalla de Contratos (esto también eliminará esta cotización).');
       return;
     }
     Alert.alert('Eliminar cotización', `¿Eliminar la cotización de ${cot.cliente_nombre}?`, [
@@ -409,7 +413,9 @@ export default function CotizacionesScreen({ route }) {
         style: 'destructive',
         onPress: async () => {
           try {
-            await axios.delete(`https://backend-app-mediterraneo.onrender.com/api/cotizaciones/${cot.id}`);
+            await axios.delete(`https://backend-app-mediterraneo.onrender.com/api/cotizaciones/${cot.id}`, {
+              data: { solicitante_id: usuario?.id },
+            });
             cargarDatos();
           } catch (error) {
             console.error('Error eliminando cotización:', error);
@@ -488,7 +494,7 @@ export default function CotizacionesScreen({ route }) {
         )}
       </ScrollView>
 
-      <TouchableOpacity style={styles.botonAgregar} onPress={() => setModalVisible(true)}>
+      <TouchableOpacity style={[styles.botonAgregar, { bottom: Math.max(insets.bottom, 20) }]} onPress={() => setModalVisible(true)}>
         <Text style={styles.botonAgregarTexto}>NUEVA COTIZACIÓN</Text>
       </TouchableOpacity>
 
@@ -506,15 +512,22 @@ export default function CotizacionesScreen({ route }) {
                 <TouchableOpacity style={styles.menuOpcion} onPress={() => abrirAdicionales(menuCotizacion)}>
                   <Text style={styles.menuOpcionTexto}>➕  Agregar adicionales</Text>
                 </TouchableOpacity>
+                {puedeEliminarCotizaciones && (
+                  <TouchableOpacity style={styles.menuOpcion} onPress={() => confirmarEliminar(menuCotizacion)}>
+                    <Text style={[styles.menuOpcionTexto, { color: '#DC143C' }]}>🗑️  Eliminar</Text>
+                  </TouchableOpacity>
+                )}
               </>
             ) : (
               <>
                 <TouchableOpacity style={styles.menuOpcion} onPress={() => abrirEditar(menuCotizacion)}>
                   <Text style={styles.menuOpcionTexto}>✏️  Editar</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.menuOpcion} onPress={() => confirmarEliminar(menuCotizacion)}>
-                  <Text style={[styles.menuOpcionTexto, { color: '#DC143C' }]}>🗑️  Eliminar</Text>
-                </TouchableOpacity>
+                {puedeEliminarCotizaciones && (
+                  <TouchableOpacity style={styles.menuOpcion} onPress={() => confirmarEliminar(menuCotizacion)}>
+                    <Text style={[styles.menuOpcionTexto, { color: '#DC143C' }]}>🗑️  Eliminar</Text>
+                  </TouchableOpacity>
+                )}
               </>
             )}
             <TouchableOpacity style={styles.menuOpcion} onPress={() => abrirModalPdf(menuCotizacion)} disabled={generandoPdf}>

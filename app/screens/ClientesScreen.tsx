@@ -1,12 +1,14 @@
 import axios from 'axios';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Linking, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import EncabezadoLogo from '../components/EncabezadoLogo';
 import InputCelular, { detectarPaisPorDispositivo, PAISES } from '../components/InputCelular';
 import { permisosDe } from '../utils/roles';
 
 export default function ClientesScreen({ route }) {
   const { empresa, usuario } = route.params;
+  const insets = useSafeAreaInsets();
   const permisos = permisosDe(empresa);
   const [clientes, setClientes] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -202,7 +204,7 @@ export default function ClientesScreen({ route }) {
         )}
       </ScrollView>
 
-      <TouchableOpacity style={styles.botonAgregar} onPress={() => setModalVisible(true)}>
+      <TouchableOpacity style={[styles.botonAgregar, { bottom: Math.max(insets.bottom, 20) }]} onPress={() => setModalVisible(true)}>
         <Text style={styles.botonAgregarTexto}>NUEVO CLIENTE</Text>
       </TouchableOpacity>
 
