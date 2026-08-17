@@ -1,20 +1,110 @@
-import { GLView } from 'expo-gl';
-import { Renderer } from 'expo-three';
-import React, { useRef, useState } from 'react';
+import { useGLTF } from '@react-three/drei/native';
+import { Canvas, useFrame, useThree } from '@react-three/fiber/native';
+import React, { Suspense, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
 
 // Visor de modelos 3D (.glb) con rotar (arrastrar con 1 dedo), mover (arrastrar con 2 dedos),
 // zoom (pellizcar con 2 dedos) y un modo "medir" donde el usuario toca dos puntos sobre el
 // modelo y se calcula la distancia real entre ellos usando raycasting. Pensado para planos
 // exportados desde SketchUp con escala real (metros).
 //
-// Los gestos se manejan con react-native-gesture-handler (Pinch + Pan simultáneos) en vez de
-// PanResponder manual: PanResponder leía evt.nativeEvent.touches directamente, cuyo orden puede
-// cambiar entre frames al usar 2 dedos, causando saltos falsos de zoom. gesture-handler resuelve
-// esto de forma nativa y confiable.
+// Migrado de expo-three + GLTFLoader "a mano" a @react-three/fiber + @react-three/drei
+// (imports /native). Motivo: GLTFLoader usado directamente sobre expo-gl NO carga bien las
+// texturas/colores embebidas en el .glb (usa TextureLoader estándar de Three.js, que depende de
+// APIs de navegador -Image(), createImageBitmap()- no disponibles en Hermes/React Native) —
+// el modelo se veía en gris plano aunque el archivo sí tuviera texturas (confirmado comparando
+// contra un visor web, donde sí se veían bien). @react-three/fiber/native y
+// @react-three/drei/native traen parches automáticos para que la carga de texturas funcione
+// correctamente en este entorno.
+//
+// Los gestos táctiles se manejan por FUERA del <Canvas>, con react-native-gesture-handler
+// (igual que en la versión anterior, ya verificada), y se aplican a la cámara real de R3F desde
+// un componente interno (ControladorCamara) que lee el estado compartido en cada frame con
+// useFrame — así se conserva toda la lógica de gestos ya probada sin reescribirla.
+
+// Captura errores de carga del modelo (ej. .glb corrupto o URL inválida) dentro del árbol de
+// React del <Canvas>. useGLTF usa Suspense, y sus rechazos de promesa solo se pueden atrapar
+// con un Error Boundary de clase — no existe un hook equivalente en React todavía.
+class LimiteDeError extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { tieneError: false };
+  }
+  static getDerivedStateFromError() {
+    return { tieneError: true };
+  }
+  componentDidCatch(error) {
+    console.error('Error cargando el modelo 3D:', error);
+    this.props.onError?.();
+  }
+  render() {
+    if (this.state.tieneError) return null;
+    return this.props.children;
+  }
+}
+
+// Aplica en cada frame el estado de cámara (camState, calculado por los gestos táctiles fuera
+// del <Canvas>) a la cámara real de R3F, y mueve la luz que acompaña a la cámara. Definido a
+// nivel de módulo (no dentro de Visor3D) para que React no lo trate como un componente nuevo en
+// cada render del padre, lo que forzaría un remontaje innecesario del árbol dentro del <Canvas>.
+function ControladorCamara({ camState, camaraRef, luzCamaraRef }) {
+  const { camera } = useThree();
+  camaraRef.current = camera;
+
+  useFrame(() => {
+    const st = camState.current;
+    const elevacionLimitada = Math.max(-1.4, Math.min(1.4, st.elevacion));
+    const x = st.centro.x + st.radio * Math.cos(elevacionLimitada) * Math.sin(st.azimut);
+    const y = st.centro.y + st.radio * Math.sin(elevacionLimitada);
+    const z = st.centro.z + st.radio * Math.cos(elevacionLimitada) * Math.cos(st.azimut);
+    camera.position.set(x, y, z);
+    camera.lookAt(st.centro);
+
+    if (luzCamaraRef.current) {
+      luzCamaraRef.current.position.copy(camera.position);
+    }
+  });
+
+  return null;
+}
+
+// Carga el .glb con drei (usa internamente el TextureLoader parcheado para React Native, por eso
+// sí se ven los colores/texturas del archivo, a diferencia del GLTFLoader "a mano" que se usaba
+// antes). Centra y escala el modelo una sola vez cuando termina de cargar, dentro de un
+// useEffect (no directamente en el cuerpo del componente, que se ejecutaría en cada render y
+// podría re-centrar el modelo mientras el usuario lo está rotando/moviendo). También definido a
+// nivel de módulo por el mismo motivo que ControladorCamara.
+function Modelo({ uri, camState, escenaRef, modeloRef, listoParaposicionarRef, onCargado }) {
+  const { scene } = useGLTF(uri);
+  const { scene: escenaThree } = useThree();
+
+  useEffect(() => {
+    escenaRef.current = escenaThree;
+
+    if (!listoParaposicionarRef.current) {
+      const caja = new THREE.Box3().setFromObject(scene);
+      const centro = caja.getCenter(new THREE.Vector3());
+      const tamano = caja.getSize(new THREE.Vector3());
+      const dimensionMax = Math.max(tamano.x, tamano.y, tamano.z) || 1;
+
+      scene.position.sub(centro);
+      camState.current.centro = new THREE.Vector3(0, 0, 0);
+      camState.current.radio = dimensionMax * 1.6;
+      listoParaposicionarRef.current = true;
+    }
+
+    modeloRef.current = scene;
+    onCargado();
+    // Solo debe correr una vez, cuando el modelo (scene) cambia — no en cada render de este
+    // componente, para no re-centrar/re-escalar mientras el usuario interactúa.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scene]);
+
+  return <primitive object={scene} />;
+}
+
 export default function Visor3D({ uri }) {
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
@@ -23,34 +113,23 @@ export default function Visor3D({ uri }) {
   const [distanciaMedida, setDistanciaMedida] = useState(null);
   const modoMedirRef = useRef(false); // espejo síncrono de modoMedir, legible dentro de los gestos
 
-  const escenaRef = useRef(null);
   const camaraRef = useRef(null);
-  const rendererRef = useRef(null);
+  const escenaRef = useRef(null);
   const modeloRef = useRef(null);
+  const luzCamaraRef = useRef(null);
   const marcadoresRef = useRef([]); // esferas rojas que marcan los puntos tocados
-  // Tamaño EN PUNTOS (no píxeles físicos) del área donde se dibuja el modelo, usado para
-  // convertir toques de pantalla a coordenadas normalizadas para el raycasting. Se lee del
-  // layout real de la View (onLayout), no del drawingBuffer del GLView, que está en píxeles
-  // físicos y queda desalineado en celulares con pixelRatio distinto de 1.
+  // Tamaño EN PUNTOS del área donde se dibuja el visor, usado para convertir toques de pantalla
+  // a coordenadas normalizadas para el raycasting.
   const layoutRef = useRef({ width: 1, height: 1 });
 
-  // Estado de orbit/pan/zoom manual (sin librería de cámara externa)
+  // Estado de orbit/pan/zoom manual (sin OrbitControls, para conservar el mismo comportamiento
+  // ya probado y no depender de otra librería más).
   const camState = useRef({ radio: 8, azimut: 0, elevacion: 0.5, centro: new THREE.Vector3(0, 0, 0) });
-  // Snapshot del estado de cámara al INICIO de cada gesto, para calcular deltas limpios en vez
-  // de acumular pequeños errores frame a frame.
+  // Snapshot del estado de cámara al INICIO de cada gesto, para calcular deltas limpios.
   const inicioGestoRef = useRef({ radio: 8, azimut: 0, elevacion: 0.5, centro: new THREE.Vector3(0, 0, 0) });
-
-  const actualizarCamara = () => {
-    const cam = camaraRef.current;
-    const st = camState.current;
-    if (!cam) return;
-    const elevacionLimitada = Math.max(-1.4, Math.min(1.4, st.elevacion));
-    const x = st.centro.x + st.radio * Math.cos(elevacionLimitada) * Math.sin(st.azimut);
-    const y = st.centro.y + st.radio * Math.sin(elevacionLimitada);
-    const z = st.centro.z + st.radio * Math.cos(elevacionLimitada) * Math.cos(st.azimut);
-    cam.position.set(x, y, z);
-    cam.lookAt(st.centro);
-  };
+  // Se pone en true una vez que el modelo carga y calculamos el radio inicial según su tamaño;
+  // ControladorCamara usa esto para saber cuándo aplicar la posición inicial de la cámara.
+  const listoParaposicionarRef = useRef(false);
 
   // Convierte un toque en coordenadas de pantalla (relativas al layout del visor) a un punto
   // real sobre la superficie del modelo, usando raycasting.
@@ -110,8 +189,7 @@ export default function Visor3D({ uri }) {
     });
   };
 
-  // Toque simple: en modo medir, marca un punto. Fuera de modo medir, no hace nada (rotar/mover
-  // se manejan con los gestos Pan/Pinch de abajo).
+  // Toque simple: en modo medir, marca un punto.
   const gestoToque = Gesture.Tap()
     .maxDuration(250)
     .onEnd((evt, exitoso) => {
@@ -119,9 +197,7 @@ export default function Visor3D({ uri }) {
       manejarToqueMedicion(evt.x, evt.y);
     });
 
-  // Un dedo: orbita la cámara alrededor del modelo. Dos dedos: mueve el centro de la cámara
-  // (paneo), como en cualquier visor 3D estándar. Se distingue por minPointers/maxPointers en
-  // dos gestos Pan separados corriendo en simultáneo con el pellizco de zoom.
+  // Un dedo: orbita la cámara alrededor del modelo. Dos dedos: mueve el centro de la cámara.
   const gestoOrbitar = Gesture.Pan()
     .minPointers(1)
     .maxPointers(1)
@@ -133,7 +209,6 @@ export default function Visor3D({ uri }) {
       const inicio = inicioGestoRef.current;
       camState.current.azimut = inicio.azimut - evt.translationX * 0.008;
       camState.current.elevacion = inicio.elevacion + evt.translationY * 0.008;
-      actualizarCamara();
     });
 
   const gestoMover = Gesture.Pan()
@@ -146,9 +221,6 @@ export default function Visor3D({ uri }) {
       const cam = camaraRef.current;
       if (!cam) return;
       const inicio = inicioGestoRef.current;
-      // Movemos el centro de la cámara en el plano de la vista (ejes derecha/arriba de la
-      // cámara), escalado por el radio actual para que el paneo se sienta igual de rápido sin
-      // importar qué tan alejados o cerca estemos del modelo.
       const direccionCamara = new THREE.Vector3();
       cam.getWorldDirection(direccionCamara);
       const derecha = new THREE.Vector3().crossVectors(direccionCamara, new THREE.Vector3(0, 1, 0)).normalize();
@@ -160,7 +232,6 @@ export default function Visor3D({ uri }) {
         .addScaledVector(arribaCamara, evt.translationY * escala);
 
       camState.current.centro = inicio.centro.clone().add(desplazamiento);
-      actualizarCamara();
     });
 
   const gestoZoom = Gesture.Pinch()
@@ -171,86 +242,12 @@ export default function Visor3D({ uri }) {
       const inicio = inicioGestoRef.current;
       const nuevoRadio = Math.max(0.5, Math.min(60, inicio.radio / evt.scale));
       camState.current.radio = nuevoRadio;
-      actualizarCamara();
     });
 
-  // Pan de 1 dedo (orbitar) y Pan de 2 dedos (mover) son mutuamente excluyentes por
-  // minPointers/maxPointers, así que se combinan con Race; el zoom (Pinch) corre en simultáneo
-  // con el paneo de 2 dedos para que pellizcar-y-arrastrar funcione en el mismo gesto, como en
-  // cualquier visor 3D o mapa.
   const gestoCompuesto = Gesture.Simultaneous(
     gestoToque,
     Gesture.Race(gestoOrbitar, Gesture.Simultaneous(gestoMover, gestoZoom))
   );
-
-  const onContextCreate = async (gl) => {
-    try {
-      const width = gl.drawingBufferWidth;
-      const height = gl.drawingBufferHeight;
-
-      const renderer = new Renderer({ gl });
-      renderer.setSize(width, height);
-      renderer.setClearColor(0xe8e8e8, 1);
-      rendererRef.current = renderer;
-
-      const escena = new THREE.Scene();
-      escenaRef.current = escena;
-
-      const camara = new THREE.PerspectiveCamera(55, width / height, 0.05, 1000);
-      camaraRef.current = camara;
-
-      escena.add(new THREE.AmbientLight(0xffffff, 0.9));
-      const luzDireccional = new THREE.DirectionalLight(0xffffff, 0.8);
-      luzDireccional.position.set(5, 10, 7);
-      escena.add(luzDireccional);
-
-      // Descarga el .glb y lo interpreta con GLTFLoader (funciona con URLs remotas vía fetch).
-      const respuesta = await fetch(uri);
-      const arrayBuffer = await respuesta.arrayBuffer();
-      const loader = new GLTFLoader();
-
-      loader.parse(
-        arrayBuffer,
-        '',
-        (gltf) => {
-          const modelo = gltf.scene;
-
-          // Centramos y escalamos el modelo para que siempre quepa bien en la vista,
-          // sin importar el tamaño real que traiga desde SketchUp.
-          const caja = new THREE.Box3().setFromObject(modelo);
-          const centro = caja.getCenter(new THREE.Vector3());
-          const tamano = caja.getSize(new THREE.Vector3());
-          const dimensionMax = Math.max(tamano.x, tamano.y, tamano.z) || 1;
-
-          modelo.position.sub(centro);
-          escena.add(modelo);
-          modeloRef.current = modelo;
-
-          camState.current.centro = new THREE.Vector3(0, 0, 0);
-          camState.current.radio = dimensionMax * 1.6;
-          actualizarCamara();
-
-          setCargando(false);
-        },
-        (errorCarga) => {
-          console.error('Error interpretando el modelo 3D:', errorCarga);
-          setError('No se pudo abrir este archivo. Verifica que sea un .glb válido.');
-          setCargando(false);
-        }
-      );
-
-      const render = () => {
-        requestAnimationFrame(render);
-        renderer.render(escena, camara);
-        gl.endFrameEXP();
-      };
-      render();
-    } catch (err) {
-      console.error('Error inicializando el visor 3D:', err);
-      setError('No se pudo cargar el archivo 3D. Revisa tu conexión e intenta de nuevo.');
-      setCargando(false);
-    }
-  };
 
   const reiniciarVista = () => {
     if (!modeloRef.current) return;
@@ -258,7 +255,6 @@ export default function Visor3D({ uri }) {
     const tamano = caja.getSize(new THREE.Vector3());
     const dimensionMax = Math.max(tamano.x, tamano.y, tamano.z) || 1;
     camState.current = { radio: dimensionMax * 1.6, azimut: 0, elevacion: 0.5, centro: new THREE.Vector3(0, 0, 0) };
-    actualizarCamara();
   };
 
   const alternarModoMedir = () => {
@@ -284,7 +280,43 @@ export default function Visor3D({ uri }) {
             layoutRef.current = { width, height };
           }}
         >
-          <GLView style={{ flex: 1 }} onContextCreate={onContextCreate} />
+          <Canvas
+            camera={{ fov: 55, near: 0.05, far: 1000 }}
+            gl={{ antialias: true }}
+            onCreated={() => setError('')}
+          >
+            <color attach="background" args={['#e8e8e8']} />
+            {/* Iluminación pensada para que ninguna cara del modelo quede oscura sin importar
+                cómo se rote: luz ambiental fuerte como base pareja, varias luces direccionales
+                fijas desde distintos ángulos, y una luz extra que acompaña a la cámara. */}
+            <ambientLight intensity={1.1} />
+            <hemisphereLight args={['#ffffff', '#666666', 0.6]} />
+            <directionalLight position={[0, 10, 0]} intensity={0.7} />
+            <directionalLight position={[5, 5, 10]} intensity={0.6} />
+            <directionalLight position={[-5, 3, -10]} intensity={0.5} />
+            <directionalLight position={[-10, 4, 0]} intensity={0.4} />
+            <pointLight ref={luzCamaraRef} intensity={0.6} />
+
+            <ControladorCamara camState={camState} camaraRef={camaraRef} luzCamaraRef={luzCamaraRef} />
+
+            <LimiteDeError
+              onError={() => {
+                setError('No se pudo abrir este archivo. Verifica que sea un .glb válido.');
+                setCargando(false);
+              }}
+            >
+              <Suspense fallback={null}>
+                <Modelo
+                  uri={uri}
+                  camState={camState}
+                  escenaRef={escenaRef}
+                  modeloRef={modeloRef}
+                  listoParaposicionarRef={listoParaposicionarRef}
+                  onCargado={() => setCargando(false)}
+                />
+              </Suspense>
+            </LimiteDeError>
+          </Canvas>
         </View>
       </GestureDetector>
 
