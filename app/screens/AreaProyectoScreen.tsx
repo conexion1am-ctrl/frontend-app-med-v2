@@ -1,12 +1,13 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
+import { AudioModule, RecordingPresets, useAudioPlayer, useAudioPlayerStatus, useAudioRecorder, useAudioRecorderState } from 'expo-audio';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
 import * as MediaLibrary from 'expo-media-library';
 import * as Sharing from 'expo-sharing';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Image, KeyboardAvoidingView, Linking, Modal, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -24,6 +25,49 @@ const formatearFechaFoto = (fecha) => {
   const anio = String(d.getUTCFullYear()).slice(-2);
   return `${dia}-${mes}-${anio}`;
 };
+
+// Burbuja de nota de voz dentro del chat: botón play/pausa + tiempo transcurrido, estilo
+// WhatsApp. Cada nota tiene su propio reproductor (useAudioPlayer), por eso es un componente
+// separado en vez de manejarlo dentro del renderItem de la lista de mensajes.
+function BurbujaAudio({ uri }) {
+  const player = useAudioPlayer(uri);
+  const status = useAudioPlayerStatus(player);
+
+  const alternarReproduccion = () => {
+    if (status.playing) {
+      player.pause();
+    } else {
+      if (status.currentTime >= status.duration && status.duration > 0) {
+        player.seekTo(0);
+      }
+      player.play();
+    }
+  };
+
+  const formatearTiempo = (segundos) => {
+    const s = Math.max(0, Math.floor(segundos || 0));
+    const min = Math.floor(s / 60);
+    const seg = String(s % 60).padStart(2, '0');
+    return `${min}:${seg}`;
+  };
+
+  return (
+    <TouchableOpacity style={styles.notaVozContainer} onPress={alternarReproduccion}>
+      <Text style={styles.notaVozBoton}>{status.playing ? '⏸️' : '▶️'}</Text>
+      <View style={styles.notaVozBarra}>
+        <View
+          style={[
+            styles.notaVozBarraProgreso,
+            { width: status.duration > 0 ? `${Math.min(100, (status.currentTime / status.duration) * 100)}%` : '0%' },
+          ]}
+        />
+      </View>
+      <Text style={styles.notaVozTiempo}>
+        {formatearTiempo(status.playing || status.currentTime > 0 ? status.currentTime : status.duration)}
+      </Text>
+    </TouchableOpacity>
+  );
+}
 
 export default function AreaProyectoScreen({ route }) {
   const { empresa, proyecto, area, usuario } = route.params;
@@ -43,6 +87,12 @@ export default function AreaProyectoScreen({ route }) {
   const [nuevoMensaje, setNuevoMensaje] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [cargandoChat, setCargandoChat] = useState(false);
+
+  // Nota de voz: se graba manteniendo presionado el botón del micrófono, estilo WhatsApp.
+  const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  useAudioRecorderState(audioRecorder); // mantiene el hook activo para que el recorder se actualice
+  const [grabandoNota, setGrabandoNota] = useState(false);
+  const inicioGrabacionRef = useRef(null);
 
   const [fotos, setFotos] = useState([]);
   const [cargandoFotos, setCargandoFotos] = useState(false);
@@ -389,13 +439,15 @@ export default function AreaProyectoScreen({ route }) {
     }
   };
 
-  // Adjuntar archivo al chat, estilo WhatsApp: elegir imagen o documento, subirlo a Firebase
-  // Storage y enviarlo como mensaje (con o sin texto acompañante).
+  // Adjuntar archivo al chat, estilo WhatsApp: tomar foto con la cámara, elegir de la galería
+  // o elegir un documento, subirlo a Firebase Storage y enviarlo como mensaje (con o sin texto
+  // acompañante).
   const elegirYAdjuntarArchivo = async () => {
     Alert.alert('Adjuntar', '¿Qué quieres enviar?', [
       { text: 'Cancelar', style: 'cancel' },
-      { text: 'Foto', onPress: adjuntarImagen },
-      { text: 'Documento', onPress: adjuntarDocumento },
+      { text: '📷 Cámara', onPress: () => adjuntarImagen(true) },
+      { text: '🖼️ Galería', onPress: () => adjuntarImagen(false) },
+      { text: '📎 Documento', onPress: adjuntarDocumento },
     ]);
   };
 
@@ -408,16 +460,17 @@ export default function AreaProyectoScreen({ route }) {
     return await getDownloadURL(storageRef);
   };
 
-  const adjuntarImagen = async () => {
-    const permiso = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  const adjuntarImagen = async (desdeCamara) => {
+    const permiso = desdeCamara
+      ? await ImagePicker.requestCameraPermissionsAsync()
+      : await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permiso.granted) {
-      Alert.alert('Permiso necesario', 'Necesitamos acceso a tus fotos para adjuntar una imagen.');
+      Alert.alert('Permiso necesario', desdeCamara ? 'Necesitamos acceso a la cámara.' : 'Necesitamos acceso a tus fotos para adjuntar una imagen.');
       return;
     }
-    const resultado = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.7,
-    });
+    const resultado = desdeCamara
+      ? await ImagePicker.launchCameraAsync({ quality: 0.7 })
+      : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.7 });
     if (resultado.canceled) return;
 
     setEnviando(true);
@@ -448,6 +501,69 @@ export default function AreaProyectoScreen({ route }) {
       Alert.alert('Error', 'No se pudo enviar el documento.');
     } finally {
       setEnviando(false);
+    }
+  };
+
+  // Nota de voz: se mantiene presionado el botón del micrófono para grabar (como WhatsApp).
+  // Al soltar, se detiene la grabación y se envía automáticamente; si se graba menos de medio
+  // segundo (toque accidental), se descarta sin enviar nada.
+  const iniciarGrabacionNota = async () => {
+    try {
+      const permiso = await AudioModule.requestRecordingPermissionsAsync();
+      if (!permiso.granted) {
+        Alert.alert('Permiso necesario', 'Necesitamos acceso al micrófono para grabar una nota de voz.');
+        return;
+      }
+      await audioRecorder.prepareToRecordAsync();
+      audioRecorder.record();
+      inicioGrabacionRef.current = Date.now();
+      setGrabandoNota(true);
+    } catch (error) {
+      console.error('Error iniciando grabación:', error);
+      Alert.alert('Error', 'No se pudo iniciar la grabación.');
+      setGrabandoNota(false);
+      inicioGrabacionRef.current = null;
+    }
+  };
+
+  const detenerYEnviarNota = async () => {
+    if (!grabandoNota) return;
+    setGrabandoNota(false);
+    try {
+      // Medimos la duración nosotros mismos con un timestamp (en vez de depender del estado
+      // del hook useAudioRecorderState, que puede no haberse actualizado todavía en el mismo
+      // tick en que se suelta el botón) para decidir de forma confiable si fue un toque
+      // accidental (menos de medio segundo) y descartarlo sin enviar nada.
+      const duracionMs = inicioGrabacionRef.current ? Date.now() - inicioGrabacionRef.current : 0;
+      inicioGrabacionRef.current = null;
+      await audioRecorder.stop();
+      const uri = audioRecorder.uri;
+
+      if (!uri || duracionMs < 500) {
+        // Grabación demasiado corta (toque accidental): se descarta sin enviar.
+        return;
+      }
+
+      setEnviando(true);
+      const nombreArchivo = `nota_voz_${Date.now()}.m4a`;
+      const url = await subirArchivoChatAFirebase(uri, nombreArchivo, 'audio/m4a');
+      await enviarMensaje({ nombre_archivo: nombreArchivo, url_archivo: url, tipo_archivo: 'audio' });
+    } catch (error) {
+      console.error('Error enviando nota de voz:', error);
+      Alert.alert('Error', 'No se pudo enviar la nota de voz.');
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  const cancelarGrabacionNota = async () => {
+    if (!grabandoNota) return;
+    setGrabandoNota(false);
+    inicioGrabacionRef.current = null;
+    try {
+      await audioRecorder.stop();
+    } catch (error) {
+      console.error('Error cancelando grabación:', error);
     }
   };
 
@@ -706,6 +822,8 @@ export default function AreaProyectoScreen({ route }) {
                         <TouchableOpacity key={archivo.id} onPress={() => setFotoAmpliada({ foto_url: archivo.url_archivo, usuario_nombre: item.usuario_nombre, created_at: item.created_at })}>
                           <Image source={{ uri: archivo.url_archivo }} style={styles.mensajeImagenAdjunta} />
                         </TouchableOpacity>
+                      ) : archivo.tipo_archivo === 'audio' ? (
+                        <BurbujaAudio key={archivo.id} uri={archivo.url_archivo} />
                       ) : (
                         <TouchableOpacity key={archivo.id} style={styles.mensajeDocumentoAdjunto} onPress={() => Linking.openURL(archivo.url_archivo)}>
                           <Text style={styles.mensajeDocumentoTexto}>📎 {archivo.nombre_archivo || 'Archivo adjunto'}</Text>
@@ -720,19 +838,44 @@ export default function AreaProyectoScreen({ route }) {
             )}
 
             <View style={[styles.chatInputContainer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
-              <TouchableOpacity style={styles.chatAdjuntar} onPress={elegirYAdjuntarArchivo} disabled={enviando}>
-                <Text style={styles.chatAdjuntarTexto}>📎</Text>
-              </TouchableOpacity>
-              <TextInput
-                style={styles.chatInput}
-                value={nuevoMensaje}
-                onChangeText={setNuevoMensaje}
-                placeholder="Escribe un mensaje..."
-                placeholderTextColor="#999"
-              />
-              <TouchableOpacity style={styles.chatEnviar} onPress={() => enviarMensaje()} disabled={enviando}>
-                <Text style={styles.chatEnviarTexto}>{enviando ? '...' : 'Enviar'}</Text>
-              </TouchableOpacity>
+              {grabandoNota ? (
+                <>
+                  <View style={styles.grabandoIndicador}>
+                    <Text style={styles.grabandoTexto}>🔴 Grabando nota de voz... suelta para enviar</Text>
+                  </View>
+                  <TouchableOpacity style={styles.chatAdjuntar} onPress={cancelarGrabacionNota}>
+                    <Text style={styles.chatAdjuntarTexto}>✖️</Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <>
+                  <TouchableOpacity style={styles.chatAdjuntar} onPress={elegirYAdjuntarArchivo} disabled={enviando}>
+                    <Text style={styles.chatAdjuntarTexto}>📎</Text>
+                  </TouchableOpacity>
+                  <TextInput
+                    style={styles.chatInput}
+                    value={nuevoMensaje}
+                    onChangeText={setNuevoMensaje}
+                    placeholder="Escribe un mensaje..."
+                    placeholderTextColor="#999"
+                  />
+                  {nuevoMensaje.trim() ? (
+                    <TouchableOpacity style={styles.chatEnviar} onPress={() => enviarMensaje()} disabled={enviando}>
+                      <Text style={styles.chatEnviarTexto}>{enviando ? '...' : 'Enviar'}</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity
+                      style={styles.chatMicrofono}
+                      onLongPress={iniciarGrabacionNota}
+                      onPressOut={detenerYEnviarNota}
+                      delayLongPress={200}
+                      disabled={enviando}
+                    >
+                      <Text style={styles.chatAdjuntarTexto}>🎤</Text>
+                    </TouchableOpacity>
+                  )}
+                </>
+              )}
             </View>
           </View>
         </KeyboardAvoidingView>
@@ -791,12 +934,20 @@ const styles = StyleSheet.create({
   mensajeImagenAdjunta: { width: 180, height: 180, borderRadius: 8, marginTop: 6, backgroundColor: '#eee' },
   mensajeDocumentoAdjunto: { backgroundColor: '#f0f6ff', borderRadius: 6, padding: 8, marginTop: 6 },
   mensajeDocumentoTexto: { fontSize: 13, color: '#1E90FF', fontWeight: '600' },
+  notaVozContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f0f6ff', borderRadius: 20, paddingVertical: 8, paddingHorizontal: 12, marginTop: 6, gap: 8, minWidth: 160 },
+  notaVozBoton: { fontSize: 18 },
+  notaVozBarra: { flex: 1, height: 4, backgroundColor: '#cddcf5', borderRadius: 2, overflow: 'hidden' },
+  notaVozBarraProgreso: { height: '100%', backgroundColor: '#1E90FF' },
+  notaVozTiempo: { fontSize: 11, color: '#1E90FF', fontWeight: '600', minWidth: 32, textAlign: 'right' },
   chatInputContainer: { flexDirection: 'row', gap: 8, padding: 12, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#eee', alignItems: 'center' },
   chatAdjuntar: { paddingHorizontal: 6, justifyContent: 'center', alignItems: 'center' },
   chatAdjuntarTexto: { fontSize: 22 },
   chatInput: { flex: 1, backgroundColor: '#f5f5f5', borderRadius: 8, padding: 10, borderWidth: 1, borderColor: '#ddd' },
   chatEnviar: { backgroundColor: '#1E90FF', borderRadius: 8, paddingHorizontal: 16, justifyContent: 'center' },
   chatEnviarTexto: { color: '#fff', fontWeight: 'bold' },
+  chatMicrofono: { paddingHorizontal: 10, justifyContent: 'center', alignItems: 'center' },
+  grabandoIndicador: { flex: 1, backgroundColor: '#fff0f0', borderRadius: 8, padding: 10, borderWidth: 1, borderColor: '#ffcccc' },
+  grabandoTexto: { color: '#DC143C', fontSize: 13, fontWeight: '600' },
   tabsContainer: { flexDirection: 'row', backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#eee' },
   tabBoton: { flex: 1, paddingVertical: 14, alignItems: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent' },
   tabBotonActivo: { borderBottomColor: '#1E90FF' },

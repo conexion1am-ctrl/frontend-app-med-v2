@@ -10,7 +10,10 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.cydmanager.app"
+      "bundleIdentifier": "com.cydmanager.app",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "Permite grabar notas de voz para enviarlas en el chat."
+      }
     },
     "android": {
       "package": "com.cydmanager.app",
@@ -29,7 +32,8 @@
         "android.permission.READ_MEDIA_IMAGES",
         "android.permission.READ_MEDIA_VIDEO",
         "android.permission.READ_MEDIA_AUDIO",
-        "android.permission.READ_CONTACTS"
+        "android.permission.READ_CONTACTS",
+        "android.permission.RECORD_AUDIO"
       ]
     },
     "web": {
@@ -57,6 +61,12 @@
         "expo-contacts",
         {
           "contactsPermission": "Permite elegir un contacto de tu directorio para agregarlo al equipo de trabajo."
+        }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Permite grabar notas de voz para enviarlas en el chat."
         }
       ]
     ],
