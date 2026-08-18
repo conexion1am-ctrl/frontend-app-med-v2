@@ -468,9 +468,22 @@ export default function AreaProyectoScreen({ route }) {
       Alert.alert('Permiso necesario', desdeCamara ? 'Necesitamos acceso a la cámara.' : 'Necesitamos acceso a tus fotos para adjuntar una imagen.');
       return;
     }
-    const resultado = desdeCamara
-      ? await ImagePicker.launchCameraAsync({ quality: 0.7 })
-      : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.7 });
+
+    // Envolvemos también la apertura de la cámara/galería en su propio try/catch: si
+    // launchCameraAsync lanza una excepción (por ejemplo, poco almacenamiento o un problema
+    // nativo al escribir la foto temporal), antes esa excepción no se capturaba en ningún lado
+    // y podía tumbar toda la pantalla, lo cual en Android puede forzar un reinicio de la app
+    // (y de ahí el salto inesperado a la pantalla de Seleccionar Empresa).
+    let resultado;
+    try {
+      resultado = desdeCamara
+        ? await ImagePicker.launchCameraAsync({ quality: 0.7 })
+        : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.7 });
+    } catch (error) {
+      console.error('Error abriendo cámara/galería:', error.message, error.stack);
+      Alert.alert('Error', 'No se pudo abrir la cámara. Intenta de nuevo.');
+      return;
+    }
     if (resultado.canceled) return;
 
     setEnviando(true);
@@ -480,7 +493,7 @@ export default function AreaProyectoScreen({ route }) {
       const url = await subirArchivoChatAFirebase(asset.uri, nombreArchivo, 'image/jpeg');
       await enviarMensaje({ nombre_archivo: nombreArchivo, url_archivo: url, tipo_archivo: 'imagen' });
     } catch (error) {
-      console.error('Error adjuntando imagen:', error);
+      console.error('Error adjuntando imagen:', error.message, error.stack);
       Alert.alert('Error', 'No se pudo enviar la imagen.');
     } finally {
       setEnviando(false);
@@ -753,22 +766,31 @@ export default function AreaProyectoScreen({ route }) {
       </Modal>
 
       <Modal visible={!!plano3dAbierto} animationType="slide">
-        <View style={styles.plano3dModalContainer}>
-          <View style={styles.plano3dHeader}>
-            <TouchableOpacity onPress={() => setPlano3dAbierto(null)}>
-              <Text style={styles.chatVolver}>‹ Volver</Text>
-            </TouchableOpacity>
-            <Text style={styles.chatTitulo} numberOfLines={1}>{plano3dAbierto?.nombre}</Text>
-            {permisos.gestionarPlanos3d ? (
-              <TouchableOpacity onPress={() => confirmarEliminarPlano3d(plano3dAbierto)}>
-                <Text style={styles.plano3dEliminarTexto}>Eliminar</Text>
+        {/* GestureHandlerRootView es indispensable aquí: un <Modal> de React Native se monta en
+            su propio árbol nativo separado, así que el GestureHandlerRootView que envuelve toda
+            la app (en app/index.tsx) NO alcanza a cubrir lo que hay dentro del Modal. Sin este
+            wrapper propio, react-native-gesture-handler no recibe ningún toque y el visor 3D
+            queda "congelado" (no responde a rotar/mover/zoom), aunque el resto de la lógica de
+            gestos esté bien. Mismo motivo por el que el Modal de fotoAmpliada, más arriba, ya
+            lo tenía. */}
+        <GestureHandlerRootView style={{ flex: 1 }}>
+          <View style={styles.plano3dModalContainer}>
+            <View style={styles.plano3dHeader}>
+              <TouchableOpacity onPress={() => setPlano3dAbierto(null)}>
+                <Text style={styles.chatVolver}>‹ Volver</Text>
               </TouchableOpacity>
-            ) : (
-              <View style={{ width: 60 }} />
-            )}
+              <Text style={styles.chatTitulo} numberOfLines={1}>{plano3dAbierto?.nombre}</Text>
+              {permisos.gestionarPlanos3d ? (
+                <TouchableOpacity onPress={() => confirmarEliminarPlano3d(plano3dAbierto)}>
+                  <Text style={styles.plano3dEliminarTexto}>Eliminar</Text>
+                </TouchableOpacity>
+              ) : (
+                <View style={{ width: 60 }} />
+              )}
+            </View>
+            {plano3dAbierto && <Visor3D uri={plano3dAbierto.url_glb} />}
           </View>
-          {plano3dAbierto && <Visor3D uri={plano3dAbierto.url_glb} />}
-        </View>
+        </GestureHandlerRootView>
       </Modal>
 
       <Modal visible={modalAsignarVisible} animationType="slide">
@@ -795,7 +817,17 @@ export default function AreaProyectoScreen({ route }) {
         </View>
       </Modal>
 
-      <Modal visible={!!chatAbierto} animationType="slide">
+      {/* statusBarTranslucent + hardwareAccelerated ayudan a que este Modal sobreviva bien cuando
+          se abre una app externa desde adentro (como la cámara nativa) y el usuario vuelve —
+          en Android, un Modal de React Native sin estas props puede perder su estado o dar la
+          impresión de que la app entera se reinició al volver de la cámara. */}
+      <Modal
+        visible={!!chatAbierto}
+        animationType="slide"
+        statusBarTranslucent
+        hardwareAccelerated
+        onRequestClose={cerrarChat}
+      >
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={80}>
           <View style={styles.chatModalContainer}>
             <View style={styles.chatHeader}>

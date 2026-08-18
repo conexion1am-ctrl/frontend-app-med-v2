@@ -2,6 +2,7 @@ import axios from 'axios';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import EncabezadoLogo from '../components/EncabezadoLogo';
+import InputMoneda from '../components/InputMoneda';
 
 const formatearMoneda = (valor) => {
   const numero = parseFloat(valor) || 0;
@@ -31,6 +32,18 @@ const convertirADdMmAaAIso = (texto) => {
   return `${anio}-${mes}-${dia}`;
 };
 
+// Fecha de hoy en formato DD-MM-AA, para precargar los campos de fecha (el usuario la puede
+// editar después si necesita registrar un movimiento con otra fecha).
+const fechaHoyDdMmAa = () => {
+  const d = new Date();
+  const dia = String(d.getDate()).padStart(2, '0');
+  const mes = String(d.getMonth() + 1).padStart(2, '0');
+  const anio = String(d.getFullYear()).slice(-2);
+  return `${dia}-${mes}-${anio}`;
+};
+
+const ETIQUETAS_TIPO_COSTO = { materiales: 'Materiales', mano_obra: 'Mano de obra', imprevistos: 'Imprevistos' };
+
 export default function EstadisticasScreen({ route }) {
   const { empresa } = route.params;
   const [proyectos, setProyectos] = useState([]);
@@ -40,11 +53,12 @@ export default function EstadisticasScreen({ route }) {
   const [cargandoStats, setCargandoStats] = useState(false);
   const [sinDatos, setSinDatos] = useState(false);
 
-  const [modalCostosVisible, setModalCostosVisible] = useState(false);
-  const [costosMateriales, setCostosMateriales] = useState('');
-  const [valorManoObra, setValorManoObra] = useState('');
-  const [valorImprevistos, setValorImprevistos] = useState('');
-  const [guardandoCostos, setGuardandoCostos] = useState(false);
+  const [modalCostoVisible, setModalCostoVisible] = useState(false);
+  const [costoTipo, setCostoTipo] = useState('materiales');
+  const [costoDetalle, setCostoDetalle] = useState('');
+  const [costoValor, setCostoValor] = useState('');
+  const [costoFecha, setCostoFecha] = useState('');
+  const [guardandoCosto, setGuardandoCosto] = useState(false);
 
   const [modalAbonoVisible, setModalAbonoVisible] = useState(false);
   const [abonoValor, setAbonoValor] = useState('');
@@ -75,9 +89,6 @@ export default function EstadisticasScreen({ route }) {
     try {
       const res = await axios.get(`https://backend-app-mediterraneo.onrender.com/api/estadisticas/${proyecto.id}`);
       setEstadisticas(res.data);
-      setCostosMateriales(String(res.data.costos_materiales || ''));
-      setValorManoObra(String(res.data.valor_mano_obra || ''));
-      setValorImprevistos(String(res.data.valor_imprevistos || ''));
     } catch (error) {
       if (error.response?.status === 404) {
         setSinDatos(true);
@@ -91,22 +102,49 @@ export default function EstadisticasScreen({ route }) {
     }
   };
 
-  const guardarCostos = async () => {
-    setGuardandoCostos(true);
+  // Abre el modal para agregar un nuevo movimiento de costo (compra de materiales, pago de
+  // mano de obra, o imprevisto), precargado con la categoría elegida y la fecha de hoy.
+  const abrirModalCosto = (tipo) => {
+    setCostoTipo(tipo);
+    setCostoDetalle('');
+    setCostoValor('');
+    setCostoFecha(fechaHoyDdMmAa());
+    setModalCostoVisible(true);
+  };
+
+  const registrarCosto = async () => {
+    if (!costoValor) {
+      Alert.alert('Campo obligatorio', 'El valor es obligatorio.');
+      return;
+    }
+    const fechaIso = convertirADdMmAaAIso(costoFecha);
+    if (!fechaIso) {
+      Alert.alert('Fecha inválida', 'Escribe la fecha en formato DD-MM-AA, por ejemplo: 15-08-26');
+      return;
+    }
+    setGuardandoCosto(true);
     try {
-      await axios.put(`https://backend-app-mediterraneo.onrender.com/api/estadisticas/${proyectoSeleccionado.id}`, {
-        costos_materiales: costosMateriales ? parseFloat(costosMateriales) : 0,
-        valor_mano_obra: valorManoObra ? parseFloat(valorManoObra) : 0,
-        valor_imprevistos: valorImprevistos ? parseFloat(valorImprevistos) : 0,
+      await axios.post(`https://backend-app-mediterraneo.onrender.com/api/estadisticas/${proyectoSeleccionado.id}/movimiento`, {
+        tipo: costoTipo,
+        detalle: costoDetalle || null,
+        valor: parseFloat(costoValor),
+        fecha: fechaIso,
       });
-      setModalCostosVisible(false);
+      setModalCostoVisible(false);
       seleccionarProyecto(proyectoSeleccionado);
     } catch (error) {
-      console.error('Error actualizando costos:', error);
-      Alert.alert('Error', 'No se pudieron guardar los costos.');
+      console.error('Error registrando movimiento de costo:', error);
+      const mensaje = error.response?.data?.error || 'No se pudo registrar el costo.';
+      Alert.alert('Error', mensaje);
     } finally {
-      setGuardandoCostos(false);
+      setGuardandoCosto(false);
     }
+  };
+
+  const abrirModalAbono = () => {
+    setAbonoValor('');
+    setAbonoFecha(fechaHoyDdMmAa());
+    setModalAbonoVisible(true);
   };
 
   const registrarAbono = async () => {
@@ -183,7 +221,8 @@ export default function EstadisticasScreen({ route }) {
         ) : sinDatos ? (
           <Text style={styles.vacioTexto}>
             Este proyecto todavía no tiene un contrato asociado, por eso no hay estadísticas. Las estadísticas se
-            generan automáticamente cuando se acepta una cotización de este proyecto.
+            generan cuando el proyecto tiene un contrato (creado al aceptar una cotización, o con el botón "Crear
+            Proyecto" desde la pantalla de Contratos).
           </Text>
         ) : (
           estadisticas && (
@@ -229,9 +268,34 @@ export default function EstadisticasScreen({ route }) {
                   <Text style={styles.resumenValor}>{formatearMoneda(estadisticas.valor_imprevistos)}</Text>
                 </View>
               </View>
-              <TouchableOpacity style={styles.botonSecundario} onPress={() => setModalCostosVisible(true)}>
-                <Text style={styles.botonSecundarioTexto}>Actualizar costos</Text>
-              </TouchableOpacity>
+
+              <View style={styles.filaBotones}>
+                <TouchableOpacity style={styles.botonChicoAgregar} onPress={() => abrirModalCosto('materiales')}>
+                  <Text style={styles.botonChicoAgregarTexto}>+ Materiales</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.botonChicoAgregar} onPress={() => abrirModalCosto('mano_obra')}>
+                  <Text style={styles.botonChicoAgregarTexto}>+ Mano de obra</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.botonChicoAgregar} onPress={() => abrirModalCosto('imprevistos')}>
+                  <Text style={styles.botonChicoAgregarTexto}>+ Imprevistos</Text>
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.seccionTitulo}>Historial de costos</Text>
+              {estadisticas.movimientos_costos.length === 0 ? (
+                <Text style={styles.vacioTexto}>Aún no hay costos registrados.</Text>
+              ) : (
+                estadisticas.movimientos_costos.map((mov) => (
+                  <View key={mov.id} style={styles.abonoCard}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.movimientoTipo}>{ETIQUETAS_TIPO_COSTO[mov.tipo] || mov.tipo}</Text>
+                      {mov.detalle ? <Text style={styles.movimientoDetalle}>{mov.detalle}</Text> : null}
+                      <Text style={styles.abonoFecha}>{formatearFecha(mov.fecha)}</Text>
+                    </View>
+                    <Text style={styles.abonoValor}>{formatearMoneda(mov.valor)}</Text>
+                  </View>
+                ))
+              )}
 
               <Text style={styles.seccionTitulo}>Abonos recibidos</Text>
               {estadisticas.abonos.length === 0 ? (
@@ -244,7 +308,7 @@ export default function EstadisticasScreen({ route }) {
                   </View>
                 ))
               )}
-              <TouchableOpacity style={styles.botonSecundario} onPress={() => setModalAbonoVisible(true)}>
+              <TouchableOpacity style={styles.botonSecundario} onPress={abrirModalAbono}>
                 <Text style={styles.botonSecundarioTexto}>+ Registrar abono</Text>
               </TouchableOpacity>
             </>
@@ -252,46 +316,38 @@ export default function EstadisticasScreen({ route }) {
         )}
       </ScrollView>
 
-      {/* MODAL: Actualizar costos */}
-      <Modal visible={modalCostosVisible} animationType="slide">
+      {/* MODAL: Agregar costo (compra de materiales, pago de mano de obra, o imprevisto) */}
+      <Modal visible={modalCostoVisible} animationType="slide">
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <ScrollView style={styles.modalContainer} contentContainerStyle={{ padding: 20, paddingBottom: 60 }}>
-            <Text style={styles.modalTitulo}>Actualizar Costos</Text>
+            <Text style={styles.modalTitulo}>Agregar Costo · {ETIQUETAS_TIPO_COSTO[costoTipo]}</Text>
 
-            <Text style={styles.label}>Materiales</Text>
+            <Text style={styles.label}>Detalle</Text>
             <TextInput
               style={styles.input}
-              value={costosMateriales}
-              onChangeText={(t) => setCostosMateriales(t.replace(/[^0-9.]/g, ''))}
-              keyboardType="numeric"
-              placeholder="0"
+              value={costoDetalle}
+              onChangeText={setCostoDetalle}
+              placeholder="Ej: Adelanto de madera para Julián"
               placeholderTextColor="#999"
             />
 
-            <Text style={styles.label}>Mano de obra</Text>
+            <Text style={styles.label}>Valor *</Text>
+            <InputMoneda style={styles.input} value={costoValor} onChangeValor={setCostoValor} />
+
+            <Text style={styles.label}>Fecha * (DD-MM-AA)</Text>
             <TextInput
               style={styles.input}
-              value={valorManoObra}
-              onChangeText={(t) => setValorManoObra(t.replace(/[^0-9.]/g, ''))}
-              keyboardType="numeric"
-              placeholder="0"
+              value={costoFecha}
+              onChangeText={setCostoFecha}
+              placeholder="Ej: 15-08-26"
               placeholderTextColor="#999"
+              keyboardType="numbers-and-punctuation"
             />
 
-            <Text style={styles.label}>Imprevistos</Text>
-            <TextInput
-              style={styles.input}
-              value={valorImprevistos}
-              onChangeText={(t) => setValorImprevistos(t.replace(/[^0-9.]/g, ''))}
-              keyboardType="numeric"
-              placeholder="0"
-              placeholderTextColor="#999"
-            />
-
-            <TouchableOpacity style={styles.botonGuardar} onPress={guardarCostos} disabled={guardandoCostos}>
-              {guardandoCostos ? <ActivityIndicator color="#fff" /> : <Text style={styles.botonGuardarTexto}>GUARDAR</Text>}
+            <TouchableOpacity style={styles.botonGuardar} onPress={registrarCosto} disabled={guardandoCosto}>
+              {guardandoCosto ? <ActivityIndicator color="#fff" /> : <Text style={styles.botonGuardarTexto}>GUARDAR</Text>}
             </TouchableOpacity>
-            <TouchableOpacity style={styles.botonCancelar} onPress={() => setModalCostosVisible(false)}>
+            <TouchableOpacity style={styles.botonCancelar} onPress={() => setModalCostoVisible(false)}>
               <Text style={styles.botonCancelarTexto}>Cancelar</Text>
             </TouchableOpacity>
           </ScrollView>
@@ -305,14 +361,7 @@ export default function EstadisticasScreen({ route }) {
             <Text style={styles.modalTitulo}>Registrar Abono</Text>
 
             <Text style={styles.label}>Valor *</Text>
-            <TextInput
-              style={styles.input}
-              value={abonoValor}
-              onChangeText={(t) => setAbonoValor(t.replace(/[^0-9.]/g, ''))}
-              keyboardType="numeric"
-              placeholder="Ej: 500000"
-              placeholderTextColor="#999"
-            />
+            <InputMoneda style={styles.input} value={abonoValor} onChangeValor={setAbonoValor} />
 
             <Text style={styles.label}>Fecha * (DD-MM-AA)</Text>
             <TextInput
@@ -367,6 +416,16 @@ const styles = StyleSheet.create({
   resumenValorDestacado: { fontSize: 16, fontWeight: 'bold' },
   botonSecundario: { alignItems: 'center', padding: 12, marginTop: 8 },
   botonSecundarioTexto: { color: '#1E90FF', fontSize: 14, fontWeight: '600' },
+  filaBotones: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
+  botonChicoAgregar: {
+    backgroundColor: '#eaf3ff',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: '#1E90FF',
+  },
+  botonChicoAgregarTexto: { color: '#1E90FF', fontSize: 13, fontWeight: '600' },
   abonoCard: {
     backgroundColor: '#fff',
     borderRadius: 8,
@@ -376,9 +435,12 @@ const styles = StyleSheet.create({
     borderColor: '#eee',
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
   },
   abonoValor: { fontSize: 15, fontWeight: '600', color: '#2e7d32' },
   abonoFecha: { fontSize: 13, color: '#999' },
+  movimientoTipo: { fontSize: 14, fontWeight: '600', color: '#222' },
+  movimientoDetalle: { fontSize: 13, color: '#666', marginTop: 2 },
   modalContainer: { flex: 1, backgroundColor: '#fff' },
   modalTitulo: { fontSize: 20, fontWeight: 'bold', marginBottom: 20 },
   label: { fontSize: 13, fontWeight: '600', color: '#333', marginBottom: 6, marginTop: 14 },

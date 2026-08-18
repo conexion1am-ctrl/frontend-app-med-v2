@@ -130,6 +130,10 @@ export default function EditarPerfilScreen({ route, navigation }) {
           const sesion = JSON.parse(sesionGuardada);
           sesion.usuario = respuestaUsuario.data.usuario;
           if (Array.isArray(sesion.empresas)) {
+            // Antes esta actualización no incluía nit/cedula_representante/datos bancarios: se
+            // guardaban bien en el servidor, pero la sesión guardada en el celular (la que se usa
+            // para entrar sin pedir contraseña de nuevo) se quedaba con los valores viejos —
+            // por eso "desaparecían" al cerrar sesión y volver a entrar.
             sesion.empresas = sesion.empresas.map((e) =>
               e.empresa_id === empresaFinal.id
                 ? {
@@ -138,6 +142,12 @@ export default function EditarPerfilScreen({ route, navigation }) {
                     logo_url: empresaFinal.logo_url,
                     color_hex: empresaFinal.color_hex,
                     sitio_web: empresaFinal.sitio_web,
+                    nit: empresaFinal.nit,
+                    cedula_representante: empresaFinal.cedula_representante,
+                    banco_nombre: empresaFinal.banco_nombre,
+                    banco_tipo_cuenta: empresaFinal.banco_tipo_cuenta,
+                    banco_numero: empresaFinal.banco_numero,
+                    banco_titular: empresaFinal.banco_titular,
                   }
                 : e
             );

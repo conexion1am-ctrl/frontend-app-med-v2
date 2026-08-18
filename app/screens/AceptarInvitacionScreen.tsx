@@ -1,7 +1,9 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import InputContraseña from '../components/InputContraseña';
+import { registrarNotificacionesPush } from '../utils/notificacionesPush';
 
 // Pantalla que se abre cuando alguien toca el link de invitación que le mandaron por WhatsApp.
 export default function AceptarInvitacionScreen({ route, navigation }) {
@@ -45,15 +47,46 @@ export default function AceptarInvitacionScreen({ route, navigation }) {
 
     setAceptando(true);
     try {
-      await axios.post(`https://backend-app-mediterraneo.onrender.com/api/invitaciones/aceptar/${token}`, {
+      const response = await axios.post(`https://backend-app-mediterraneo.onrender.com/api/invitaciones/aceptar/${token}`, {
         contraseña,
       });
 
-      Alert.alert(
-        '¡Bienvenido a ' + invitacion.empresa_nombre + '!',
-        'Tu cuenta quedó vinculada exitosamente. Ahora puedes ingresar con tu número de celular y tu contraseña.',
-        [{ text: 'Ingresar ahora', onPress: () => navigation.replace('Ingresar') }]
-      );
+      const { usuario, empresas } = response.data;
+
+      // Guardamos la sesión de una vez y entramos directo a la app, sin pasar por la pantalla
+      // de Ingresar: la persona ya escribió su contraseña acá mismo, no tiene sentido pedirle
+      // que la vuelva a escribir. Si quedó en varias áreas/empresas, que elija con cuál entrar;
+      // si es solo una, directo a Inicio con sus proyectos asignados.
+      const sesion = { usuario, empresas };
+      await AsyncStorage.setItem('sesion', JSON.stringify(sesion));
+      registrarNotificacionesPush(usuario.id);
+
+      if (empresas && empresas.length > 1) {
+        navigation.replace('SeleccionarEmpresa', { empresas, usuario });
+      } else {
+        const primeraEmpresa = empresas?.[0];
+        navigation.replace('Inicio', {
+          empresa: primeraEmpresa
+            ? {
+                id: primeraEmpresa.empresa_id,
+                nombre: primeraEmpresa.empresa_nombre,
+                logo_url: primeraEmpresa.logo_url,
+                color_hex: primeraEmpresa.color_hex,
+                sitio_web: primeraEmpresa.sitio_web,
+                area_id: primeraEmpresa.area_id,
+                area_nombre: primeraEmpresa.area_nombre,
+                area_tipo: primeraEmpresa.area_tipo,
+                nit: primeraEmpresa.nit,
+                cedula_representante: primeraEmpresa.cedula_representante,
+                banco_nombre: primeraEmpresa.banco_nombre,
+                banco_tipo_cuenta: primeraEmpresa.banco_tipo_cuenta,
+                banco_numero: primeraEmpresa.banco_numero,
+                banco_titular: primeraEmpresa.banco_titular,
+              }
+            : { id: invitacion.empresa_id, nombre: invitacion.empresa_nombre, color_hex: invitacion.color_hex },
+          usuario,
+        });
+      }
     } catch (error) {
       console.error('Error aceptando invitación:', error);
       const mensaje = error.response?.data?.error || 'No se pudo aceptar la invitación. Intenta de nuevo.';

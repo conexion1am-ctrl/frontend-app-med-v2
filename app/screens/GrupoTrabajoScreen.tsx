@@ -11,6 +11,9 @@ import EncabezadoLogo from '../components/EncabezadoLogo';
 import InputCelular, { detectarPaisPorDispositivo, PAISES } from '../components/InputCelular';
 import { esGerencia, permisosDe } from '../utils/roles';
 
+// Quita mayúsculas y acentos para poder comparar/filtrar texto sin importar cómo se escribió
+const textoNormalizado = (t) => (t || '').toString().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+
 // Convierte "2026-08-15" a "15-08-26" (formato de fecha estándar de la app)
 const formatearFechaDdMmAa = (fecha) => {
   if (!fecha) return '';
@@ -44,6 +47,7 @@ export default function GrupoTrabajoScreen({ route }) {
   const [areas, setAreas] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
+  const [busqueda, setBusqueda] = useState('');
 
   const [nombre, setNombre] = useState('');
   const [celular, setCelular] = useState('');
@@ -61,6 +65,7 @@ export default function GrupoTrabajoScreen({ route }) {
 
   const [modalContactosVisible, setModalContactosVisible] = useState(false);
   const [contactosDisponibles, setContactosDisponibles] = useState([]);
+  const [busquedaContacto, setBusquedaContacto] = useState('');
 
   const [archivoArlUri, setArchivoArlUri] = useState(null);
   const [archivoArlNombre, setArchivoArlNombre] = useState(null);
@@ -164,6 +169,7 @@ export default function GrupoTrabajoScreen({ route }) {
     }
 
     setContactosDisponibles(conTelefono);
+    setBusquedaContacto('');
     setModalContactosVisible(true);
   };
 
@@ -173,7 +179,13 @@ export default function GrupoTrabajoScreen({ route }) {
     setPaisCelular(pais);
     setCelular(numeroLimpio);
     setModalContactosVisible(false);
+    setBusquedaContacto('');
   };
+
+  const busquedaContactoNormalizada = textoNormalizado(busquedaContacto);
+  const contactosFiltrados = busquedaContactoNormalizada
+    ? contactosDisponibles.filter((c) => textoNormalizado(c.name).includes(busquedaContactoNormalizada))
+    : contactosDisponibles;
 
   const enviarInvitaciones = async () => {
     setGuardando(true);
@@ -521,7 +533,12 @@ export default function GrupoTrabajoScreen({ route }) {
     }
   };
 
-  const personalPorArea = personal.reduce((grupos, persona) => {
+  const busquedaNormalizada = textoNormalizado(busqueda);
+  const personalFiltrado = busquedaNormalizada
+    ? personal.filter((p) => textoNormalizado(p.nombre).includes(busquedaNormalizada))
+    : personal;
+
+  const personalPorArea = personalFiltrado.reduce((grupos, persona) => {
     const area = persona.area_nombre;
     if (!grupos[area]) grupos[area] = [];
     grupos[area].push(persona);
@@ -539,9 +556,20 @@ export default function GrupoTrabajoScreen({ route }) {
   return (
     <View style={[styles.container, { backgroundColor: empresa.color_hex || '#1E90FF' }]}>
       <EncabezadoLogo empresa={empresa} />
+      <View style={styles.buscadorContainer}>
+        <TextInput
+          style={styles.buscadorInput}
+          value={busqueda}
+          onChangeText={setBusqueda}
+          placeholder="🔍 Buscar por nombre..."
+          placeholderTextColor="#999"
+        />
+      </View>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {Object.keys(personalPorArea).length === 0 ? (
-          <Text style={styles.vacioTexto}>Aún no hay personal agregado. Toca "Agregar Personal" para empezar.</Text>
+          <Text style={styles.vacioTexto}>
+            {personal.length === 0 ? 'Aún no hay personal agregado. Toca "Agregar Personal" para empezar.' : 'No se encontró personal con ese nombre.'}
+          </Text>
         ) : (
           Object.keys(personalPorArea).map((area) => (
             <View key={area} style={styles.grupoArea}>
@@ -863,21 +891,32 @@ export default function GrupoTrabajoScreen({ route }) {
       <Modal visible={modalContactosVisible} animationType="slide">
         <View style={styles.modalContainer}>
           <Text style={styles.modalTitulo}>Elige un contacto</Text>
+          <TextInput
+            style={styles.buscadorContactoInput}
+            value={busquedaContacto}
+            onChangeText={setBusquedaContacto}
+            placeholder="Buscar contacto..."
+            placeholderTextColor="#999"
+          />
           <ScrollView>
-            {contactosDisponibles.map((contacto) => (
-              <View key={contacto.id} style={styles.contactoGrupo}>
-                <Text style={styles.contactoNombre}>{contacto.name}</Text>
-                {contacto.phoneNumbers.map((tel, index) => (
-                  <TouchableOpacity
-                    key={index}
-                    style={styles.contactoNumeroOpcion}
-                    onPress={() => elegirContacto(contacto, tel.number)}
-                  >
-                    <Text style={styles.contactoNumeroTexto}>{tel.number}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            ))}
+            {contactosFiltrados.length === 0 ? (
+              <Text style={styles.notaTexto}>No se encontraron contactos con ese nombre.</Text>
+            ) : (
+              contactosFiltrados.map((contacto) => (
+                <View key={contacto.id} style={styles.contactoGrupo}>
+                  <Text style={styles.contactoNombre}>{contacto.name}</Text>
+                  {contacto.phoneNumbers.map((tel, index) => (
+                    <TouchableOpacity
+                      key={index}
+                      style={styles.contactoNumeroOpcion}
+                      onPress={() => elegirContacto(contacto, tel.number)}
+                    >
+                      <Text style={styles.contactoNumeroTexto}>{tel.number}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              ))
+            )}
           </ScrollView>
           <TouchableOpacity style={styles.botonCancelar} onPress={() => setModalContactosVisible(false)}>
             <Text style={styles.botonCancelarTexto}>Cerrar</Text>
@@ -892,6 +931,27 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f5f5' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   scrollContent: { padding: 16, paddingBottom: 100 },
+  buscadorContainer: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 },
+  buscadorInput: {
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    fontSize: 14,
+    borderWidth: 1,
+    borderColor: '#ddd',
+  },
+  buscadorContactoInput: {
+    backgroundColor: '#f5f5f5',
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    fontSize: 14,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    color: '#222',
+    marginBottom: 12,
+  },
   vacioTexto: { textAlign: 'center', color: '#888', marginTop: 40, fontSize: 15 },
   grupoArea: { marginBottom: 20 },
   areaTitulo: { fontSize: 14, fontWeight: 'bold', color: '#555', marginBottom: 8, textTransform: 'uppercase' },
@@ -935,6 +995,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     borderWidth: 1,
     borderColor: '#ddd',
+    color: '#222',
   },
   inputDeshabilitado: { backgroundColor: '#eee', color: '#999' },
   notaTexto: { fontSize: 12, color: '#999', marginTop: 4 },

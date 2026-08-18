@@ -13,6 +13,7 @@ export default function ClientesScreen({ route }) {
   const [clientes, setClientes] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
+  const [busqueda, setBusqueda] = useState('');
 
   const [nombreProyecto, setNombreProyecto] = useState('');
   const [nombre, setNombre] = useState('');
@@ -182,6 +183,17 @@ export default function ClientesScreen({ route }) {
     ]);
   };
 
+  // Filtra por nombre del cliente, nombre del proyecto o cédula, sin distinguir mayúsculas/acentos.
+  const textoNormalizado = (t) => (t || '').toString().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const busquedaNormalizada = textoNormalizado(busqueda);
+  const clientesFiltrados = busquedaNormalizada
+    ? clientes.filter((c) =>
+        textoNormalizado(c.nombre).includes(busquedaNormalizada) ||
+        textoNormalizado(c.nombre_proyecto).includes(busquedaNormalizada) ||
+        textoNormalizado(c.cedula).includes(busquedaNormalizada)
+      )
+    : clientes;
+
   if (cargando) {
     return (
       <View style={styles.center}>
@@ -193,11 +205,22 @@ export default function ClientesScreen({ route }) {
   return (
     <View style={[styles.container, { backgroundColor: empresa.color_hex || '#1E90FF' }]}>
       <EncabezadoLogo empresa={empresa} />
+      <View style={styles.buscadorContainer}>
+        <TextInput
+          style={styles.buscadorInput}
+          value={busqueda}
+          onChangeText={setBusqueda}
+          placeholder="🔍 Buscar cliente o proyecto..."
+          placeholderTextColor="#999"
+        />
+      </View>
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {clientes.length === 0 ? (
-          <Text style={styles.vacioTexto}>Aún no hay clientes. Toca "Nuevo Cliente" para empezar.</Text>
+        {clientesFiltrados.length === 0 ? (
+          <Text style={styles.vacioTexto}>
+            {clientes.length === 0 ? 'Aún no hay clientes. Toca "Nuevo Cliente" para empezar.' : 'No se encontraron clientes con ese texto.'}
+          </Text>
         ) : (
-          clientes.map((cliente) => (
+          clientesFiltrados.map((cliente) => (
             <View key={cliente.id} style={styles.clienteCard}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.clienteProyectoNombre}>
@@ -345,6 +368,16 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f5f5' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   scrollContent: { padding: 16, paddingBottom: 100 },
+  buscadorContainer: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 },
+  buscadorInput: {
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    fontSize: 14,
+    borderWidth: 1,
+    borderColor: '#ddd',
+  },
   vacioTexto: { textAlign: 'center', color: '#888', marginTop: 40, fontSize: 15 },
   clienteCard: {
     backgroundColor: '#fff',

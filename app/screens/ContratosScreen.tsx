@@ -1,6 +1,6 @@
 import axios from 'axios';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Linking, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Linking, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import EncabezadoLogo from '../components/EncabezadoLogo';
 import { esGerencia } from '../utils/roles';
 
@@ -24,7 +24,9 @@ export default function ContratosScreen({ route, navigation }) {
   const [contratos, setContratos] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [menuContrato, setMenuContrato] = useState(null);
+  const [busqueda, setBusqueda] = useState('');
   const [generandoPdf, setGenerandoPdf] = useState(false);
+  const [creandoProyecto, setCreandoProyecto] = useState(false);
 
   useEffect(() => {
     cargarContratos();
@@ -72,6 +74,25 @@ export default function ContratosScreen({ route, navigation }) {
     }
   };
 
+  // Crea el proyecto de este contrato (si todavía no lo tiene, ya sea porque nunca se creó o
+  // porque se eliminó desde la pantalla de Proyectos). Usa el snapshot guardado en el contrato.
+  const crearProyecto = async () => {
+    const contrato = menuContrato;
+    cerrarMenu();
+    setCreandoProyecto(true);
+    try {
+      await axios.post(`https://backend-app-mediterraneo.onrender.com/api/cotizaciones/contratos/${contrato.id}/crear-proyecto`);
+      Alert.alert('¡Listo!', 'Proyecto creado exitosamente.');
+      cargarContratos();
+    } catch (error) {
+      console.error('Error creando proyecto:', error);
+      const mensaje = error.response?.data?.error || 'No se pudo crear el proyecto. Intenta de nuevo.';
+      Alert.alert('Error', mensaje);
+    } finally {
+      setCreandoProyecto(false);
+    }
+  };
+
   // El PDF del contrato se genera automáticamente en el servidor al aceptar la cotización
   // (tomando todos sus datos). Aquí solo lo abrimos; si por algún motivo todavía no existe
   // (falló la primera vez, o es un contrato antiguo), lo regeneramos en el servidor sin pedir
@@ -105,15 +126,15 @@ export default function ContratosScreen({ route, navigation }) {
     }
   };
 
-  // Eliminar contrato: solo Gerencia. Borra también el proyecto asociado con todo lo que
-  // tenga (fotos, planos 3D, chat, equipo asignado, estadísticas) y la cotización que lo
-  // originó, igual que al eliminar un cliente.
+  // Eliminar contrato: solo Gerencia. Borra el contrato y la cotización que lo originó, pero
+  // el proyecto NO se borra (queda blindado con su propia copia de datos) y sigue viéndose
+  // normal en la pantalla de Proyectos.
   const confirmarEliminarContrato = () => {
     const contrato = menuContrato;
     cerrarMenu();
     Alert.alert(
       'Eliminar contrato',
-      `¿Eliminar el contrato de "${contrato.proyecto_nombre || 'este proyecto'}"? Esto borra también el proyecto completo (fotos, planos 3D, chat, equipo asignado) y la cotización que lo originó. Esta acción no se puede deshacer.`,
+      `¿Eliminar el contrato de "${contrato.proyecto_nombre || 'este proyecto'}"? Esto borra el contrato y la cotización que lo originó. El proyecto (fotos, planos 3D, chat, equipo asignado) se conserva intacto. Esta acción no se puede deshacer.`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -136,6 +157,12 @@ export default function ContratosScreen({ route, navigation }) {
     );
   };
 
+  const textoNormalizado = (t) => (t || '').toString().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const busquedaNormalizada = textoNormalizado(busqueda);
+  const contratosFiltrados = busquedaNormalizada
+    ? contratos.filter((c) => textoNormalizado(c.proyecto_nombre).includes(busquedaNormalizada))
+    : contratos;
+
   if (cargando) {
     return (
       <View style={styles.center}>
@@ -147,13 +174,24 @@ export default function ContratosScreen({ route, navigation }) {
   return (
     <View style={[styles.container, { backgroundColor: empresa.color_hex || '#1E90FF' }]}>
       <EncabezadoLogo empresa={empresa} />
+      <View style={styles.buscadorContainer}>
+        <TextInput
+          style={styles.buscadorInput}
+          value={busqueda}
+          onChangeText={setBusqueda}
+          placeholder="🔍 Buscar por proyecto..."
+          placeholderTextColor="#999"
+        />
+      </View>
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {contratos.length === 0 ? (
+        {contratosFiltrados.length === 0 ? (
           <Text style={styles.vacioTexto}>
-            Aún no hay contratos. Los contratos se generan automáticamente al aceptar una cotización.
+            {contratos.length === 0
+              ? 'Aún no hay contratos. Los contratos se generan automáticamente al aceptar una cotización.'
+              : 'No se encontraron contratos con ese texto.'}
           </Text>
         ) : (
-          contratos.map((contrato) => {
+          contratosFiltrados.map((contrato) => {
             const finalizado = contrato.proyecto_estado === 'finalizado';
             return (
               <View key={contrato.id} style={styles.contratoCard}>
@@ -199,7 +237,7 @@ export default function ContratosScreen({ route, navigation }) {
         <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={cerrarMenu}>
           <View style={styles.menuBox}>
             <Text style={styles.menuTitulo}>{menuContrato?.proyecto_nombre || 'Contrato'}</Text>
-            {menuContrato?.proyecto_id && (
+            {menuContrato?.proyecto_id ? (
               menuContrato?.proyecto_estado === 'finalizado' ? (
                 <TouchableOpacity style={styles.menuOpcion} onPress={reactivarProyecto}>
                   <Text style={styles.menuOpcionTexto}>↩️  Reactivar proyecto</Text>
@@ -209,6 +247,12 @@ export default function ContratosScreen({ route, navigation }) {
                   <Text style={styles.menuOpcionTexto}>✅  Marcar como finalizado</Text>
                 </TouchableOpacity>
               )
+            ) : (
+              <TouchableOpacity style={styles.menuOpcion} onPress={crearProyecto} disabled={creandoProyecto}>
+                <Text style={[styles.menuOpcionTexto, { color: '#1E90FF', fontWeight: 'bold' }]}>
+                  {creandoProyecto ? 'Creando proyecto...' : '🏗️  Crear Proyecto'}
+                </Text>
+              </TouchableOpacity>
             )}
             <TouchableOpacity style={styles.menuOpcion} onPress={verPdf} disabled={generandoPdf}>
               <Text style={styles.menuOpcionTexto}>{generandoPdf ? 'Generando PDF...' : '📄  Ver contrato (PDF)'}</Text>
@@ -233,6 +277,16 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f5f5' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   scrollContent: { padding: 16, paddingBottom: 40 },
+  buscadorContainer: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 },
+  buscadorInput: {
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    fontSize: 14,
+    borderWidth: 1,
+    borderColor: '#ddd',
+  },
   vacioTexto: { textAlign: 'center', color: '#888', marginTop: 40, fontSize: 15, paddingHorizontal: 20 },
   contratoCard: {
     backgroundColor: '#fff',

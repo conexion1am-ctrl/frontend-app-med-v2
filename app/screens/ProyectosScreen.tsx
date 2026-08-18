@@ -3,17 +3,21 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import EncabezadoLogo from '../components/EncabezadoLogo';
-import { esAccesoReducido, permisosDe } from '../utils/roles';
+import { esAccesoReducido, esGerencia, permisosDe } from '../utils/roles';
 
 export default function ProyectosScreen({ route, navigation }) {
   const { empresa, usuario } = route.params;
   const insets = useSafeAreaInsets();
   const accesoReducido = esAccesoReducido(empresa);
   const puedeGestionar = permisosDe(empresa).gestionarProyectos;
+  const puedeEliminar = esGerencia(empresa);
   const [proyectos, setProyectos] = useState([]);
   const [areas, setAreas] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
+  const [busqueda, setBusqueda] = useState('');
+  const [menuProyecto, setMenuProyecto] = useState(null);
+  const [eliminando, setEliminando] = useState(false);
 
   const [nombre, setNombre] = useState('');
   const [areaM2, setAreaM2] = useState('');
@@ -127,6 +131,49 @@ export default function ProyectosScreen({ route, navigation }) {
     }
   };
 
+  const cerrarMenuProyecto = () => setMenuProyecto(null);
+
+  // Eliminar proyecto: solo Gerencia. Borra el proyecto y todo lo que cuelga de él (fotos,
+  // planos 3D, chat, equipo asignado, estadísticas), pero el contrato que lo originó (si
+  // existe) se conserva: queda desvinculado y se puede volver a crear el proyecto desde la
+  // pantalla de Contratos con el botón "Crear Proyecto".
+  const confirmarEliminarProyecto = () => {
+    const proyecto = menuProyecto;
+    cerrarMenuProyecto();
+    Alert.alert(
+      'Eliminar proyecto',
+      `¿Eliminar "${proyecto.nombre}"? Se borrarán sus fotos, planos 3D, chat y equipo asignado. Si tiene un contrato, este se conserva y podrás volver a crear el proyecto desde la pantalla de Contratos. Esta acción no se puede deshacer.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            setEliminando(true);
+            try {
+              await axios.delete(`https://backend-app-mediterraneo.onrender.com/api/proyectos/${proyecto.id}`, {
+                data: { usuario_id: usuario?.id },
+              });
+              cargarDatos();
+            } catch (error) {
+              console.error('Error eliminando proyecto:', error);
+              const mensaje = error.response?.data?.error || 'No se pudo eliminar el proyecto.';
+              Alert.alert('Error', mensaje);
+            } finally {
+              setEliminando(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const textoNormalizado = (t) => (t || '').toString().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const busquedaNormalizada = textoNormalizado(busqueda);
+  const proyectosFiltrados = busquedaNormalizada
+    ? proyectos.filter((p) => textoNormalizado(p.nombre).includes(busquedaNormalizada))
+    : proyectos;
+
   if (cargando) {
     return (
       <View style={styles.center}>
@@ -138,15 +185,27 @@ export default function ProyectosScreen({ route, navigation }) {
   return (
     <View style={[styles.container, { backgroundColor: empresa.color_hex || '#1E90FF' }]}>
       <EncabezadoLogo empresa={empresa} />
+      <View style={styles.buscadorContainer}>
+        <TextInput
+          style={styles.buscadorInput}
+          value={busqueda}
+          onChangeText={setBusqueda}
+          placeholder="🔍 Buscar proyecto..."
+          placeholderTextColor="#999"
+        />
+      </View>
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {proyectos.length === 0 ? (
-          <Text style={styles.vacioTexto}>Aún no hay proyectos. Toca "Nuevo Proyecto" para empezar.</Text>
+        {proyectosFiltrados.length === 0 ? (
+          <Text style={styles.vacioTexto}>
+            {proyectos.length === 0 ? 'Aún no hay proyectos. Toca "Nuevo Proyecto" para empezar.' : 'No se encontraron proyectos con ese texto.'}
+          </Text>
         ) : (
-          proyectos.map((proyecto) => (
+          proyectosFiltrados.map((proyecto) => (
             <TouchableOpacity
               key={proyecto.id}
               style={styles.proyectoCard}
               onPress={() => abrirProyecto(proyecto)}
+              onLongPress={() => puedeEliminar && !accesoReducido && setMenuProyecto(proyecto)}
             >
               <Text style={styles.proyectoNombre}>{proyecto.nombre}</Text>
               {proyecto.direccion ? <Text style={styles.proyectoDireccion}>{proyecto.direccion}</Text> : null}
@@ -227,6 +286,22 @@ export default function ProyectosScreen({ route, navigation }) {
           </ScrollView>
         </KeyboardAvoidingView>
       </Modal>
+
+      <Modal visible={!!menuProyecto} animationType="fade" transparent>
+        <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={cerrarMenuProyecto}>
+          <View style={styles.menuBox}>
+            <Text style={styles.menuTitulo}>{menuProyecto?.nombre}</Text>
+            <TouchableOpacity style={styles.menuOpcion} onPress={confirmarEliminarProyecto} disabled={eliminando}>
+              <Text style={[styles.menuOpcionTexto, { color: '#DC143C' }]}>
+                {eliminando ? 'Eliminando...' : '🗑️  Eliminar'}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.menuOpcion} onPress={cerrarMenuProyecto}>
+              <Text style={[styles.menuOpcionTexto, { color: '#888' }]}>Cancelar</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -235,6 +310,16 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f5f5' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   scrollContent: { padding: 16, paddingBottom: 100 },
+  buscadorContainer: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 },
+  buscadorInput: {
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    fontSize: 14,
+    borderWidth: 1,
+    borderColor: '#ddd',
+  },
   vacioTexto: { textAlign: 'center', color: '#888', marginTop: 40, fontSize: 15 },
   proyectoCard: {
     backgroundColor: '#fff',
@@ -247,6 +332,11 @@ const styles = StyleSheet.create({
   proyectoNombre: { fontSize: 16, fontWeight: '600', color: '#222' },
   proyectoDireccion: { fontSize: 13, color: '#777', marginTop: 2 },
   proyectoArea: { fontSize: 12, color: '#999', marginTop: 2 },
+  menuOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
+  menuBox: { backgroundColor: '#fff', borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 20, paddingBottom: 34 },
+  menuTitulo: { fontSize: 15, fontWeight: 'bold', color: '#222', marginBottom: 14, textAlign: 'center' },
+  menuOpcion: { paddingVertical: 14, borderTopWidth: 1, borderTopColor: '#f0f0f0' },
+  menuOpcionTexto: { fontSize: 16, color: '#333', textAlign: 'center' },
   botonAgregar: {
     position: 'absolute',
     bottom: 20,

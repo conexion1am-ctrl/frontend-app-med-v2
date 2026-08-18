@@ -114,6 +114,12 @@ export default function IngresarScreen({ navigation }) {
             area_id: primeraEmpresa.area_id,
             area_nombre: primeraEmpresa.area_nombre,
             area_tipo: primeraEmpresa.area_tipo,
+            nit: primeraEmpresa.nit,
+            cedula_representante: primeraEmpresa.cedula_representante,
+            banco_nombre: primeraEmpresa.banco_nombre,
+            banco_tipo_cuenta: primeraEmpresa.banco_tipo_cuenta,
+            banco_numero: primeraEmpresa.banco_numero,
+            banco_titular: primeraEmpresa.banco_titular,
           },
           usuario: response.data.usuario,
         });

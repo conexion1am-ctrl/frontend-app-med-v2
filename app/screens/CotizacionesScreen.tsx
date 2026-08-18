@@ -31,6 +31,7 @@ export default function CotizacionesScreen({ route }) {
   const [clientes, setClientes] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
+  const [busqueda, setBusqueda] = useState('');
 
   const [clienteSeleccionado, setClienteSeleccionado] = useState(null);
   const [numero, setNumero] = useState('');
@@ -402,11 +403,12 @@ export default function CotizacionesScreen({ route }) {
 
   const confirmarEliminar = (cot) => {
     cerrarMenu();
-    if (cot.aceptada) {
-      Alert.alert('No se puede eliminar todavía', 'Esta cotización ya fue aceptada y generó un contrato. Elimina primero el contrato desde la pantalla de Contratos (esto también eliminará esta cotización).');
-      return;
-    }
-    Alert.alert('Eliminar cotización', `¿Eliminar la cotización de ${cot.cliente_nombre}?`, [
+    // Si ya fue aceptada, el backend elimina también el contrato y el proyecto asociado
+    // (con todo lo que tenga: fotos, planos, chat, equipo, estadísticas) en la misma operación.
+    const mensaje = cot.aceptada
+      ? `Esta cotización ya fue aceptada y generó un contrato. Al eliminarla se borrará también el contrato y el proyecto completo asociado (fotos, planos 3D, chat, equipo asignado). ¿Eliminar la cotización de ${cot.cliente_nombre}?`
+      : `¿Eliminar la cotización de ${cot.cliente_nombre}?`;
+    Alert.alert('Eliminar cotización', mensaje, [
       { text: 'Cancelar', style: 'cancel' },
       {
         text: 'Eliminar',
@@ -419,8 +421,8 @@ export default function CotizacionesScreen({ route }) {
             cargarDatos();
           } catch (error) {
             console.error('Error eliminando cotización:', error);
-            const mensaje = error.response?.data?.error || 'No se pudo eliminar la cotización.';
-            Alert.alert('Error', mensaje);
+            const mensajeError = error.response?.data?.error || 'No se pudo eliminar la cotización.';
+            Alert.alert('Error', mensajeError);
           }
         },
       },
@@ -451,6 +453,17 @@ export default function CotizacionesScreen({ route }) {
     );
   };
 
+  // Filtra por nombre del proyecto, nombre del cliente o número de cotización.
+  const textoNormalizado = (t) => (t || '').toString().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const busquedaNormalizada = textoNormalizado(busqueda);
+  const cotizacionesFiltradas = busquedaNormalizada
+    ? cotizaciones.filter((c) =>
+        textoNormalizado(c.nombre_proyecto).includes(busquedaNormalizada) ||
+        textoNormalizado(c.cliente_nombre).includes(busquedaNormalizada) ||
+        textoNormalizado(c.numero).includes(busquedaNormalizada)
+      )
+    : cotizaciones;
+
   if (cargando) {
     return (
       <View style={styles.center}>
@@ -462,14 +475,27 @@ export default function CotizacionesScreen({ route }) {
   return (
     <View style={[styles.container, { backgroundColor: empresa.color_hex || '#1E90FF' }]}>
       <EncabezadoLogo empresa={empresa} />
+      <View style={styles.buscadorContainer}>
+        <TextInput
+          style={styles.buscadorInput}
+          value={busqueda}
+          onChangeText={setBusqueda}
+          placeholder="🔍 Buscar por proyecto, cliente o N°..."
+          placeholderTextColor="#999"
+        />
+      </View>
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {cotizaciones.length === 0 ? (
-          <Text style={styles.vacioTexto}>Aún no hay cotizaciones. Toca "Nueva Cotización" para empezar.</Text>
+        {cotizacionesFiltradas.length === 0 ? (
+          <Text style={styles.vacioTexto}>
+            {cotizaciones.length === 0 ? 'Aún no hay cotizaciones. Toca "Nueva Cotización" para empezar.' : 'No se encontraron cotizaciones con ese texto.'}
+          </Text>
         ) : (
-          cotizaciones.map((cot) => (
+          cotizacionesFiltradas.map((cot) => (
             <View key={cot.id} style={styles.cotizacionCard}>
               <View style={{ flex: 1 }}>
+                <Text style={styles.cotizacionProyecto}>{cot.nombre_proyecto || 'Sin nombre de proyecto'}</Text>
                 <Text style={styles.cotizacionCliente}>{cot.cliente_nombre}</Text>
+                {cot.mts2 ? <Text style={styles.cotizacionMts2}>📐 {cot.mts2} m²</Text> : null}
                 {cot.numero ? <Text style={styles.cotizacionNumero}>N° {cot.numero}</Text> : null}
                 <Text style={styles.cotizacionTotal}>{formatearMoneda(cot.total)}</Text>
                 <View
@@ -554,7 +580,12 @@ export default function CotizacionesScreen({ route }) {
                   <TouchableOpacity
                     key={cliente.id}
                     style={[styles.opcion, clienteSeleccionado === cliente.id && styles.opcionSeleccionada]}
-                    onPress={() => setClienteSeleccionado(cliente.id)}
+                    onPress={() => {
+                      setClienteSeleccionado(cliente.id);
+                      // Precargamos "propietario" con el nombre del cliente al seleccionarlo,
+                      // pero el campo sigue siendo editable por si hay que ponerlo distinto.
+                      setPropietario(cliente.nombre);
+                    }}
                   >
                     <Text style={[styles.opcionTexto, clienteSeleccionado === cliente.id && styles.opcionTextoSeleccionado]}>
                       {cliente.nombre}
@@ -939,6 +970,16 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f5f5' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   scrollContent: { padding: 16, paddingBottom: 100 },
+  buscadorContainer: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 },
+  buscadorInput: {
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    fontSize: 14,
+    borderWidth: 1,
+    borderColor: '#ddd',
+  },
   vacioTexto: { textAlign: 'center', color: '#888', marginTop: 40, fontSize: 15 },
   cotizacionCard: {
     backgroundColor: '#fff',
@@ -950,7 +991,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  cotizacionCliente: { fontSize: 16, fontWeight: '600', color: '#222' },
+  cotizacionProyecto: { fontSize: 16, fontWeight: 'bold', color: '#1E90FF' },
+  cotizacionCliente: { fontSize: 14, fontWeight: '600', color: '#222', marginTop: 2 },
+  cotizacionMts2: { fontSize: 12, color: '#666', marginTop: 2 },
   cotizacionNumero: { fontSize: 12, color: '#999', marginTop: 2 },
   cotizacionTotal: { fontSize: 15, fontWeight: 'bold', color: '#1E90FF', marginTop: 4 },
   etiquetaEstado: { alignSelf: 'flex-start', borderRadius: 10, paddingVertical: 3, paddingHorizontal: 8, marginTop: 6 },
