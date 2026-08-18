@@ -230,19 +230,19 @@ export default function EditarPerfilScreen({ route, navigation }) {
             <Text style={styles.ayudaTexto}>Estos datos aparecen automáticamente en los contratos que genera la app.</Text>
 
             <Text style={styles.label}>Cédula del representante legal</Text>
-            <TextInput style={styles.input} value={cedulaRepresentante} onChangeText={setCedulaRepresentante} placeholder="Ej: 1.152.442.156" placeholderTextColor="#999" keyboardType="number-pad" />
+            <TextInput style={styles.input} value={cedulaRepresentante} onChangeText={setCedulaRepresentante} placeholder="Ej: 1.234.567.891" placeholderTextColor="#999" keyboardType="number-pad" />
 
             <Text style={styles.label}>NIT de la empresa</Text>
-            <TextInput style={styles.input} value={nit} onChangeText={setNit} placeholder="Ej: 900990917-1" placeholderTextColor="#999" />
+            <TextInput style={styles.input} value={nit} onChangeText={setNit} placeholder="Ej: 900123456-1" placeholderTextColor="#999" />
 
             <Text style={styles.label}>Banco</Text>
-            <TextInput style={styles.input} value={bancoNombre} onChangeText={setBancoNombre} placeholder="Ej: Bancolombia" placeholderTextColor="#999" />
+            <TextInput style={styles.input} value={bancoNombre} onChangeText={setBancoNombre} placeholder="Ej: Nombre de tu banco" placeholderTextColor="#999" />
 
             <Text style={styles.label}>Tipo de cuenta</Text>
             <TextInput style={styles.input} value={bancoTipoCuenta} onChangeText={setBancoTipoCuenta} placeholder="Ej: Ahorros" placeholderTextColor="#999" />
 
             <Text style={styles.label}>Número de cuenta</Text>
-            <TextInput style={styles.input} value={bancoNumero} onChangeText={setBancoNumero} placeholder="Ej: 93363300004" placeholderTextColor="#999" keyboardType="number-pad" />
+            <TextInput style={styles.input} value={bancoNumero} onChangeText={setBancoNumero} placeholder="Ej: 00000000000" placeholderTextColor="#999" keyboardType="number-pad" />
 
             <Text style={styles.label}>Titular de la cuenta</Text>
             <TextInput style={styles.input} value={bancoTitular} onChangeText={setBancoTitular} placeholder="Ej: Inversiones Obra Blanca S.A.S" placeholderTextColor="#999" />

@@ -284,6 +284,16 @@ export default function Visor3D({ uri }) {
             camera={{ fov: 55, near: 0.05, far: 1000 }}
             gl={{ antialias: true }}
             onCreated={() => setError('')}
+            // pointerEvents="none": @react-three/fiber/native monta, SIEMPRE y sin importar
+            // el prop `events`, una View interna con su propio PanResponder de React Native
+            // clásico (no gesture-handler) encima del GLView, pensada para poder usar
+            // onPointerDown/onClick sobre objetos 3D. Esa View captura el toque ANTES de que
+            // el GestureDetector (react-native-gesture-handler) que envuelve este <Canvas> por
+            // fuera pueda reconocer el gesto — por eso rotar/mover/zoom/medir no respondían
+            // aunque el modelo cargara y se viera bien. Esta app no usa eventos de puntero de
+            // R3F sobre los objetos (el "medir" se hace con raycasting manual desde el toque
+            // capturado por gesture-handler), así que es seguro desactivar esa View por completo.
+            pointerEvents="none"
           >
             <color attach="background" args={['#e8e8e8']} />
             {/* Iluminación pensada para que ninguna cara del modelo quede oscura sin importar

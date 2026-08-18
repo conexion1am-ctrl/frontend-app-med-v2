@@ -870,16 +870,12 @@ export default function AreaProyectoScreen({ route }) {
             )}
 
             <View style={[styles.chatInputContainer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
-              {grabandoNota ? (
-                <>
-                  <View style={styles.grabandoIndicador}>
-                    <Text style={styles.grabandoTexto}>🔴 Grabando nota de voz... suelta para enviar</Text>
-                  </View>
-                  <TouchableOpacity style={styles.chatAdjuntar} onPress={cancelarGrabacionNota}>
-                    <Text style={styles.chatAdjuntarTexto}>✖️</Text>
-                  </TouchableOpacity>
-                </>
-              ) : (
+              {grabandoNota && (
+                <View style={styles.grabandoIndicador}>
+                  <Text style={styles.grabandoTexto}>🔴 Grabando... suelta el micrófono para enviar</Text>
+                </View>
+              )}
+              {!grabandoNota && (
                 <>
                   <TouchableOpacity style={styles.chatAdjuntar} onPress={elegirYAdjuntarArchivo} disabled={enviando}>
                     <Text style={styles.chatAdjuntarTexto}>📎</Text>
@@ -891,22 +887,29 @@ export default function AreaProyectoScreen({ route }) {
                     placeholder="Escribe un mensaje..."
                     placeholderTextColor="#999"
                   />
-                  {nuevoMensaje.trim() ? (
-                    <TouchableOpacity style={styles.chatEnviar} onPress={() => enviarMensaje()} disabled={enviando}>
-                      <Text style={styles.chatEnviarTexto}>{enviando ? '...' : 'Enviar'}</Text>
-                    </TouchableOpacity>
-                  ) : (
-                    <TouchableOpacity
-                      style={styles.chatMicrofono}
-                      onLongPress={iniciarGrabacionNota}
-                      onPressOut={detenerYEnviarNota}
-                      delayLongPress={200}
-                      disabled={enviando}
-                    >
-                      <Text style={styles.chatAdjuntarTexto}>🎤</Text>
-                    </TouchableOpacity>
-                  )}
                 </>
+              )}
+              {!grabandoNota && nuevoMensaje.trim() ? (
+                <TouchableOpacity style={styles.chatEnviar} onPress={() => enviarMensaje()} disabled={enviando}>
+                  <Text style={styles.chatEnviarTexto}>{enviando ? '...' : 'Enviar'}</Text>
+                </TouchableOpacity>
+              ) : (
+                // Este botón permanece siempre montado (mismo elemento, mismo lugar en pantalla)
+                // tanto antes como durante la grabación. Antes intercambiábamos este TouchableOpacity
+                // por otro distinto (uno de cancelar) apenas grabandoNota pasaba a true, y al hacerlo
+                // React desmontaba el elemento que tenía el dedo encima a mitad del gesto: el evento
+                // onPressOut (soltar el dedo) se perdía y la nota nunca se enviaba, quedando "pegada".
+                // Ahora solo cambia el ícono/color, nunca el componente en sí, así el gesto de soltar
+                // siempre llega a detenerYEnviarNota.
+                <TouchableOpacity
+                  style={[styles.chatMicrofono, grabandoNota && styles.chatMicrofonoActivo]}
+                  onLongPress={iniciarGrabacionNota}
+                  onPressOut={detenerYEnviarNota}
+                  delayLongPress={200}
+                  disabled={enviando}
+                >
+                  <Text style={styles.chatAdjuntarTexto}>{grabandoNota ? '🔴' : '🎤'}</Text>
+                </TouchableOpacity>
               )}
             </View>
           </View>
@@ -978,6 +981,7 @@ const styles = StyleSheet.create({
   chatEnviar: { backgroundColor: '#1E90FF', borderRadius: 8, paddingHorizontal: 16, justifyContent: 'center' },
   chatEnviarTexto: { color: '#fff', fontWeight: 'bold' },
   chatMicrofono: { paddingHorizontal: 10, justifyContent: 'center', alignItems: 'center' },
+  chatMicrofonoActivo: { backgroundColor: '#ffe0e0', borderRadius: 20 },
   grabandoIndicador: { flex: 1, backgroundColor: '#fff0f0', borderRadius: 8, padding: 10, borderWidth: 1, borderColor: '#ffcccc' },
   grabandoTexto: { color: '#DC143C', fontSize: 13, fontWeight: '600' },
   tabsContainer: { flexDirection: 'row', backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#eee' },

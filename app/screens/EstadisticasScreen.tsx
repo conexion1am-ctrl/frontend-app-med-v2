@@ -327,7 +327,7 @@ export default function EstadisticasScreen({ route }) {
               style={styles.input}
               value={costoDetalle}
               onChangeText={setCostoDetalle}
-              placeholder="Ej: Adelanto de madera para Julián"
+              placeholder="Ej: Compra de materiales, pago a proveedor, etc."
               placeholderTextColor="#999"
             />
 

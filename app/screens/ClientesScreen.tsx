@@ -284,7 +284,7 @@ export default function ClientesScreen({ route }) {
               style={styles.input}
               value={nombreProyecto}
               onChangeText={setNombreProyecto}
-              placeholder="Ej: Llano Azul Casa 430"
+              placeholder="Ej: Casa modelo 123"
               placeholderTextColor="#999"
             />
 
@@ -295,13 +295,13 @@ export default function ClientesScreen({ route }) {
             <InputCelular numero={celular} onChangeNumero={setCelular} pais={paisCelular} onChangePais={setPaisCelular} />
 
             <Text style={styles.label}>Cédula (opcional)</Text>
-            <TextInput style={styles.input} value={cedula} onChangeText={setCedula} placeholder="Ej: 1.017.133.852" placeholderTextColor="#999" keyboardType="number-pad" />
+            <TextInput style={styles.input} value={cedula} onChangeText={setCedula} placeholder="Ej: 1.234.567.891" placeholderTextColor="#999" keyboardType="number-pad" />
 
             <Text style={styles.label}>Metros cuadrados (opcional)</Text>
             <TextInput style={styles.input} value={mts2} onChangeText={setMts2} placeholder="Ej: 180" placeholderTextColor="#999" keyboardType="number-pad" />
 
             <Text style={styles.label}>Dirección (opcional)</Text>
-            <TextInput style={styles.input} value={direccion} onChangeText={setDireccion} placeholder="Ej: Carrera 14 N12a-60 Girardota" placeholderTextColor="#999" />
+            <TextInput style={styles.input} value={direccion} onChangeText={setDireccion} placeholder="Ej: Calle 10 # 20-30, Ciudad" placeholderTextColor="#999" />
 
             <TouchableOpacity style={styles.botonGuardar} onPress={crearCliente} disabled={guardando}>
               {guardando ? <ActivityIndicator color="#fff" /> : <Text style={styles.botonAgregarTexto}>CREAR CLIENTE</Text>}
@@ -331,7 +331,7 @@ export default function ClientesScreen({ route }) {
               style={styles.input}
               value={editNombreProyecto}
               onChangeText={setEditNombreProyecto}
-              placeholder="Ej: Llano Azul Casa 430"
+              placeholder="Ej: Casa modelo 123"
               placeholderTextColor="#999"
             />
 
@@ -342,13 +342,13 @@ export default function ClientesScreen({ route }) {
             <InputCelular numero={editCelular} onChangeNumero={setEditCelular} pais={editPaisCelular} onChangePais={setEditPaisCelular} />
 
             <Text style={styles.label}>Cédula (opcional)</Text>
-            <TextInput style={styles.input} value={editCedula} onChangeText={setEditCedula} placeholder="Ej: 1.017.133.852" placeholderTextColor="#999" keyboardType="number-pad" />
+            <TextInput style={styles.input} value={editCedula} onChangeText={setEditCedula} placeholder="Ej: 1.234.567.891" placeholderTextColor="#999" keyboardType="number-pad" />
 
             <Text style={styles.label}>Metros cuadrados (opcional)</Text>
             <TextInput style={styles.input} value={editMts2} onChangeText={setEditMts2} placeholder="Ej: 180" placeholderTextColor="#999" keyboardType="number-pad" />
 
             <Text style={styles.label}>Dirección (opcional)</Text>
-            <TextInput style={styles.input} value={editDireccion} onChangeText={setEditDireccion} placeholder="Ej: Carrera 14 N12a-60 Girardota" placeholderTextColor="#999" />
+            <TextInput style={styles.input} value={editDireccion} onChangeText={setEditDireccion} placeholder="Ej: Calle 10 # 20-30, Ciudad" placeholderTextColor="#999" />
 
             <TouchableOpacity style={styles.botonGuardar} onPress={guardarEdicion} disabled={guardando}>
               {guardando ? <ActivityIndicator color="#fff" /> : <Text style={styles.botonAgregarTexto}>GUARDAR CAMBIOS</Text>}

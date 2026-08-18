@@ -232,7 +232,7 @@ export default function ProyectosScreen({ route, navigation }) {
             <Text style={styles.modalTitulo}>Nuevo Proyecto</Text>
 
             <Text style={styles.label}>Nombre del Proyecto *</Text>
-            <TextInput style={styles.input} value={nombre} onChangeText={setNombre} placeholder="Ej: Llano Azul Casa 340" placeholderTextColor="#999" />
+            <TextInput style={styles.input} value={nombre} onChangeText={setNombre} placeholder="Ej: Casa modelo 123" placeholderTextColor="#999" />
 
             <Text style={styles.label}>Área (m²)</Text>
             <TextInput

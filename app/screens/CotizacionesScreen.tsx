@@ -61,9 +61,6 @@ export default function CotizacionesScreen({ route }) {
   const [editTiempoEntrega, setEditTiempoEntrega] = useState(TIEMPO_ENTREGA_DEFECTO);
   const [editFirmante, setEditFirmante] = useState('');
 
-  const [modalAdicionalesVisible, setModalAdicionalesVisible] = useState(false);
-  const [cotizacionAdicionales, setCotizacionAdicionales] = useState(null);
-  const [itemsAdicionales, setItemsAdicionales] = useState([{ descripcion: '', cantidad: '', valor: '', seccion: '' }]);
 
   const [generandoPdf, setGenerandoPdf] = useState(false);
   const [modalPdfVisible, setModalPdfVisible] = useState(false);
@@ -243,8 +240,14 @@ export default function CotizacionesScreen({ route }) {
         await axios.put(`https://backend-app-mediterraneo.onrender.com/api/cotizaciones/${editandoCotizacion.id}/items-aceptada`, {
           items: itemsValidos,
           descuento: editDescuento || 0,
+          propietario: editPropietario || null,
+          ciudad: editCiudad || null,
+          parrafo_contexto: editParrafoContexto || null,
+          condiciones_pago: editCondicionesPago.filter((c) => c.porcentaje || c.descripcion),
+          tiempo_entrega: editTiempoEntrega || null,
+          firmante: editFirmante || null,
         });
-        Alert.alert('¡Listo!', 'La cotización y el contrato se actualizaron con los nuevos ítems.');
+        Alert.alert('¡Listo!', 'La cotización y el contrato se actualizaron correctamente.');
       } else {
         await axios.put(`https://backend-app-mediterraneo.onrender.com/api/cotizaciones/${editandoCotizacion.id}`, {
           numero: editNumero || null,
@@ -263,51 +266,6 @@ export default function CotizacionesScreen({ route }) {
     } catch (error) {
       console.error('Error editando cotización:', error);
       const mensaje = error.response?.data?.error || 'No se pudo editar la cotización.';
-      Alert.alert('Error', mensaje);
-    } finally {
-      setGuardando(false);
-    }
-  };
-
-  const abrirAdicionales = (cot) => {
-    cerrarMenu();
-    setCotizacionAdicionales(cot);
-    setItemsAdicionales([{ descripcion: '', cantidad: '', valor: '', seccion: '' }]);
-    setModalAdicionalesVisible(true);
-  };
-
-  const actualizarItemAdicional = (index, campo, valor) => {
-    const nuevos = [...itemsAdicionales];
-    nuevos[index][campo] = valor;
-    setItemsAdicionales(nuevos);
-  };
-
-  const agregarItemAdicional = () => setItemsAdicionales([...itemsAdicionales, { descripcion: '', cantidad: '', valor: '', seccion: '' }]);
-
-  const quitarItemAdicional = (index) => {
-    if (itemsAdicionales.length === 1) return;
-    setItemsAdicionales(itemsAdicionales.filter((_, i) => i !== index));
-  };
-
-  const totalItemsAdicionales = itemsAdicionales.reduce((sum, item) => sum + (parseFloat(item.valor) || 0), 0);
-
-  const guardarAdicionales = async () => {
-    const itemsValidos = itemsAdicionales.filter((i) => i.descripcion.trim() && i.valor);
-    if (itemsValidos.length === 0) {
-      Alert.alert('Campos incompletos', 'Agrega al menos un ítem con descripción y valor.');
-      return;
-    }
-    setGuardando(true);
-    try {
-      await axios.post(`https://backend-app-mediterraneo.onrender.com/api/cotizaciones/${cotizacionAdicionales.id}/adicionales`, {
-        items: itemsValidos,
-      });
-      Alert.alert('¡Listo!', 'Ítems adicionales agregados. El contrato fue actualizado.');
-      setModalAdicionalesVisible(false);
-      cargarDatos();
-    } catch (error) {
-      console.error('Error agregando adicionales:', error);
-      const mensaje = error.response?.data?.error || 'No se pudieron agregar los adicionales.';
       Alert.alert('Error', mensaje);
     } finally {
       setGuardando(false);
@@ -531,12 +489,9 @@ export default function CotizacionesScreen({ route }) {
             <Text style={styles.menuTitulo}>{menuCotizacion?.cliente_nombre}</Text>
             {menuCotizacion?.aceptada ? (
               <>
-                <Text style={styles.menuNotaTexto}>Ya fue aceptada. Puedes editar sus ítems o agregar adicionales; el contrato se actualiza automáticamente.</Text>
+                <Text style={styles.menuNotaTexto}>Ya fue aceptada. Puedes editarla por completo; el contrato se actualiza automáticamente.</Text>
                 <TouchableOpacity style={styles.menuOpcion} onPress={() => abrirEditar(menuCotizacion)}>
-                  <Text style={styles.menuOpcionTexto}>✏️  Editar ítems</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.menuOpcion} onPress={() => abrirAdicionales(menuCotizacion)}>
-                  <Text style={styles.menuOpcionTexto}>➕  Agregar adicionales</Text>
+                  <Text style={styles.menuOpcionTexto}>✏️  Editar</Text>
                 </TouchableOpacity>
                 {puedeEliminarCotizaciones && (
                   <TouchableOpacity style={styles.menuOpcion} onPress={() => confirmarEliminar(menuCotizacion)}>
@@ -601,21 +556,29 @@ export default function CotizacionesScreen({ route }) {
             <Text style={styles.label}>Ítems de la cotización *</Text>
             {items.map((item, index) => (
               <View key={index} style={styles.itemBloque}>
+                <View style={styles.itemSeccionBotones}>
+                  <TouchableOpacity
+                    style={[styles.itemSeccionBoton, item.seccion === 'Obra blanca' && styles.itemSeccionBotonSeleccionado]}
+                    onPress={() => actualizarItem(index, 'seccion', item.seccion === 'Obra blanca' ? '' : 'Obra blanca')}
+                  >
+                    <Text style={[styles.itemSeccionBotonTexto, item.seccion === 'Obra blanca' && styles.itemSeccionBotonTextoSeleccionado]}>Obra blanca</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.itemSeccionBoton, item.seccion === 'Carpintería' && styles.itemSeccionBotonSeleccionado]}
+                    onPress={() => actualizarItem(index, 'seccion', item.seccion === 'Carpintería' ? '' : 'Carpintería')}
+                  >
+                    <Text style={[styles.itemSeccionBotonTexto, item.seccion === 'Carpintería' && styles.itemSeccionBotonTextoSeleccionado]}>Carpintería</Text>
+                  </TouchableOpacity>
+                </View>
                 <TextInput
-                  style={styles.input}
-                  value={item.seccion}
-                  onChangeText={(texto) => actualizarItem(index, 'seccion', texto)}
-                  placeholder="Sección (opcional, ej: Obra blanca)"
+                  style={[styles.input, styles.inputDescripcionItem]}
+                  value={item.descripcion}
+                  onChangeText={(texto) => actualizarItem(index, 'descripcion', texto)}
+                  placeholder="Descripción"
                   placeholderTextColor="#999"
+                  multiline
                 />
                 <View style={styles.itemFila}>
-                  <TextInput
-                    style={[styles.input, { flex: 2 }]}
-                    value={item.descripcion}
-                    onChangeText={(texto) => actualizarItem(index, 'descripcion', texto)}
-                    placeholder="Descripción"
-                    placeholderTextColor="#999"
-                  />
                   <TextInput
                     style={[styles.input, { flex: 0.7 }]}
                     value={item.cantidad}
@@ -625,7 +588,7 @@ export default function CotizacionesScreen({ route }) {
                     keyboardType="numeric"
                   />
                   <InputMoneda
-                    style={[styles.input, { flex: 1 }]}
+                    style={[styles.input, styles.inputValorItem]}
                     value={item.valor}
                     onChangeValor={(texto) => actualizarItem(index, 'valor', texto)}
                     placeholder="Valor"
@@ -721,34 +684,38 @@ export default function CotizacionesScreen({ route }) {
             <Text style={styles.modalTitulo}>Editar Cotización</Text>
             <Text style={styles.notaTexto}>Cliente: {editandoCotizacion?.cliente_nombre}</Text>
             {editandoCotizacion?.aceptada && (
-              <Text style={styles.notaTexto}>Esta cotización ya fue aceptada: al guardar, el contrato se actualizará con el nuevo total.</Text>
+              <Text style={styles.notaTexto}>Esta cotización ya fue aceptada: al guardar, el contrato se actualizará con los cambios.</Text>
             )}
 
-            {!editandoCotizacion?.aceptada && (
-              <>
-                <Text style={styles.label}>Número de cotización (opcional)</Text>
-                <TextInput style={styles.input} value={editNumero} onChangeText={setEditNumero} placeholder="Ej: COT-001" placeholderTextColor="#999" />
-              </>
-            )}
+            <Text style={styles.label}>Número de cotización (opcional)</Text>
+            <TextInput style={styles.input} value={editNumero} onChangeText={setEditNumero} placeholder="Ej: COT-001" placeholderTextColor="#999" />
 
             <Text style={styles.label}>Ítems de la cotización *</Text>
             {editItems.map((item, index) => (
               <View key={index} style={styles.itemBloque}>
+                <View style={styles.itemSeccionBotones}>
+                  <TouchableOpacity
+                    style={[styles.itemSeccionBoton, item.seccion === 'Obra blanca' && styles.itemSeccionBotonSeleccionado]}
+                    onPress={() => actualizarEditItem(index, 'seccion', item.seccion === 'Obra blanca' ? '' : 'Obra blanca')}
+                  >
+                    <Text style={[styles.itemSeccionBotonTexto, item.seccion === 'Obra blanca' && styles.itemSeccionBotonTextoSeleccionado]}>Obra blanca</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.itemSeccionBoton, item.seccion === 'Carpintería' && styles.itemSeccionBotonSeleccionado]}
+                    onPress={() => actualizarEditItem(index, 'seccion', item.seccion === 'Carpintería' ? '' : 'Carpintería')}
+                  >
+                    <Text style={[styles.itemSeccionBotonTexto, item.seccion === 'Carpintería' && styles.itemSeccionBotonTextoSeleccionado]}>Carpintería</Text>
+                  </TouchableOpacity>
+                </View>
                 <TextInput
-                  style={styles.input}
-                  value={item.seccion}
-                  onChangeText={(texto) => actualizarEditItem(index, 'seccion', texto)}
-                  placeholder="Sección (opcional, ej: Obra blanca)"
+                  style={[styles.input, styles.inputDescripcionItem]}
+                  value={item.descripcion}
+                  onChangeText={(texto) => actualizarEditItem(index, 'descripcion', texto)}
+                  placeholder="Descripción"
                   placeholderTextColor="#999"
+                  multiline
                 />
                 <View style={styles.itemFila}>
-                  <TextInput
-                    style={[styles.input, { flex: 2 }]}
-                    value={item.descripcion}
-                    onChangeText={(texto) => actualizarEditItem(index, 'descripcion', texto)}
-                    placeholder="Descripción"
-                    placeholderTextColor="#999"
-                  />
                   <TextInput
                     style={[styles.input, { flex: 0.7 }]}
                     value={item.cantidad}
@@ -758,7 +725,7 @@ export default function CotizacionesScreen({ route }) {
                     keyboardType="numeric"
                   />
                   <InputMoneda
-                    style={[styles.input, { flex: 1 }]}
+                    style={[styles.input, styles.inputValorItem]}
                     value={item.valor}
                     onChangeValor={(texto) => actualizarEditItem(index, 'valor', texto)}
                     placeholder="Valor"
@@ -786,127 +753,55 @@ export default function CotizacionesScreen({ route }) {
 
             <Text style={styles.totalTexto}>Total: {formatearMoneda(totalEditCotizacion)}</Text>
 
-            {!editandoCotizacion?.aceptada && (
-              <>
-                <Text style={[styles.seccionTitulo, { marginTop: 20 }]}>Datos para la carta</Text>
+            <Text style={[styles.seccionTitulo, { marginTop: 20 }]}>Datos para la carta</Text>
 
-                <Text style={styles.label}>Propietario (a quién va dirigido)</Text>
-                <TextInput style={styles.input} value={editPropietario} onChangeText={setEditPropietario} placeholder="Nombre del propietario" placeholderTextColor="#999" />
+            <Text style={styles.label}>Propietario (a quién va dirigido)</Text>
+            <TextInput style={styles.input} value={editPropietario} onChangeText={setEditPropietario} placeholder="Nombre del propietario" placeholderTextColor="#999" />
 
-                <Text style={styles.label}>Ciudad</Text>
-                <TextInput style={styles.input} value={editCiudad} onChangeText={setEditCiudad} placeholder="Ej: Medellín" placeholderTextColor="#999" />
+            <Text style={styles.label}>Ciudad</Text>
+            <TextInput style={styles.input} value={editCiudad} onChangeText={setEditCiudad} placeholder="Ej: Medellín" placeholderTextColor="#999" />
 
-                <Text style={styles.label}>Párrafo de contexto</Text>
-                <TextInput style={[styles.input, styles.inputMultilinea]} value={editParrafoContexto} onChangeText={setEditParrafoContexto} multiline placeholderTextColor="#999" />
+            <Text style={styles.label}>Párrafo de contexto</Text>
+            <TextInput style={[styles.input, styles.inputMultilinea]} value={editParrafoContexto} onChangeText={setEditParrafoContexto} multiline placeholderTextColor="#999" />
 
-                <Text style={styles.label}>Condiciones de pago</Text>
-                {editCondicionesPago.map((cond, index) => (
-                  <View key={index} style={styles.filaCondicionPago}>
-                    <TextInput
-                      style={[styles.input, styles.inputPorcentaje]}
-                      value={cond.porcentaje}
-                      onChangeText={(texto) => actualizarEditCondicionPago(index, 'porcentaje', texto.replace(/[^0-9]/g, ''))}
-                      placeholder="%"
-                      placeholderTextColor="#999"
-                      keyboardType="numeric"
-                    />
-                    <TextInput
-                      style={[styles.input, styles.inputDescripcionCondicion]}
-                      value={cond.descripcion}
-                      onChangeText={(texto) => actualizarEditCondicionPago(index, 'descripcion', texto)}
-                      placeholder="Descripción"
-                      placeholderTextColor="#999"
-                    />
-                    <TouchableOpacity onPress={() => quitarEditCondicionPago(index)}>
-                      <Text style={styles.botonQuitarItem}>✕</Text>
-                    </TouchableOpacity>
-                  </View>
-                ))}
-                <TouchableOpacity style={styles.botonAgregarItem} onPress={agregarEditCondicionPago}>
-                  <Text style={styles.botonAgregarItemTexto}>+ Agregar condición</Text>
+            <Text style={styles.label}>Condiciones de pago</Text>
+            {editCondicionesPago.map((cond, index) => (
+              <View key={index} style={styles.filaCondicionPago}>
+                <TextInput
+                  style={[styles.input, styles.inputPorcentaje]}
+                  value={cond.porcentaje}
+                  onChangeText={(texto) => actualizarEditCondicionPago(index, 'porcentaje', texto.replace(/[^0-9]/g, ''))}
+                  placeholder="%"
+                  placeholderTextColor="#999"
+                  keyboardType="numeric"
+                />
+                <TextInput
+                  style={[styles.input, styles.inputDescripcionCondicion]}
+                  value={cond.descripcion}
+                  onChangeText={(texto) => actualizarEditCondicionPago(index, 'descripcion', texto)}
+                  placeholder="Descripción"
+                  placeholderTextColor="#999"
+                />
+                <TouchableOpacity onPress={() => quitarEditCondicionPago(index)}>
+                  <Text style={styles.botonQuitarItem}>✕</Text>
                 </TouchableOpacity>
+              </View>
+            ))}
+            <TouchableOpacity style={styles.botonAgregarItem} onPress={agregarEditCondicionPago}>
+              <Text style={styles.botonAgregarItemTexto}>+ Agregar condición</Text>
+            </TouchableOpacity>
 
-                <Text style={styles.label}>Tiempo de entrega</Text>
-                <TextInput style={styles.input} value={editTiempoEntrega} onChangeText={setEditTiempoEntrega} placeholderTextColor="#999" />
+            <Text style={styles.label}>Tiempo de entrega</Text>
+            <TextInput style={styles.input} value={editTiempoEntrega} onChangeText={setEditTiempoEntrega} placeholderTextColor="#999" />
 
-                <Text style={styles.label}>Firmante</Text>
-                <TextInput style={styles.input} value={editFirmante} onChangeText={setEditFirmante} placeholder="Quién firma la carta" placeholderTextColor="#999" />
-              </>
-            )}
+            <Text style={styles.label}>Firmante</Text>
+            <TextInput style={styles.input} value={editFirmante} onChangeText={setEditFirmante} placeholder="Quién firma la carta" placeholderTextColor="#999" />
 
             <TouchableOpacity style={styles.botonGuardar} onPress={guardarEdicion} disabled={guardando}>
               {guardando ? <ActivityIndicator color="#fff" /> : <Text style={styles.botonAgregarTexto}>GUARDAR CAMBIOS</Text>}
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.botonCancelar} onPress={() => setModalEditarVisible(false)}>
-              <Text style={styles.botonCancelarTexto}>Cancelar</Text>
-            </TouchableOpacity>
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </Modal>
-
-      {/* MODAL: Agregar adicionales a cotización ya aceptada */}
-      <Modal visible={modalAdicionalesVisible} animationType="slide">
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-          <ScrollView style={styles.modalContainer} contentContainerStyle={{ padding: 20, paddingBottom: 60 }}>
-            <Text style={styles.modalTitulo}>Agregar Adicionales</Text>
-            <Text style={styles.notaTexto}>
-              Cliente: {cotizacionAdicionales?.cliente_nombre}{'\n'}
-              Estos ítems se sumarán al total y actualizarán el contrato automáticamente.
-            </Text>
-
-            <Text style={styles.label}>Ítems adicionales *</Text>
-            {itemsAdicionales.map((item, index) => (
-              <View key={index} style={styles.itemBloque}>
-                <TextInput
-                  style={styles.input}
-                  value={item.seccion}
-                  onChangeText={(texto) => actualizarItemAdicional(index, 'seccion', texto)}
-                  placeholder="Sección (opcional, ej: Adicional)"
-                  placeholderTextColor="#999"
-                />
-                <View style={styles.itemFila}>
-                  <TextInput
-                    style={[styles.input, { flex: 2 }]}
-                    value={item.descripcion}
-                    onChangeText={(texto) => actualizarItemAdicional(index, 'descripcion', texto)}
-                    placeholder="Descripción"
-                    placeholderTextColor="#999"
-                  />
-                  <TextInput
-                    style={[styles.input, { flex: 0.7 }]}
-                    value={item.cantidad}
-                    onChangeText={(texto) => actualizarItemAdicional(index, 'cantidad', texto.replace(/[^0-9.]/g, ''))}
-                    placeholder="Cant."
-                    placeholderTextColor="#999"
-                    keyboardType="numeric"
-                  />
-                  <InputMoneda
-                    style={[styles.input, { flex: 1 }]}
-                    value={item.valor}
-                    onChangeValor={(texto) => actualizarItemAdicional(index, 'valor', texto)}
-                    placeholder="Valor"
-                  />
-                  {itemsAdicionales.length > 1 && (
-                    <TouchableOpacity onPress={() => quitarItemAdicional(index)} style={styles.botonQuitarItem}>
-                      <Text style={styles.botonQuitarItemTexto}>✕</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              </View>
-            ))}
-
-            <TouchableOpacity style={styles.botonAgregarItem} onPress={agregarItemAdicional}>
-              <Text style={styles.botonAgregarItemTexto}>+ Agregar ítem</Text>
-            </TouchableOpacity>
-
-            <Text style={styles.totalTexto}>Total adicional: {formatearMoneda(totalItemsAdicionales)}</Text>
-
-            <TouchableOpacity style={styles.botonGuardar} onPress={guardarAdicionales} disabled={guardando}>
-              {guardando ? <ActivityIndicator color="#fff" /> : <Text style={styles.botonAgregarTexto}>GUARDAR ADICIONALES</Text>}
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.botonCancelar} onPress={() => setModalAdicionalesVisible(false)}>
               <Text style={styles.botonCancelarTexto}>Cancelar</Text>
             </TouchableOpacity>
           </ScrollView>
@@ -921,10 +816,10 @@ export default function CotizacionesScreen({ route }) {
             <Text style={styles.notaTexto}>Estos datos se usan solo para armar el documento; puedes dejarlos en blanco si no aplican.</Text>
 
             <Text style={styles.label}>Ciudad (opcional)</Text>
-            <TextInput style={styles.input} value={pdfCiudad} onChangeText={setPdfCiudad} placeholder="Ej: Girardota" placeholderTextColor="#999" />
+            <TextInput style={styles.input} value={pdfCiudad} onChangeText={setPdfCiudad} placeholder="Ej: Tu ciudad" placeholderTextColor="#999" />
 
             <Text style={styles.label}>Dirigido a (propietario)</Text>
-            <TextInput style={styles.input} value={pdfPropietario} onChangeText={setPdfPropietario} placeholder="Ej: Propietario Llano Azul" placeholderTextColor="#999" />
+            <TextInput style={styles.input} value={pdfPropietario} onChangeText={setPdfPropietario} placeholder="Ej: Nombre del propietario" placeholderTextColor="#999" />
 
             <Text style={styles.label}>Párrafo de contexto (opcional)</Text>
             <TextInput
@@ -950,7 +845,7 @@ export default function CotizacionesScreen({ route }) {
             <TextInput style={styles.input} value={pdfTiempoEntrega} onChangeText={setPdfTiempoEntrega} placeholder="Ej: 12 - 14 semanas" placeholderTextColor="#999" />
 
             <Text style={styles.label}>Firma (nombre de quien envía)</Text>
-            <TextInput style={styles.input} value={pdfFirmante} onChangeText={setPdfFirmante} placeholder="Ej: Juliana María Villa Flórez" placeholderTextColor="#999" />
+            <TextInput style={styles.input} value={pdfFirmante} onChangeText={setPdfFirmante} placeholder="Ej: Nombre de quien firma" placeholderTextColor="#999" />
 
             <TouchableOpacity style={styles.botonGuardar} onPress={generarYCompartirPdf} disabled={generandoPdf}>
               {generandoPdf ? <ActivityIndicator color="#fff" /> : <Text style={styles.botonAgregarTexto}>GENERAR PDF</Text>}
@@ -1039,6 +934,21 @@ const styles = StyleSheet.create({
   opcionTextoSeleccionado: { color: '#fff', fontWeight: '600' },
   itemBloque: { marginTop: 12, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#f0f0f0' },
   itemFila: { flexDirection: 'row', gap: 8, marginTop: 8, alignItems: 'center' },
+  itemSeccionBotones: { flexDirection: 'row', gap: 8 },
+  itemSeccionBoton: {
+    flex: 1,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#ddd',
+  },
+  itemSeccionBotonSeleccionado: { backgroundColor: '#1E90FF', borderColor: '#1E90FF' },
+  itemSeccionBotonTexto: { fontSize: 14, color: '#555', fontWeight: '600' },
+  itemSeccionBotonTextoSeleccionado: { color: '#fff' },
+  inputDescripcionItem: { minHeight: 60, textAlignVertical: 'top', marginTop: 8 },
+  inputValorItem: { flex: 1.6 },
   botonQuitarItem: { padding: 8 },
   botonQuitarItemTexto: { fontSize: 16, color: '#DC143C', fontWeight: 'bold' },
   botonAgregarItem: { marginTop: 10, padding: 8 },
