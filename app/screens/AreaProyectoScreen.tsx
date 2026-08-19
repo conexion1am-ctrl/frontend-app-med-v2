@@ -364,10 +364,11 @@ export default function AreaProyectoScreen({ route }) {
   const abrirAsignar = async () => {
     try {
       const response = await axios.get(`https://backend-app-mediterraneo.onrender.com/api/areas/personal/${empresa.id}`);
-      // Solo se puede asignar personal ya VINCULADO (con usuario_id real).
-      // Las personas "pendientes" (invitadas pero que aún no aceptaron) no tienen usuario_id
-      // todavía y no pueden ser asignadas a un proyecto hasta que acepten la invitación.
-      const delArea = response.data.personal.filter((p) => p.area_id === area.id && p.estado === 'vinculado' && p.usuario_id);
+      // Se puede asignar tanto personal ya VINCULADO (usuario_id real) como personal PENDIENTE
+      // (invitado pero que aún no acepta el link, identificado por rol_id = id de la invitación).
+      // Así gerencia puede dejar armado el equipo del proyecto desde ya, sin esperar a que la
+      // persona acepte; cuando acepte, el backend migra su asignación automáticamente.
+      const delArea = response.data.personal.filter((p) => p.area_id === area.id);
       setPersonalDisponible(delArea);
       setModalAsignarVisible(true);
     } catch (error) {
@@ -376,10 +377,12 @@ export default function AreaProyectoScreen({ route }) {
     }
   };
 
-  const asignarPersona = async (usuarioId) => {
+  const asignarPersona = async (persona) => {
     try {
       await axios.post(`https://backend-app-mediterraneo.onrender.com/api/proyectos/${proyecto.id}/equipo/asignar`, {
-        usuario_id: usuarioId,
+        usuario_id: persona.usuario_id || null,
+        // Para personal pendiente, rol_id devuelto por /areas/personal es el id de la invitación.
+        invitacion_id: persona.usuario_id ? null : persona.rol_id,
         area_id: area.id,
       });
       Alert.alert('¡Listo!', 'Persona asignada al proyecto.');
@@ -633,15 +636,31 @@ export default function AreaProyectoScreen({ route }) {
               data={equipo}
               keyExtractor={(item) => item.asignacion_id.toString()}
               contentContainerStyle={styles.lista}
-              renderItem={({ item }) => (
-                <TouchableOpacity style={styles.personaCard} onPress={() => abrirChat(item)}>
-                  <View>
-                    <Text style={styles.personaNombre}>{item.nombre}</Text>
-                    <Text style={styles.personaSubtexto}>Toca para abrir el chat</Text>
-                  </View>
-                  <Text style={styles.personaFlecha}>›</Text>
-                </TouchableOpacity>
-              )}
+              renderItem={({ item }) => {
+                const esPendiente = item.estado === 'pendiente';
+                return (
+                  <TouchableOpacity
+                    style={styles.personaCard}
+                    onPress={() => !esPendiente && abrirChat(item)}
+                    disabled={esPendiente}
+                  >
+                    <View>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <Text style={styles.personaNombre}>{item.nombre}</Text>
+                        {esPendiente && (
+                          <View style={styles.etiquetaPendiente}>
+                            <Text style={styles.etiquetaPendienteTexto}>Pendiente</Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={styles.personaSubtexto}>
+                        {esPendiente ? 'Todavía no acepta la invitación · el chat se habilita al aceptar' : 'Toca para abrir el chat'}
+                      </Text>
+                    </View>
+                    {!esPendiente && <Text style={styles.personaFlecha}>›</Text>}
+                  </TouchableOpacity>
+                );
+              }}
             />
           )}
         </>
@@ -798,16 +817,23 @@ export default function AreaProyectoScreen({ route }) {
           <Text style={styles.modalTitulo}>Asignar a {area.nombre}</Text>
           <FlatList
             data={personalDisponible}
-            keyExtractor={(item, index) => (item.usuario_id != null ? item.usuario_id.toString() : `sin-id-${index}`)}
+            keyExtractor={(item, index) => (item.usuario_id != null ? `u-${item.usuario_id}` : `inv-${item.rol_id}-${index}`)}
             renderItem={({ item }) => (
-              <TouchableOpacity style={styles.opcionPersona} onPress={() => asignarPersona(item.usuario_id)}>
-                <Text style={styles.opcionPersonaTexto}>{item.nombre}</Text>
-                <Text style={styles.opcionPersonaCelular}>{item.celular}</Text>
+              <TouchableOpacity style={styles.opcionPersona} onPress={() => asignarPersona(item)}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.opcionPersonaTexto}>{item.nombre}</Text>
+                  <Text style={styles.opcionPersonaCelular}>{item.celular}</Text>
+                </View>
+                {item.estado === 'pendiente' && (
+                  <View style={styles.etiquetaPendiente}>
+                    <Text style={styles.etiquetaPendienteTexto}>Pendiente</Text>
+                  </View>
+                )}
               </TouchableOpacity>
             )}
             ListEmptyComponent={
               <Text style={styles.vacioTexto}>
-                No hay personal vinculado en esta área todavía. Ve a Grupo de Trabajo para agregar o invitar personas (las personas invitadas aparecerán aquí solo después de aceptar).
+                No hay personal en esta área todavía. Ve a Grupo de Trabajo para agregar o invitar personas.
               </Text>
             }
           />
@@ -944,9 +970,19 @@ const styles = StyleSheet.create({
   personaFlecha: { fontSize: 22, color: '#ccc' },
   modalContainer: { flex: 1, backgroundColor: '#fff', padding: 20, paddingTop: 60 },
   modalTitulo: { fontSize: 18, fontWeight: 'bold', marginBottom: 16 },
-  opcionPersona: { backgroundColor: '#f5f5f5', borderRadius: 8, padding: 14, marginBottom: 8 },
+  opcionPersona: {
+    backgroundColor: '#f5f5f5',
+    borderRadius: 8,
+    padding: 14,
+    marginBottom: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   opcionPersonaTexto: { fontSize: 15, fontWeight: '600' },
   opcionPersonaCelular: { fontSize: 13, color: '#777', marginTop: 2 },
+  etiquetaPendiente: { backgroundColor: '#FFF3CD', borderRadius: 12, paddingVertical: 3, paddingHorizontal: 9 },
+  etiquetaPendienteTexto: { fontSize: 11, color: '#8A6D00', fontWeight: '700' },
   botonCancelar: { alignItems: 'center', marginTop: 16, padding: 12 },
   botonCancelarTexto: { color: '#888', fontSize: 14 },
   chatModalContainer: { flex: 1, backgroundColor: '#f5f5f5' },

@@ -271,63 +271,76 @@ export default function Visor3D({ uri }) {
   };
 
   return (
-    <View style={{ flex: 1 }}>
-      <GestureDetector gesture={gestoCompuesto}>
-        <View
-          style={{ flex: 1 }}
-          onLayout={(evt) => {
-            const { width, height } = evt.nativeEvent.layout;
-            layoutRef.current = { width, height };
+    <View
+      style={{ flex: 1 }}
+      onLayout={(evt) => {
+        const { width, height } = evt.nativeEvent.layout;
+        layoutRef.current = { width, height };
+      }}
+    >
+      {/* IMPORTANTE: el GestureDetector NO envuelve al <Canvas>, es HERMANO y se dibuja
+          ENCIMA (después en el árbol = mayor z-order) mediante una View absoluta transparente.
+          Motivo: @react-three/fiber/native SIEMPRE monta, dentro del <Canvas>, una View interna
+          con su propio PanResponder clásico de React Native (reactNative.PanResponder.create),
+          sin importar el prop `events` ni pointerEvents. React Native usa un "gesture responder
+          system" único y global: en cuanto CUALQUIER view dentro del árbol que envuelve el
+          GestureDetector se vuelve el "responder" (como hace ese PanResponder interno de fiber
+          en cuanto detecta el primer toque), esa view se queda con el toque y el GestureDetector
+          (que usa un sistema nativo distinto, gesture-handler) nunca llega a reconocer el gesto
+          — esto es un problema documentado y conocido de usar GestureDetector como ANCESTRO de
+          un <Canvas> de r3f (ver pmndrs/react-three-fiber#3332: "react-native gesture responders
+          can't be nested"). Ya se probó desactivar esa View interna con pointerEvents="none" (no
+          alcanza: pointerEvents="none" no saca a la view de la negociación del responder, solo
+          evita que ESA view en particular reciba el toque directamente) y no funcionó en un build
+          real. La solución robusta es que el GestureDetector tenga su PROPIA superficie táctil,
+          sin ningún descendiente nativo que compita por el responder: una View vacía y
+          transparente, posicionada encima del Canvas. Como está encima en el orden de dibujado,
+          Android le entrega el toque a ELLA primero y el Canvas/GLView de abajo nunca llega a
+          participar. */}
+      <Canvas
+        camera={{ fov: 55, near: 0.05, far: 1000 }}
+        gl={{ antialias: true }}
+        onCreated={() => setError('')}
+        pointerEvents="none"
+      >
+        <color attach="background" args={['#e8e8e8']} />
+        {/* Iluminación pensada para que ninguna cara del modelo quede oscura sin importar
+            cómo se rote: luz ambiental fuerte como base pareja, varias luces direccionales
+            fijas desde distintos ángulos, y una luz extra que acompaña a la cámara. */}
+        <ambientLight intensity={1.1} />
+        <hemisphereLight args={['#ffffff', '#666666', 0.6]} />
+        <directionalLight position={[0, 10, 0]} intensity={0.7} />
+        <directionalLight position={[5, 5, 10]} intensity={0.6} />
+        <directionalLight position={[-5, 3, -10]} intensity={0.5} />
+        <directionalLight position={[-10, 4, 0]} intensity={0.4} />
+        <pointLight ref={luzCamaraRef} intensity={0.6} />
+
+        <ControladorCamara camState={camState} camaraRef={camaraRef} luzCamaraRef={luzCamaraRef} />
+
+        <LimiteDeError
+          onError={() => {
+            setError('No se pudo abrir este archivo. Verifica que sea un .glb válido.');
+            setCargando(false);
           }}
         >
-          <Canvas
-            camera={{ fov: 55, near: 0.05, far: 1000 }}
-            gl={{ antialias: true }}
-            onCreated={() => setError('')}
-            // pointerEvents="none": @react-three/fiber/native monta, SIEMPRE y sin importar
-            // el prop `events`, una View interna con su propio PanResponder de React Native
-            // clásico (no gesture-handler) encima del GLView, pensada para poder usar
-            // onPointerDown/onClick sobre objetos 3D. Esa View captura el toque ANTES de que
-            // el GestureDetector (react-native-gesture-handler) que envuelve este <Canvas> por
-            // fuera pueda reconocer el gesto — por eso rotar/mover/zoom/medir no respondían
-            // aunque el modelo cargara y se viera bien. Esta app no usa eventos de puntero de
-            // R3F sobre los objetos (el "medir" se hace con raycasting manual desde el toque
-            // capturado por gesture-handler), así que es seguro desactivar esa View por completo.
-            pointerEvents="none"
-          >
-            <color attach="background" args={['#e8e8e8']} />
-            {/* Iluminación pensada para que ninguna cara del modelo quede oscura sin importar
-                cómo se rote: luz ambiental fuerte como base pareja, varias luces direccionales
-                fijas desde distintos ángulos, y una luz extra que acompaña a la cámara. */}
-            <ambientLight intensity={1.1} />
-            <hemisphereLight args={['#ffffff', '#666666', 0.6]} />
-            <directionalLight position={[0, 10, 0]} intensity={0.7} />
-            <directionalLight position={[5, 5, 10]} intensity={0.6} />
-            <directionalLight position={[-5, 3, -10]} intensity={0.5} />
-            <directionalLight position={[-10, 4, 0]} intensity={0.4} />
-            <pointLight ref={luzCamaraRef} intensity={0.6} />
+          <Suspense fallback={null}>
+            <Modelo
+              uri={uri}
+              camState={camState}
+              escenaRef={escenaRef}
+              modeloRef={modeloRef}
+              listoParaposicionarRef={listoParaposicionarRef}
+              onCargado={() => setCargando(false)}
+            />
+          </Suspense>
+        </LimiteDeError>
+      </Canvas>
 
-            <ControladorCamara camState={camState} camaraRef={camaraRef} luzCamaraRef={luzCamaraRef} />
-
-            <LimiteDeError
-              onError={() => {
-                setError('No se pudo abrir este archivo. Verifica que sea un .glb válido.');
-                setCargando(false);
-              }}
-            >
-              <Suspense fallback={null}>
-                <Modelo
-                  uri={uri}
-                  camState={camState}
-                  escenaRef={escenaRef}
-                  modeloRef={modeloRef}
-                  listoParaposicionarRef={listoParaposicionarRef}
-                  onCargado={() => setCargando(false)}
-                />
-              </Suspense>
-            </LimiteDeError>
-          </Canvas>
-        </View>
+      {/* Superficie táctil real: View vacía, absoluta, encima del Canvas, sin ningún hijo
+          nativo propio (nada que pueda volverse "responder" y competir con gesture-handler).
+          El GestureDetector se ancla A ESTA VIEW, no al Canvas. */}
+      <GestureDetector gesture={gestoCompuesto}>
+        <View style={StyleSheet.absoluteFill} collapsable={false} />
       </GestureDetector>
 
       {cargando && (
