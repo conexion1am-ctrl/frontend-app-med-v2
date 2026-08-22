@@ -752,25 +752,26 @@ export default function AreaProyectoScreen({ route }) {
             <Text style={styles.vacioTexto}>Aún no hay fotos de avance. Toca "+ Foto" para agregar la primera.</Text>
           ) : (
             <FlatList
-              key="galeria-fotos-3-columnas"
               data={fotos}
               keyExtractor={(item) => item.id.toString()}
-              numColumns={3}
-              contentContainerStyle={styles.galeriaLista}
+              contentContainerStyle={styles.lista}
               renderItem={({ item }) => (
                 <TouchableOpacity
-                  style={styles.fotoMiniaturaContainer}
+                  style={styles.fotoFila}
                   onPress={() => setFotoAmpliada(item)}
                   onLongPress={() => setMenuFoto(item)}
                 >
-                  <View style={styles.fotoMiniatura}>
-                    <Image source={{ uri: item.foto_url }} style={styles.fotoMiniaturaImagen} />
+                  <Image source={{ uri: item.foto_url }} style={styles.fotoFilaMiniatura} />
+                  <View style={{ flex: 1 }}>
+                    {/* Si el usuario no puso descripción al subir la foto (lo más común), se
+                        muestra "Foto de avance" como título genérico, igual que pidió el
+                        usuario: nombre/descripción arriba, fecha y hora debajo. */}
+                    <Text style={styles.personaNombre} numberOfLines={1}>
+                      {item.descripcion?.trim() || 'Foto de avance'}
+                    </Text>
+                    <Text style={styles.personaSubtexto}>{formatearFechaHora(item.created_at)}</Text>
                   </View>
-                  {/* Fecha y hora visibles directamente en la cuadrícula, sin tener que entrar a
-                      la foto — a pedido del usuario, mismo dato que ya se ve en Planos 3D. */}
-                  <Text style={styles.fotoMiniaturaFecha} numberOfLines={1}>
-                    {formatearFechaHora(item.created_at)}
-                  </Text>
+                  <Text style={styles.personaFlecha}>›</Text>
                 </TouchableOpacity>
               )}
             />
@@ -853,16 +854,9 @@ export default function AreaProyectoScreen({ route }) {
                   {fotoAmpliada.usuario_nombre} · {formatearFechaHora(fotoAmpliada.created_at)}
                 </Text>
                 {guardandoFoto && <ActivityIndicator color="#fff" style={{ marginTop: 10 }} />}
-                {/* El botón "Eliminar" que vivía aquí se movió a un menú de mantener-presionado
-                    en la cuadrícula de miniaturas (mismo patrón que Planos 3D y Proyectos). */}
-                <View style={styles.fotoAmpliadaBotones}>
-                  <TouchableOpacity style={styles.fotoAmpliadaBoton} onPress={() => descargarFoto(fotoAmpliada)} disabled={guardandoFoto}>
-                    <Text style={styles.fotoAmpliadaBotonTexto}>⬇️ Descargar</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.fotoAmpliadaBoton} onPress={() => compartirFoto(fotoAmpliada)} disabled={guardandoFoto}>
-                    <Text style={styles.fotoAmpliadaBotonTexto}>📤 Compartir</Text>
-                  </TouchableOpacity>
-                </View>
+                {/* Eliminar, Descargar y Compartir se movieron al menú de mantener-presionado en
+                    la lista (mismo patrón que Planos 3D y Proyectos) — esta pantalla ampliada
+                    solo sirve para ver la foto en grande y hacer zoom. */}
                 <TouchableOpacity style={styles.fotoAmpliadaCerrar} onPress={() => setFotoAmpliada(null)}>
                   <Text style={styles.fotoAmpliadaBotonTexto}>Cerrar</Text>
                 </TouchableOpacity>
@@ -922,6 +916,26 @@ export default function AreaProyectoScreen({ route }) {
         <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={cerrarMenuFoto}>
           <View style={styles.menuBox}>
             <Text style={styles.menuTitulo}>Foto de avance</Text>
+            <TouchableOpacity
+              style={styles.menuOpcion}
+              onPress={() => {
+                const foto = menuFoto;
+                cerrarMenuFoto();
+                descargarFoto(foto);
+              }}
+            >
+              <Text style={styles.menuOpcionTexto}>⬇️  Descargar</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.menuOpcion}
+              onPress={() => {
+                const foto = menuFoto;
+                cerrarMenuFoto();
+                compartirFoto(foto);
+              }}
+            >
+              <Text style={styles.menuOpcionTexto}>📤  Compartir</Text>
+            </TouchableOpacity>
             <TouchableOpacity
               style={styles.menuOpcion}
               onPress={() => {
@@ -1179,17 +1193,22 @@ const styles = StyleSheet.create({
   tabBotonActivo: { borderBottomColor: '#1E90FF' },
   tabBotonTexto: { fontSize: 14, color: '#888', fontWeight: '600' },
   tabBotonTextoActivo: { color: '#1E90FF' },
-  galeriaLista: { padding: 8 },
-  fotoMiniaturaContainer: { flex: 1 / 3, margin: 4 },
-  fotoMiniatura: { aspectRatio: 1, borderRadius: 8, overflow: 'hidden', backgroundColor: '#eee' },
-  fotoMiniaturaImagen: { width: '100%', height: '100%' },
-  fotoMiniaturaFecha: { fontSize: 10, color: '#666', marginTop: 3, textAlign: 'center' },
+  fotoFila: {
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#eee',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  fotoFilaMiniatura: { width: 56, height: 56, borderRadius: 8, backgroundColor: '#eee' },
   fotoAmpliadaOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'center', alignItems: 'center', padding: 16 },
   fotoAmpliadaImagenContainer: { width: '100%', height: '62%', overflow: 'hidden' },
   fotoAmpliadaAyuda: { color: 'rgba(255,255,255,0.6)', fontSize: 11, marginTop: 10, textAlign: 'center' },
   fotoAmpliadaInfo: { color: '#fff', fontSize: 13, marginTop: 6, textAlign: 'center' },
-  fotoAmpliadaBotones: { flexDirection: 'row', gap: 10, marginTop: 20, flexWrap: 'wrap', justifyContent: 'center' },
-  fotoAmpliadaBoton: { backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 8, paddingVertical: 10, paddingHorizontal: 14 },
   fotoAmpliadaBotonTexto: { color: '#fff', fontSize: 14, fontWeight: '600' },
   fotoAmpliadaCerrar: { marginTop: 16, paddingVertical: 10, paddingHorizontal: 24, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)' },
   plano3dModalContainer: { flex: 1, backgroundColor: '#1c1c1c' },
