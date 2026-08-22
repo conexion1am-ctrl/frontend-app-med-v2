@@ -72,6 +72,10 @@ export default function EstadisticasScreen({ route }) {
   const [abonoValor, setAbonoValor] = useState('');
   const [abonoFecha, setAbonoFecha] = useState('');
   const [guardandoAbono, setGuardandoAbono] = useState(false);
+  const [abonoEditandoId, setAbonoEditandoId] = useState(null); // si no es null, el modal edita en vez de crear
+
+  // Menú (Editar / Eliminar) al mantener presionado un abono.
+  const [menuAbono, setMenuAbono] = useState(null);
 
   // Categoría actualmente abierta (ej. "Carpintería"): cuando no es null, en vez del resumen
   // general se muestra solo el historial de costos de esa categoría, para no mezclar todo en
@@ -210,7 +214,12 @@ export default function EstadisticasScreen({ route }) {
       id: mov.id,
       tipo: mov.tipo,
       detalle: mov.detalle || '',
-      valor: String(mov.valor),
+      // mov.valor viene del backend como string de Postgres con decimales (ej. "500000.00",
+      // porque la columna es DECIMAL). Si se pasara tal cual a InputMoneda, quitarPuntosDeMiles
+      // solo borra el punto y dejaría "50000000" (el .00 se pega al número) — dos ceros de más,
+      // multiplicando el valor real por 100. Math.round(parseFloat(...)) descarta los decimales
+      // antes de convertir a texto, dejando el número entero real.
+      valor: String(Math.round(parseFloat(mov.valor) || 0)),
       fecha: formatearFecha(mov.fecha), // ya viene en DD-MM-AA
       categoria_id: mov.categoria_id || null,
     });
@@ -268,9 +277,43 @@ export default function EstadisticasScreen({ route }) {
   };
 
   const abrirModalAbono = () => {
+    setAbonoEditandoId(null);
     setAbonoValor('');
     setAbonoFecha(fechaHoyDdMmAa());
     setModalAbonoVisible(true);
+  };
+
+  // Abre el mismo modal de abono, pero precargado para EDITAR uno ya existente (por ejemplo, el
+  // cliente dice que abonó $1.500.000 y por error se había ingresado $2.000.000).
+  const abrirEditarAbono = (abono) => {
+    setAbonoEditandoId(abono.id);
+    // abono.valor viene del backend como DECIMAL (string con ".00"), igual que en los costos —
+    // se redondea para no arrastrar el mismo bug de "dos ceros de más" en InputMoneda.
+    setAbonoValor(String(Math.round(parseFloat(abono.valor) || 0)));
+    setAbonoFecha(formatearFecha(abono.fecha));
+    setModalAbonoVisible(true);
+  };
+
+  const abrirMenuAbono = (abono) => setMenuAbono(abono);
+  const cerrarMenuAbono = () => setMenuAbono(null);
+
+  const eliminarAbono = (abono) => {
+    Alert.alert('Eliminar abono', '¿Seguro que quieres eliminar este abono? Esta acción no se puede deshacer.', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Eliminar',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await axios.delete(`https://backend-app-mediterraneo.onrender.com/api/estadisticas/abono/${abono.id}`);
+            seleccionarProyecto(proyectoSeleccionado);
+          } catch (error) {
+            console.error('Error eliminando abono:', error);
+            Alert.alert('Error', 'No se pudo eliminar el abono.');
+          }
+        },
+      },
+    ]);
   };
 
   const registrarAbono = async () => {
@@ -285,11 +328,19 @@ export default function EstadisticasScreen({ route }) {
     }
     setGuardandoAbono(true);
     try {
-      await axios.post(`https://backend-app-mediterraneo.onrender.com/api/estadisticas/${proyectoSeleccionado.id}/abono`, {
-        valor: parseFloat(abonoValor),
-        fecha: fechaIso,
-      });
+      if (abonoEditandoId) {
+        await axios.put(`https://backend-app-mediterraneo.onrender.com/api/estadisticas/abono/${abonoEditandoId}`, {
+          valor: parseFloat(abonoValor),
+          fecha: fechaIso,
+        });
+      } else {
+        await axios.post(`https://backend-app-mediterraneo.onrender.com/api/estadisticas/${proyectoSeleccionado.id}/abono`, {
+          valor: parseFloat(abonoValor),
+          fecha: fechaIso,
+        });
+      }
       setModalAbonoVisible(false);
+      setAbonoEditandoId(null);
       setAbonoValor('');
       setAbonoFecha('');
       seleccionarProyecto(proyectoSeleccionado);
@@ -507,10 +558,15 @@ export default function EstadisticasScreen({ route }) {
                 <Text style={styles.vacioTexto}>Aún no hay abonos registrados.</Text>
               ) : (
                 estadisticas.abonos.map((abono) => (
-                  <View key={abono.id} style={styles.abonoCard}>
+                  <TouchableOpacity
+                    key={abono.id}
+                    style={styles.abonoCard}
+                    onLongPress={() => abrirMenuAbono(abono)}
+                    delayLongPress={350}
+                  >
                     <Text style={styles.abonoValor}>{formatearMoneda(abono.valor)}</Text>
                     <Text style={styles.abonoFecha}>{formatearFecha(abono.fecha)}</Text>
-                  </View>
+                  </TouchableOpacity>
                 ))
               )}
               <TouchableOpacity style={styles.botonSecundario} onPress={abrirModalAbono}>
@@ -595,11 +651,11 @@ export default function EstadisticasScreen({ route }) {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* MODAL: Registrar abono */}
+      {/* MODAL: Registrar / Editar abono */}
       <Modal visible={modalAbonoVisible} animationType="slide">
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <ScrollView style={styles.modalContainer} contentContainerStyle={{ padding: 20, paddingBottom: 60 }}>
-            <Text style={styles.modalTitulo}>Registrar Abono</Text>
+            <Text style={styles.modalTitulo}>{abonoEditandoId ? 'Editar Abono' : 'Registrar Abono'}</Text>
 
             <Text style={styles.label}>Valor *</Text>
             <InputMoneda style={styles.input} value={abonoValor} onChangeValor={setAbonoValor} />
@@ -615,13 +671,54 @@ export default function EstadisticasScreen({ route }) {
             />
 
             <TouchableOpacity style={styles.botonGuardar} onPress={registrarAbono} disabled={guardandoAbono}>
-              {guardandoAbono ? <ActivityIndicator color="#fff" /> : <Text style={styles.botonGuardarTexto}>REGISTRAR</Text>}
+              {guardandoAbono ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.botonGuardarTexto}>{abonoEditandoId ? 'GUARDAR CAMBIOS' : 'REGISTRAR'}</Text>
+              )}
             </TouchableOpacity>
-            <TouchableOpacity style={styles.botonCancelar} onPress={() => setModalAbonoVisible(false)}>
+            <TouchableOpacity
+              style={styles.botonCancelar}
+              onPress={() => {
+                setModalAbonoVisible(false);
+                setAbonoEditandoId(null);
+              }}
+            >
               <Text style={styles.botonCancelarTexto}>Cancelar</Text>
             </TouchableOpacity>
           </ScrollView>
         </KeyboardAvoidingView>
+      </Modal>
+
+      {/* MENÚ: Editar / Eliminar, al mantener presionado un abono */}
+      <Modal visible={!!menuAbono} transparent animationType="fade" onRequestClose={cerrarMenuAbono}>
+        <TouchableOpacity style={styles.menuFondo} activeOpacity={1} onPress={cerrarMenuAbono}>
+          <View style={styles.menuCaja}>
+            <TouchableOpacity
+              style={styles.menuOpcion}
+              onPress={() => {
+                const abono = menuAbono;
+                cerrarMenuAbono();
+                abrirEditarAbono(abono);
+              }}
+            >
+              <Text style={styles.menuOpcionTexto}>✏️ Editar</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.menuOpcion}
+              onPress={() => {
+                const abono = menuAbono;
+                cerrarMenuAbono();
+                eliminarAbono(abono);
+              }}
+            >
+              <Text style={[styles.menuOpcionTexto, { color: '#c62828' }]}>🗑️ Eliminar</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.menuOpcion} onPress={cerrarMenuAbono}>
+              <Text style={styles.menuOpcionTexto}>Cancelar</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
       </Modal>
 
       {/* MENÚ: Editar / Eliminar, al mantener presionado un movimiento de costo */}
