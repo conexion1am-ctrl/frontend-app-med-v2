@@ -98,11 +98,37 @@ export default function AreaProyectoScreen({ route }) {
   const [cargandoFotos, setCargandoFotos] = useState(false);
   const [subiendoFoto, setSubiendoFoto] = useState(false);
   const [fotoAmpliada, setFotoAmpliada] = useState(null);
+  // Menú al mantener presionada una miniatura en la cuadrícula de fotos de avance (reemplaza
+  // el botón "Eliminar" que antes vivía dentro de la vista ampliada).
+  const [menuFoto, setMenuFoto] = useState(null);
+  const cerrarMenuFoto = () => setMenuFoto(null);
+
+  // Menú al mantener presionado un mensaje propio en el chat (solo se puede eliminar lo que
+  // uno mismo envió — el backend también valida esto, así que aunque alguien manipulara la
+  // app no podría borrar mensajes ajenos).
+  const [menuMensaje, setMenuMensaje] = useState(null);
+  const cerrarMenuMensaje = () => setMenuMensaje(null);
+  const eliminarMensaje = async (mensaje) => {
+    try {
+      await axios.delete(`https://backend-app-mediterraneo.onrender.com/api/mensajes/${mensaje.id}`, {
+        data: { usuario_id: usuario.id },
+      });
+      setMensajes((anteriores) => anteriores.filter((m) => m.id !== mensaje.id));
+    } catch (error) {
+      console.error('Error eliminando mensaje:', error);
+      Alert.alert('Error', 'No se pudo eliminar el mensaje.');
+    }
+  };
 
   const [planos3d, setPlanos3d] = useState([]);
   const [cargandoPlanos3d, setCargandoPlanos3d] = useState(false);
   const [subiendoPlano3d, setSubiendoPlano3d] = useState(false);
   const [plano3dAbierto, setPlano3dAbierto] = useState(null);
+  // Menú de opciones al mantener presionado un plano 3D en la lista (reemplaza el botón
+  // "Eliminar" que antes vivía dentro del visor — ahora se elimina desde la lista, sin
+  // necesidad de entrar al modelo primero).
+  const [menuPlano3d, setMenuPlano3d] = useState(null);
+  const cerrarMenuPlano3d = () => setMenuPlano3d(null);
 
   useEffect(() => {
     cargarEquipo();
@@ -684,7 +710,11 @@ export default function AreaProyectoScreen({ route }) {
               numColumns={3}
               contentContainerStyle={styles.galeriaLista}
               renderItem={({ item }) => (
-                <TouchableOpacity style={styles.fotoMiniatura} onPress={() => setFotoAmpliada(item)}>
+                <TouchableOpacity
+                  style={styles.fotoMiniatura}
+                  onPress={() => setFotoAmpliada(item)}
+                  onLongPress={() => setMenuFoto(item)}
+                >
                   <Image source={{ uri: item.foto_url }} style={styles.fotoMiniaturaImagen} />
                 </TouchableOpacity>
               )}
@@ -736,7 +766,11 @@ export default function AreaProyectoScreen({ route }) {
               keyExtractor={(item) => item.id.toString()}
               contentContainerStyle={styles.lista}
               renderItem={({ item }) => (
-                <TouchableOpacity style={styles.personaCard} onPress={() => setPlano3dAbierto(item)}>
+                <TouchableOpacity
+                  style={styles.personaCard}
+                  onPress={() => setPlano3dAbierto(item)}
+                  onLongPress={() => permisos.gestionarPlanos3d && setMenuPlano3d(item)}
+                >
                   <View style={{ flex: 1 }}>
                     <Text style={styles.personaNombre}>{item.nombre}</Text>
                     <Text style={styles.personaSubtexto}>
@@ -764,15 +798,14 @@ export default function AreaProyectoScreen({ route }) {
                   {fotoAmpliada.usuario_nombre} · {formatearFechaFoto(fotoAmpliada.created_at)}
                 </Text>
                 {guardandoFoto && <ActivityIndicator color="#fff" style={{ marginTop: 10 }} />}
+                {/* El botón "Eliminar" que vivía aquí se movió a un menú de mantener-presionado
+                    en la cuadrícula de miniaturas (mismo patrón que Planos 3D y Proyectos). */}
                 <View style={styles.fotoAmpliadaBotones}>
                   <TouchableOpacity style={styles.fotoAmpliadaBoton} onPress={() => descargarFoto(fotoAmpliada)} disabled={guardandoFoto}>
                     <Text style={styles.fotoAmpliadaBotonTexto}>⬇️ Descargar</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.fotoAmpliadaBoton} onPress={() => compartirFoto(fotoAmpliada)} disabled={guardandoFoto}>
                     <Text style={styles.fotoAmpliadaBotonTexto}>📤 Compartir</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.fotoAmpliadaBoton} onPress={() => confirmarEliminarFoto(fotoAmpliada)}>
-                    <Text style={styles.fotoAmpliadaBotonTexto}>🗑️ Eliminar</Text>
                   </TouchableOpacity>
                 </View>
                 <TouchableOpacity style={styles.fotoAmpliadaCerrar} onPress={() => setFotoAmpliada(null)}>
@@ -799,17 +832,77 @@ export default function AreaProyectoScreen({ route }) {
                 <Text style={styles.chatVolver}>‹ Volver</Text>
               </TouchableOpacity>
               <Text style={styles.chatTitulo} numberOfLines={1}>{plano3dAbierto?.nombre}</Text>
-              {permisos.gestionarPlanos3d ? (
-                <TouchableOpacity onPress={() => confirmarEliminarPlano3d(plano3dAbierto)}>
-                  <Text style={styles.plano3dEliminarTexto}>Eliminar</Text>
-                </TouchableOpacity>
-              ) : (
-                <View style={{ width: 60 }} />
-              )}
+              {/* El botón "Eliminar" que vivía aquí se movió a un menú de mantener-presionado
+                  en la lista de planos 3D (mismo patrón que Proyectos), para no tener que
+                  entrar al modelo primero solo para borrarlo. Este espacio vacío mantiene el
+                  título centrado, igual que antes. */}
+              <View style={{ width: 60 }} />
             </View>
             {plano3dAbierto && <Visor3D uri={plano3dAbierto.url_glb} />}
           </View>
         </GestureHandlerRootView>
+      </Modal>
+
+      <Modal visible={!!menuPlano3d} animationType="fade" transparent>
+        <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={cerrarMenuPlano3d}>
+          <View style={styles.menuBox}>
+            <Text style={styles.menuTitulo}>{menuPlano3d?.nombre}</Text>
+            <TouchableOpacity
+              style={styles.menuOpcion}
+              onPress={() => {
+                cerrarMenuPlano3d();
+                confirmarEliminarPlano3d(menuPlano3d);
+              }}
+            >
+              <Text style={[styles.menuOpcionTexto, { color: '#DC143C' }]}>🗑️  Eliminar</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.menuOpcion} onPress={cerrarMenuPlano3d}>
+              <Text style={[styles.menuOpcionTexto, { color: '#888' }]}>Cancelar</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      <Modal visible={!!menuFoto} animationType="fade" transparent>
+        <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={cerrarMenuFoto}>
+          <View style={styles.menuBox}>
+            <Text style={styles.menuTitulo}>Foto de avance</Text>
+            <TouchableOpacity
+              style={styles.menuOpcion}
+              onPress={() => {
+                const foto = menuFoto;
+                cerrarMenuFoto();
+                confirmarEliminarFoto(foto);
+              }}
+            >
+              <Text style={[styles.menuOpcionTexto, { color: '#DC143C' }]}>🗑️  Eliminar</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.menuOpcion} onPress={cerrarMenuFoto}>
+              <Text style={[styles.menuOpcionTexto, { color: '#888' }]}>Cancelar</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      <Modal visible={!!menuMensaje} animationType="fade" transparent>
+        <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={cerrarMenuMensaje}>
+          <View style={styles.menuBox}>
+            <Text style={styles.menuTitulo}>Mensaje</Text>
+            <TouchableOpacity
+              style={styles.menuOpcion}
+              onPress={() => {
+                const mensaje = menuMensaje;
+                cerrarMenuMensaje();
+                eliminarMensaje(mensaje);
+              }}
+            >
+              <Text style={[styles.menuOpcionTexto, { color: '#DC143C' }]}>🗑️  Eliminar</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.menuOpcion} onPress={cerrarMenuMensaje}>
+              <Text style={[styles.menuOpcionTexto, { color: '#888' }]}>Cancelar</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
       </Modal>
 
       <Modal visible={modalAsignarVisible} animationType="slide">
@@ -873,7 +966,11 @@ export default function AreaProyectoScreen({ route }) {
                 style={styles.chatLista}
                 contentContainerStyle={{ padding: 16 }}
                 renderItem={({ item }) => (
-                  <View style={styles.mensajeCard}>
+                  <TouchableOpacity
+                    activeOpacity={item.usuario_id === usuario.id ? 0.6 : 1}
+                    onLongPress={() => item.usuario_id === usuario.id && setMenuMensaje(item)}
+                    style={styles.mensajeCard}
+                  >
                     <Text style={styles.mensajeAutor}>{item.usuario_nombre}</Text>
                     {item.archivos?.map((archivo) =>
                       archivo.tipo_archivo === 'imagen' ? (
@@ -889,7 +986,7 @@ export default function AreaProyectoScreen({ route }) {
                       )
                     )}
                     {!!item.contenido && <Text style={styles.mensajeTexto}>{item.contenido}</Text>}
-                  </View>
+                  </TouchableOpacity>
                 )}
                 ListEmptyComponent={<Text style={styles.vacioTexto}>Sin mensajes todavía. Escribe el primero.</Text>}
               />
@@ -1047,5 +1144,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
   },
-  plano3dEliminarTexto: { color: '#DC143C', fontSize: 14, fontWeight: '600' },
+  menuOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
+  menuBox: { backgroundColor: '#fff', borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 20, paddingBottom: 34 },
+  menuTitulo: { fontSize: 15, fontWeight: 'bold', color: '#222', marginBottom: 14, textAlign: 'center' },
+  menuOpcion: { paddingVertical: 14, borderTopWidth: 1, borderTopColor: '#f0f0f0' },
+  menuOpcionTexto: { fontSize: 16, color: '#333', textAlign: 'center' },
 });

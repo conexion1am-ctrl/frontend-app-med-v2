@@ -1,7 +1,7 @@
 import { useGLTF } from '@react-three/drei/native';
 import { Canvas, useFrame, useThree } from '@react-three/fiber/native';
 import React, { Suspense, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import * as THREE from 'three';
 
@@ -76,7 +76,46 @@ function ControladorCamara({ camState, camaraRef, luzCamaraRef }) {
 // useEffect (no directamente en el cuerpo del componente, que se ejecutaría en cada render y
 // podría re-centrar el modelo mientras el usuario lo está rotando/moviendo). También definido a
 // nivel de módulo por el mismo motivo que ControladorCamara.
-function Modelo({ uri, camState, escenaRef, modeloRef, listoParaposicionarRef, onCargado }) {
+// Agrega, a cada Mesh del modelo, una línea de contorno (EdgesGeometry) que resalta solo las
+// aristas donde el ángulo entre caras vecinas es pronunciado (>35°) — es decir, exactamente las
+// uniones reales entre piezas (donde termina una tabla y empieza otra), no cualquier textura o
+// sombra de la superficie. threshold más alto = solo esquinas "duras" reales, ignora curvas
+// suaves. Se recorre una sola vez, cuando el modelo termina de cargar.
+function agregarContornosDePiezas(raiz) {
+  const meshesAProcesar = [];
+  raiz.traverse((nodo) => {
+    if (nodo.isMesh && nodo.geometry) meshesAProcesar.push(nodo);
+  });
+
+  meshesAProcesar.forEach((mesh) => {
+    const geometriaBordes = new THREE.EdgesGeometry(mesh.geometry, 35);
+    const material = new THREE.LineBasicMaterial({
+      color: 0x000000,
+      transparent: true,
+      opacity: 0.35, // sutil: se nota la unión entre piezas, sin verse como un dibujo caricaturesco
+    });
+    const lineas = new THREE.LineSegments(geometriaBordes, material);
+    lineas.renderOrder = 1; // dibujar después de la pieza, encima, para que no quede tapado
+    mesh.add(lineas);
+  });
+}
+
+// Lee los hijos DIRECTOS de la escena cargada (los grupos/componentes tal como se llamaron al
+// exportar desde SketchUp, ej. "Cajon 1", "Cajon 2", "Estructura") y arma la lista que se
+// muestra en el panel de Mostrar/Ocultar. Si el .glb no trae nombres reales (todo suelto sin
+// agrupar), cae de vuelta a listar cada Mesh individual para que el panel no quede vacío.
+function detectarComponentes(scene) {
+  const candidatos = scene.children.filter((hijo) => hijo.type !== 'Object3D' || hijo.children.length > 0);
+  const base = candidatos.length > 0 ? candidatos : scene.children;
+
+  return base.map((nodo, indice) => ({
+    id: nodo.uuid,
+    nombre: nodo.name && nodo.name.trim() ? nodo.name : `Pieza ${indice + 1}`,
+    nodo,
+  }));
+}
+
+function Modelo({ uri, camState, escenaRef, modeloRef, listoParaposicionarRef, onCargado, onComponentesDetectados }) {
   const { scene } = useGLTF(uri);
   const { scene: escenaThree } = useThree();
 
@@ -93,6 +132,9 @@ function Modelo({ uri, camState, escenaRef, modeloRef, listoParaposicionarRef, o
       camState.current.centro = new THREE.Vector3(0, 0, 0);
       camState.current.radio = dimensionMax * 1.6;
       listoParaposicionarRef.current = true;
+
+      agregarContornosDePiezas(scene);
+      onComponentesDetectados(detectarComponentes(scene));
     }
 
     modeloRef.current = scene;
@@ -112,6 +154,21 @@ export default function Visor3D({ uri }) {
   const [puntosMedicion, setPuntosMedicion] = useState([]); // hasta 2 puntos THREE.Vector3
   const [distanciaMedida, setDistanciaMedida] = useState(null);
   const modoMedirRef = useRef(false); // espejo síncrono de modoMedir, legible dentro de los gestos
+
+  // Lista de piezas/componentes detectados en el modelo (para el panel de Mostrar/Ocultar) y
+  // el set de ids actualmente OCULTOS (todo empieza visible, por eso el set arranca vacío).
+  const [componentes, setComponentes] = useState([]); // [{ id, nombre, nodo }]
+  const [ocultos, setOcultos] = useState(() => new Set());
+  const [panelAbierto, setPanelAbierto] = useState(false);
+
+  const alternarVisibilidadComponente = (id) => {
+    setOcultos((anteriores) => {
+      const nuevos = new Set(anteriores);
+      if (nuevos.has(id)) nuevos.delete(id);
+      else nuevos.add(id);
+      return nuevos;
+    });
+  };
 
   const camaraRef = useRef(null);
   const escenaRef = useRef(null);
@@ -287,6 +344,17 @@ export default function Visor3D({ uri }) {
     });
   };
 
+  // Aplica la visibilidad real en Three.js cada vez que el usuario oculta/muestra una pieza
+  // desde el panel. No se quita del modelo (eso perdería la referencia), solo se marca
+  // node.visible = false, que Three.js respeta al dibujar cada frame.
+  useEffect(() => {
+    componentes.forEach(({ id, nodo }) => {
+      nodo.visible = !ocultos.has(id);
+    });
+  }, [ocultos, componentes]);
+
+  const mostrarTodo = () => setOcultos(new Set());
+
   return (
     <View
       style={{ flex: 1 }}
@@ -330,7 +398,11 @@ export default function Visor3D({ uri }) {
         <directionalLight position={[5, 5, 10]} intensity={0.6} />
         <directionalLight position={[-5, 3, -10]} intensity={0.5} />
         <directionalLight position={[-10, 4, 0]} intensity={0.4} />
-        <pointLight ref={luzCamaraRef} intensity={0.6} />
+        {/* Reducida de 0.6 a 0.24 (-60%): de cerca, esta luz "pegaba" tan fuerte sobre la
+            superficie que la saturaba de blanco y no dejaba ver el detalle de las uniones
+            entre piezas. El decay/distance ayudan a que se atenúe de forma natural con la
+            cercanía, en vez de mantener la misma fuerza sin importar qué tan cerca esté. */}
+        <pointLight ref={luzCamaraRef} intensity={0.24} distance={20} decay={1.5} />
 
         <ControladorCamara camState={camState} camaraRef={camaraRef} luzCamaraRef={luzCamaraRef} />
 
@@ -348,6 +420,7 @@ export default function Visor3D({ uri }) {
               modeloRef={modeloRef}
               listoParaposicionarRef={listoParaposicionarRef}
               onCargado={() => setCargando(false)}
+              onComponentesDetectados={setComponentes}
             />
           </Suspense>
         </LimiteDeError>
@@ -387,7 +460,45 @@ export default function Visor3D({ uri }) {
                 📏 {modoMedir ? 'Midiendo' : 'Medir'}
               </Text>
             </TouchableOpacity>
+            {componentes.length > 1 && (
+              <TouchableOpacity
+                style={[styles.botonChico, panelAbierto && styles.botonChicoActivo]}
+                onPress={() => setPanelAbierto((actual) => !actual)}
+              >
+                <Text style={[styles.botonChicoTexto, panelAbierto && styles.botonChicoTextoActivo]}>
+                  🧩 Piezas{ocultos.size > 0 ? ` (${ocultos.size} oculta${ocultos.size > 1 ? 's' : ''})` : ''}
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
+
+          {panelAbierto && (
+            <View style={styles.panelPiezas}>
+              <View style={styles.panelPiezasCabecera}>
+                <Text style={styles.panelPiezasTitulo}>Mostrar / ocultar piezas</Text>
+                {ocultos.size > 0 && (
+                  <TouchableOpacity onPress={mostrarTodo}>
+                    <Text style={styles.panelPiezasMostrarTodo}>Mostrar todo</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+              <ScrollView style={styles.panelPiezasLista}>
+                {componentes.map(({ id, nombre }) => (
+                  <View key={id} style={styles.panelPiezaFila}>
+                    <Text style={styles.panelPiezaNombre} numberOfLines={1}>
+                      {nombre}
+                    </Text>
+                    <Switch
+                      value={!ocultos.has(id)}
+                      onValueChange={() => alternarVisibilidadComponente(id)}
+                      trackColor={{ false: '#555', true: '#1E90FF' }}
+                      thumbColor="#fff"
+                    />
+                  </View>
+                ))}
+              </ScrollView>
+            </View>
+          )}
 
           {!modoMedir && (
             <View style={styles.avisoAyuda} pointerEvents="none">
@@ -463,4 +574,34 @@ const styles = StyleSheet.create({
   },
   avisoMedicionTexto: { color: '#fff', fontSize: 14, fontWeight: '600', textAlign: 'center' },
   avisoMedicionNota: { color: 'rgba(255,255,255,0.75)', fontSize: 11, textAlign: 'center', marginTop: 4 },
+  panelPiezas: {
+    position: 'absolute',
+    top: 56,
+    right: 10,
+    left: 10,
+    maxHeight: 260,
+    backgroundColor: 'rgba(20,20,20,0.92)',
+    borderRadius: 10,
+    padding: 10,
+  },
+  panelPiezasCabecera: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+    paddingHorizontal: 4,
+  },
+  panelPiezasTitulo: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  panelPiezasMostrarTodo: { color: '#1E90FF', fontSize: 12, fontWeight: '600' },
+  panelPiezasLista: { maxHeight: 220 },
+  panelPiezaFila: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(255,255,255,0.15)',
+  },
+  panelPiezaNombre: { color: '#fff', fontSize: 13, flex: 1, marginRight: 10 },
 });
