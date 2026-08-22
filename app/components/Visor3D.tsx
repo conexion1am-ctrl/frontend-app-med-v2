@@ -49,7 +49,7 @@ class LimiteDeError extends React.Component {
 // del <Canvas>) a la cámara real de R3F, y mueve la luz que acompaña a la cámara. Definido a
 // nivel de módulo (no dentro de Visor3D) para que React no lo trate como un componente nuevo en
 // cada render del padre, lo que forzaría un remontaje innecesario del árbol dentro del <Canvas>.
-function ControladorCamara({ camState, camaraRef, luzCamaraRef }) {
+function ControladorCamara({ camState, camaraRef, luzCamaraRef, marcadoresRef }) {
   const { camera } = useThree();
   camaraRef.current = camera;
 
@@ -64,6 +64,19 @@ function ControladorCamara({ camState, camaraRef, luzCamaraRef }) {
 
     if (luzCamaraRef.current) {
       luzCamaraRef.current.position.copy(camera.position);
+    }
+
+    // Los marcadores rojos de medición deben verse siempre del mismo tamaño EN PANTALLA, sin
+    // importar qué tan cerca o lejos esté la cámara — igual que los puntos de referencia de
+    // SketchUp. Como ahora el zoom mueve la cámara libremente (en vez de orbitar a un radio
+    // fijo), ya no hay un "radio" único que sirva para calcular su tamaño de una sola vez al
+    // crearlos: hay que reescalarlos en cada frame según su distancia real a la cámara.
+    if (marcadoresRef?.current?.length) {
+      marcadoresRef.current.forEach((esfera) => {
+        const distancia = camera.position.distanceTo(esfera.position);
+        const escala = distancia * 0.02;
+        esfera.scale.setScalar(escala);
+      });
     }
   });
 
@@ -201,17 +214,12 @@ function Modelo({ uri, camState, escenaRef, modeloRef, listoParaposicionarRef, o
       // vacío en vez de a la arista real que se ve en pantalla.
       const segmentosDeArista = agregarContornosDePiezas(scene);
       onComponentesDetectados(detectarComponentes(scene));
-      // El radio del imán es proporcional al tamaño del modelo: 1.5% de su dimensión más
-      // grande. Así funciona igual de bien en una mesa de noche chiquita que en un mueble
-      // grande, sin tener que ajustarlo a mano según el archivo.
-      //
-      // El límite mínimo de zoom también es proporcional (0.3% de la dimensión más grande),
-      // en vez de un valor fijo (0.5) pensado para un modelo "promedio" — con un valor fijo,
-      // en un mueble grande el zoom se sentía limitado mucho antes de llegar a ver el detalle
-      // de una unión entre piezas. Nunca baja de 0.08 (un poco por encima del "near" de la
-      // cámara, 0.05): si el radio de la cámara quedara más cerca que el plano de recorte
-      // cercano, el modelo empezaría a "desaparecer" en vez de seguir acercándose.
-      onAristasDetectadas(segmentosDeArista, dimensionMax * 0.015, Math.max(0.08, dimensionMax * 0.003));
+      // El radio del imán es proporcional al tamaño del modelo (3% de su dimensión más grande,
+      // subido de 1.5% porque con el dedo el toque es menos preciso que con un mouse y el imán
+      // casi no se sentía). Así funciona igual de bien en una mesa de noche chiquita que en un
+      // mueble grande, sin tener que ajustarlo a mano según el archivo. Esta misma escala
+      // también se reutiliza para calcular qué tan rápido avanza el zoom libre (ver gestoZoom).
+      onAristasDetectadas(segmentosDeArista, dimensionMax * 0.03);
     }
 
     modeloRef.current = scene;
@@ -256,11 +264,6 @@ export default function Visor3D({ uri }) {
   // el snap de medición para "imanar" el punto tocado a la arista real más cercana.
   const segmentosAristaRef = useRef([]);
   const radioImanRef = useRef(0.05);
-  // Límites de zoom (radio mínimo/máximo de la cámara), proporcionales al tamaño real del
-  // modelo — antes eran valores fijos (0.5 a 60) pensados para un modelo "promedio", así que
-  // en un mueble grande el límite mínimo se sentía como "no me deja acercar más" mucho antes
-  // de llegar a ver el detalle de una unión entre piezas.
-  const limitesZoomRef = useRef({ min: 0.05, max: 60 });
   // Tamaño EN PUNTOS del área donde se dibuja el visor, usado para convertir toques de pantalla
   // a coordenadas normalizadas para el raycasting.
   const layoutRef = useRef({ width: 1, height: 1 });
@@ -293,9 +296,13 @@ export default function Visor3D({ uri }) {
   const agregarMarcador = (punto) => {
     const escena = escenaRef.current;
     if (!escena) return;
-    const geometria = new THREE.SphereGeometry(camState.current.radio * 0.012, 12, 12);
-    const material = new THREE.MeshBasicMaterial({ color: 0xff3b30 });
+    // Geometría de radio 1: el tamaño real en pantalla lo controla ControladorCamara en cada
+    // frame (esfera.scale), recalculado según la distancia a la cámara — así el punto se ve
+    // igual de grande sin importar qué tan cerca o lejos esté el usuario del modelo.
+    const geometria = new THREE.SphereGeometry(1, 12, 12);
+    const material = new THREE.MeshBasicMaterial({ color: 0xff3b30, depthTest: false });
     const esfera = new THREE.Mesh(geometria, material);
+    esfera.renderOrder = 2; // dibujar encima del modelo y de las líneas de contorno
     esfera.position.copy(punto);
     escena.add(esfera);
     marcadoresRef.current.push(esfera);
@@ -398,16 +405,40 @@ export default function Visor3D({ uri }) {
       camState.current.centro = inicio.centro.clone().add(desplazamiento);
     });
 
+  // Zoom "libre" tipo SketchUp: en vez de acortar la distancia a un centro fijo (lo que antes
+  // topaba contra un mínimo y no dejaba pasar de cierto punto), el pellizco ahora AVANZA la
+  // cámara en línea recta, en la dirección exacta hacia la que está mirando — igual que volar
+  // un dron hacia el modelo. Esto permite acercarse hasta la superficie de una pieza e incluso
+  // atravesarla de lado a lado, sin ningún límite artificial de cercanía.
+  //
+  // Técnicamente: se mueve `centro` (el punto que la cámara mira) hacia adelante/atrás a lo
+  // largo de la dirección de vista, manteniendo `radio` fijo — como la cámara siempre se coloca
+  // a `radio` de distancia de `centro` mirando hacia él, mover `centro` hacia adelante logra el
+  // mismo efecto que "la cámara avanza", sin tener que reescribir ControladorCamara.
   const gestoZoom = Gesture.Pinch()
     .runOnJS(true)
     .onStart(() => {
       inicioGestoRef.current = { ...camState.current, centro: camState.current.centro.clone() };
+      const cam = camaraRef.current;
+      if (cam) {
+        const direccion = new THREE.Vector3();
+        cam.getWorldDirection(direccion);
+        inicioGestoRef.current.direccionZoom = direccion;
+      }
     })
     .onUpdate((evt) => {
       const inicio = inicioGestoRef.current;
-      const { min, max } = limitesZoomRef.current;
-      const nuevoRadio = Math.max(min, Math.min(max, inicio.radio / evt.scale));
-      camState.current.radio = nuevoRadio;
+      const direccion = inicio.direccionZoom;
+      if (!direccion) return;
+
+      // (evt.scale - 1) > 0 = dedos separándose = acercar (avanzar); < 0 = alejar (retroceder).
+      // La distancia que avanza es proporcional al tamaño del modelo (radioIman ya viene
+      // calculado como una fracción de la dimensión máxima del modelo, así que reutilizamos esa
+      // escala para que el zoom se sienta igual de "rápido" en un mueble chico o uno grande).
+      const escalaAvance = Math.max(radioImanRef.current * 20, 0.05);
+      const avance = (evt.scale - 1) * escalaAvance * 3;
+
+      camState.current.centro = inicio.centro.clone().addScaledVector(direccion, avance);
     });
 
   const gestoCompuesto = Gesture.Simultaneous(
@@ -496,7 +527,7 @@ export default function Visor3D({ uri }) {
             cercanía, en vez de mantener la misma fuerza sin importar qué tan cerca esté. */}
         <pointLight ref={luzCamaraRef} intensity={0.24} distance={20} decay={1.5} />
 
-        <ControladorCamara camState={camState} camaraRef={camaraRef} luzCamaraRef={luzCamaraRef} />
+        <ControladorCamara camState={camState} camaraRef={camaraRef} luzCamaraRef={luzCamaraRef} marcadoresRef={marcadoresRef} />
 
         <LimiteDeError
           onError={() => {
@@ -513,10 +544,9 @@ export default function Visor3D({ uri }) {
               listoParaposicionarRef={listoParaposicionarRef}
               onCargado={() => setCargando(false)}
               onComponentesDetectados={setComponentes}
-              onAristasDetectadas={(segmentos, radioIman, zoomMinimo) => {
+              onAristasDetectadas={(segmentos, radioIman) => {
                 segmentosAristaRef.current = segmentos;
                 radioImanRef.current = radioIman;
-                limitesZoomRef.current = { min: zoomMinimo, max: 60 };
               }}
             />
           </Suspense>
