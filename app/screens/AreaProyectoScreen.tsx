@@ -17,13 +17,20 @@ import ImagenZoom from '../components/ImagenZoom';
 import Visor3D from '../components/Visor3D';
 import { areasVisiblesEnEquipo, pestanasAreaProyecto, permisosDe } from '../utils/roles';
 
-const formatearFechaFoto = (fecha) => {
+// Fecha + hora en la hora local del celular (no UTC), para que "8:32 PM" coincida con el reloj
+// real del usuario. Se usa como pie de página en fotos de avance, planos 3D y mensajes de chat.
+const formatearFechaHora = (fecha) => {
   if (!fecha) return '';
   const d = new Date(fecha);
-  const dia = String(d.getUTCDate()).padStart(2, '0');
-  const mes = String(d.getUTCMonth() + 1).padStart(2, '0');
-  const anio = String(d.getUTCFullYear()).slice(-2);
-  return `${dia}-${mes}-${anio}`;
+  const dia = String(d.getDate()).padStart(2, '0');
+  const mes = String(d.getMonth() + 1).padStart(2, '0');
+  const anio = String(d.getFullYear()).slice(-2);
+  let horas = d.getHours();
+  const minutos = String(d.getMinutes()).padStart(2, '0');
+  const sufijo = horas >= 12 ? 'PM' : 'AM';
+  horas = horas % 12;
+  if (horas === 0) horas = 12;
+  return `${dia}-${mes}-${anio} ${horas}:${minutos} ${sufijo}`;
 };
 
 // Burbuja de nota de voz dentro del chat: botón play/pausa + tiempo transcurrido, estilo
@@ -72,6 +79,21 @@ function BurbujaAudio({ uri }) {
 export default function AreaProyectoScreen({ route }) {
   const { empresa, proyecto, area, usuario } = route.params;
   const insets = useSafeAreaInsets();
+
+  // Guardamos en qué pantalla está el usuario ahora mismo. Si Android mata la app por falta de
+  // memoria mientras la cámara está abierta (algo fuera de nuestro control) y luego la revive,
+  // toda la navegación en memoria se pierde y normalmente el usuario aterrizaría de nuevo en
+  // "Seleccionar Empresa". Con este dato guardado, revisarSesion() en index.tsx puede detectar
+  // que venía de aquí y devolverlo directo a esta misma área de proyecto en vez de preguntarle
+  // la empresa otra vez. Se guarda con un timestamp para no aplicar esto si el usuario cerró la
+  // app hace horas y la abre de nuevo normalmente (en ese caso sí queremos el flujo normal).
+  useEffect(() => {
+    AsyncStorage.setItem(
+      'ultimaPantalla',
+      JSON.stringify({ pantalla: 'AreaProyecto', empresa, proyecto, area, usuario, ts: Date.now() })
+    ).catch(() => {});
+  }, []);
+
   const permisos = permisosDe(empresa);
   const pestanasVisibles = pestanasAreaProyecto(empresa); // ['equipo', 'fotos', 'planos3d'] o subconjunto
   const [tab, setTab] = useState(pestanasVisibles[0]); // 'equipo' | 'fotos' | 'planos3d' | 'contrato'
@@ -190,9 +212,21 @@ export default function AreaProyectoScreen({ route }) {
       return;
     }
 
-    const resultado = desdeCamara
-      ? await ImagePicker.launchCameraAsync({ quality: 0.6 })
-      : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.6 });
+    // Envolvemos la apertura de la cámara/galería en su propio try/catch: si launchCameraAsync
+    // lanza una excepción (por ejemplo, poco almacenamiento o un problema nativo al escribir la
+    // foto temporal), antes esa excepción no se capturaba en ningún lado y podía tumbar toda la
+    // pantalla, lo cual en Android puede forzar un reinicio de la app (y de ahí el salto
+    // inesperado a la pantalla de Seleccionar Empresa). Mismo fix ya aplicado en adjuntarImagen.
+    let resultado;
+    try {
+      resultado = desdeCamara
+        ? await ImagePicker.launchCameraAsync({ quality: 0.6 })
+        : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.6 });
+    } catch (error) {
+      console.error('Error abriendo cámara/galería:', error.message, error.stack);
+      Alert.alert('Error', 'No se pudo abrir la cámara. Intenta de nuevo.');
+      return;
+    }
 
     if (resultado.canceled) return;
 
@@ -774,7 +808,7 @@ export default function AreaProyectoScreen({ route }) {
                   <View style={{ flex: 1 }}>
                     <Text style={styles.personaNombre}>{item.nombre}</Text>
                     <Text style={styles.personaSubtexto}>
-                      Subido por {item.usuario_nombre} · {formatearFechaFoto(item.created_at)}
+                      Subido por {item.usuario_nombre} · {formatearFechaHora(item.created_at)}
                     </Text>
                   </View>
                   <Text style={styles.personaFlecha}>›</Text>
@@ -795,7 +829,7 @@ export default function AreaProyectoScreen({ route }) {
                 </View>
                 <Text style={styles.fotoAmpliadaAyuda}>Pellizca para hacer zoom · doble toque para volver al tamaño normal</Text>
                 <Text style={styles.fotoAmpliadaInfo}>
-                  {fotoAmpliada.usuario_nombre} · {formatearFechaFoto(fotoAmpliada.created_at)}
+                  {fotoAmpliada.usuario_nombre} · {formatearFechaHora(fotoAmpliada.created_at)}
                 </Text>
                 {guardandoFoto && <ActivityIndicator color="#fff" style={{ marginTop: 10 }} />}
                 {/* El botón "Eliminar" que vivía aquí se movió a un menú de mantener-presionado
@@ -986,6 +1020,7 @@ export default function AreaProyectoScreen({ route }) {
                       )
                     )}
                     {!!item.contenido && <Text style={styles.mensajeTexto}>{item.contenido}</Text>}
+                    <Text style={styles.mensajeHora}>{formatearFechaHora(item.created_at)}</Text>
                   </TouchableOpacity>
                 )}
                 ListEmptyComponent={<Text style={styles.vacioTexto}>Sin mensajes todavía. Escribe el primero.</Text>}
@@ -1099,6 +1134,7 @@ const styles = StyleSheet.create({
   mensajeCard: { backgroundColor: '#fff', borderRadius: 8, padding: 10, marginBottom: 8, borderWidth: 1, borderColor: '#eee' },
   mensajeAutor: { fontSize: 12, fontWeight: 'bold', color: '#1E90FF' },
   mensajeTexto: { fontSize: 14, color: '#333', marginTop: 2 },
+  mensajeHora: { fontSize: 10, color: '#999', marginTop: 4, textAlign: 'right' },
   mensajeImagenAdjunta: { width: 180, height: 180, borderRadius: 8, marginTop: 6, backgroundColor: '#eee' },
   mensajeDocumentoAdjunto: { backgroundColor: '#f0f6ff', borderRadius: 6, padding: 8, marginTop: 6 },
   mensajeDocumentoTexto: { fontSize: 13, color: '#1E90FF', fontWeight: '600' },

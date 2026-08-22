@@ -100,6 +100,33 @@ export default function App() {
 
       registrarNotificacionesPush(usuario.id);
 
+      // Si Android mató la app por falta de memoria hace muy poco (por ejemplo mientras la
+      // cámara estaba abierta) y la está reviviendo ahora, "ultimaPantalla" tiene guardado dónde
+      // estaba el usuario. Lo devolvemos directo ahí en vez de mandarlo a Seleccionar Empresa,
+      // para que no sienta que "se salió" de donde estaba. Si pasaron más de 2 minutos, asumimos
+      // que cerró la app normalmente y seguimos con el flujo de siempre.
+      const ultimaPantallaGuardada = await AsyncStorage.getItem('ultimaPantalla');
+      if (ultimaPantallaGuardada) {
+        try {
+          const ultimaPantalla = JSON.parse(ultimaPantallaGuardada);
+          const reciente = ultimaPantalla?.ts && Date.now() - ultimaPantalla.ts < 2 * 60 * 1000;
+          if (reciente && ultimaPantalla.pantalla === 'AreaProyecto' && ultimaPantalla.empresa && ultimaPantalla.proyecto && ultimaPantalla.area) {
+            setRutaInicial('AreaProyecto');
+            setParamsIniciales({
+              empresa: ultimaPantalla.empresa,
+              proyecto: ultimaPantalla.proyecto,
+              area: ultimaPantalla.area,
+              usuario: ultimaPantalla.usuario || usuario,
+            });
+            return;
+          }
+        } catch (error) {
+          // Si el dato guardado está corrupto, lo ignoramos y seguimos con el flujo normal.
+        } finally {
+          AsyncStorage.removeItem('ultimaPantalla').catch(() => {});
+        }
+      }
+
       if (empresas.length > 1) {
         // Pertenece a varias empresas: que elija con cuál entrar, sin pedir contraseña de nuevo.
         setRutaInicial('SeleccionarEmpresa');
@@ -178,6 +205,7 @@ export default function App() {
       <Stack.Screen
         name="AreaProyecto"
         component={AreaProyectoScreen}
+        initialParams={rutaInicial === 'AreaProyecto' ? paramsIniciales : undefined}
         options={({ route }) => ({ headerShown: true, title: route.params.area.nombre })}
       />
       <Stack.Screen

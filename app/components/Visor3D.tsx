@@ -81,23 +81,84 @@ function ControladorCamara({ camState, camaraRef, luzCamaraRef }) {
 // uniones reales entre piezas (donde termina una tabla y empieza otra), no cualquier textura o
 // sombra de la superficie. threshold más alto = solo esquinas "duras" reales, ignora curvas
 // suaves. Se recorre una sola vez, cuando el modelo termina de cargar.
+//
+// Además de dibujar el contorno, esta misma pasada devuelve la lista de segmentos de arista en
+// coordenadas de MUNDO (no locales a cada pieza) — esa lista es la que usa el snap de medición
+// (ver buscarPuntoDeAristaMasCercano) para "imanar" el punto tocado a la arista real más
+// próxima, en vez de dejarlo flotando en cualquier parte de la superficie.
 function agregarContornosDePiezas(raiz) {
   const meshesAProcesar = [];
   raiz.traverse((nodo) => {
     if (nodo.isMesh && nodo.geometry) meshesAProcesar.push(nodo);
   });
 
+  const segmentosDeArista = []; // [{ a: Vector3, b: Vector3 }, ...] en coordenadas de mundo
+
   meshesAProcesar.forEach((mesh) => {
     const geometriaBordes = new THREE.EdgesGeometry(mesh.geometry, 35);
     const material = new THREE.LineBasicMaterial({
       color: 0x000000,
       transparent: true,
-      opacity: 0.35, // sutil: se nota la unión entre piezas, sin verse como un dibujo caricaturesco
+      opacity: 0.55, // subido de 0.35 a pedido del usuario: un poco más marcado para distinguir
+      // mejor las uniones, sin llegar a verse como un dibujo caricaturesco. NOTA: linewidth de
+      // LineBasicMaterial NO funciona de forma confiable en móvil/OpenGL ES (limitación conocida
+      // de Three.js, no es un bug de este código) — por eso el ajuste de "grosor" se logra
+      // subiendo la opacidad, no el linewidth.
     });
     const lineas = new THREE.LineSegments(geometriaBordes, material);
     lineas.renderOrder = 1; // dibujar después de la pieza, encima, para que no quede tapado
+    // Desactiva el raycasting de estas líneas: sin esto, el rayo del toque (tocarModelo) podría
+    // "chocar" contra la línea del contorno en vez de la cara sólida de la pieza que hay
+    // debajo, dando un punto de superficie ligeramente distinto al esperado.
+    lineas.raycast = () => {};
     mesh.add(lineas);
+
+    // EdgesGeometry guarda pares de puntos consecutivos (cada par = un segmento de arista), en
+    // coordenadas LOCALES del mesh. Los pasamos a coordenadas de mundo con matrixWorld para que
+    // todos los segmentos, de todas las piezas, queden en el mismo sistema de referencia y se
+    // puedan comparar entre sí sin importar de qué pieza vengan.
+    mesh.updateMatrixWorld(true);
+    const posiciones = geometriaBordes.attributes.position;
+    for (let i = 0; i < posiciones.count; i += 2) {
+      const a = new THREE.Vector3().fromBufferAttribute(posiciones, i).applyMatrix4(mesh.matrixWorld);
+      const b = new THREE.Vector3().fromBufferAttribute(posiciones, i + 1).applyMatrix4(mesh.matrixWorld);
+      segmentosDeArista.push({ a, b });
+    }
   });
+
+  return segmentosDeArista;
+}
+
+// Dado un punto (donde el usuario tocó la superficie) y la lista de segmentos de arista del
+// modelo, busca el punto MÁS CERCANO sobre cualquiera de esas aristas — igual que el "snap a
+// aristas" de SketchUp. radioIman limita qué tan lejos puede estar la arista para que aplique
+// el snap (en las mismas unidades que el modelo, normalmente metros); si el punto tocado está
+// más lejos que eso de cualquier arista, se devuelve tal cual, sin imanar.
+function buscarPuntoDeAristaMasCercano(punto, segmentosDeArista, radioIman) {
+  let mejorPunto = null;
+  let mejorDistancia = radioIman;
+
+  const segmentoAux = new THREE.Vector3();
+  const puntoEnSegmento = new THREE.Vector3();
+
+  for (const { a, b } of segmentosDeArista) {
+    // Proyecta `punto` sobre el segmento a→b y recorta el resultado para que quede DENTRO del
+    // segmento (t entre 0 y 1) — así el imán encuentra tanto los extremos (vértices) como
+    // cualquier punto intermedio de la arista, tal como espera un carpintero midiendo un borde.
+    segmentoAux.subVectors(b, a);
+    const largoAlCuadrado = segmentoAux.lengthSq();
+    let t = largoAlCuadrado > 0 ? punto.clone().sub(a).dot(segmentoAux) / largoAlCuadrado : 0;
+    t = Math.max(0, Math.min(1, t));
+    puntoEnSegmento.copy(a).addScaledVector(segmentoAux, t);
+
+    const distancia = puntoEnSegmento.distanceTo(punto);
+    if (distancia < mejorDistancia) {
+      mejorDistancia = distancia;
+      mejorPunto = puntoEnSegmento.clone();
+    }
+  }
+
+  return mejorPunto || punto;
 }
 
 // Lee los hijos DIRECTOS de la escena cargada (los grupos/componentes tal como se llamaron al
@@ -115,7 +176,7 @@ function detectarComponentes(scene) {
   }));
 }
 
-function Modelo({ uri, camState, escenaRef, modeloRef, listoParaposicionarRef, onCargado, onComponentesDetectados }) {
+function Modelo({ uri, camState, escenaRef, modeloRef, listoParaposicionarRef, onCargado, onComponentesDetectados, onAristasDetectadas }) {
   const { scene } = useGLTF(uri);
   const { scene: escenaThree } = useThree();
 
@@ -133,8 +194,24 @@ function Modelo({ uri, camState, escenaRef, modeloRef, listoParaposicionarRef, o
       camState.current.radio = dimensionMax * 1.6;
       listoParaposicionarRef.current = true;
 
-      agregarContornosDePiezas(scene);
+      // IMPORTANTE: los segmentos de arista se calculan DESPUÉS de mover la escena a su
+      // posición centrada (scene.position.sub(centro), arriba), para que sus coordenadas de
+      // mundo ya coincidan con las de los puntos que toque el usuario al medir. Si se
+      // calcularan antes del recentrado, quedarían desplazados y el imán apuntaría a un lugar
+      // vacío en vez de a la arista real que se ve en pantalla.
+      const segmentosDeArista = agregarContornosDePiezas(scene);
       onComponentesDetectados(detectarComponentes(scene));
+      // El radio del imán es proporcional al tamaño del modelo: 1.5% de su dimensión más
+      // grande. Así funciona igual de bien en una mesa de noche chiquita que en un mueble
+      // grande, sin tener que ajustarlo a mano según el archivo.
+      //
+      // El límite mínimo de zoom también es proporcional (0.3% de la dimensión más grande),
+      // en vez de un valor fijo (0.5) pensado para un modelo "promedio" — con un valor fijo,
+      // en un mueble grande el zoom se sentía limitado mucho antes de llegar a ver el detalle
+      // de una unión entre piezas. Nunca baja de 0.08 (un poco por encima del "near" de la
+      // cámara, 0.05): si el radio de la cámara quedara más cerca que el plano de recorte
+      // cercano, el modelo empezaría a "desaparecer" en vez de seguir acercándose.
+      onAristasDetectadas(segmentosDeArista, dimensionMax * 0.015, Math.max(0.08, dimensionMax * 0.003));
     }
 
     modeloRef.current = scene;
@@ -175,6 +252,15 @@ export default function Visor3D({ uri }) {
   const modeloRef = useRef(null);
   const luzCamaraRef = useRef(null);
   const marcadoresRef = useRef([]); // esferas rojas que marcan los puntos tocados
+  // Segmentos de arista del modelo (en coordenadas de mundo) y el radio del imán, usados por
+  // el snap de medición para "imanar" el punto tocado a la arista real más cercana.
+  const segmentosAristaRef = useRef([]);
+  const radioImanRef = useRef(0.05);
+  // Límites de zoom (radio mínimo/máximo de la cámara), proporcionales al tamaño real del
+  // modelo — antes eran valores fijos (0.5 a 60) pensados para un modelo "promedio", así que
+  // en un mueble grande el límite mínimo se sentía como "no me deja acercar más" mucho antes
+  // de llegar a ver el detalle de una unión entre piezas.
+  const limitesZoomRef = useRef({ min: 0.05, max: 60 });
   // Tamaño EN PUNTOS del área donde se dibuja el visor, usado para convertir toques de pantalla
   // a coordenadas normalizadas para el raycasting.
   const layoutRef = useRef({ width: 1, height: 1 });
@@ -224,8 +310,13 @@ export default function Visor3D({ uri }) {
   };
 
   const manejarToqueMedicion = (x, y) => {
-    const punto = tocarModelo(x, y);
-    if (!punto) return;
+    const puntoDeSuperficie = tocarModelo(x, y);
+    if (!puntoDeSuperficie) return;
+
+    // Imanta el punto tocado a la arista/vértice real más cercana del modelo, igual que hace
+    // SketchUp — las mediciones reales se hacen de arista a arista, no en cualquier punto
+    // arbitrario de una cara plana.
+    const punto = buscarPuntoDeAristaMasCercano(puntoDeSuperficie, segmentosAristaRef.current, radioImanRef.current);
 
     setPuntosMedicion((anteriores) => {
       let nuevos;
@@ -314,7 +405,8 @@ export default function Visor3D({ uri }) {
     })
     .onUpdate((evt) => {
       const inicio = inicioGestoRef.current;
-      const nuevoRadio = Math.max(0.5, Math.min(60, inicio.radio / evt.scale));
+      const { min, max } = limitesZoomRef.current;
+      const nuevoRadio = Math.max(min, Math.min(max, inicio.radio / evt.scale));
       camState.current.radio = nuevoRadio;
     });
 
@@ -421,6 +513,11 @@ export default function Visor3D({ uri }) {
               listoParaposicionarRef={listoParaposicionarRef}
               onCargado={() => setCargando(false)}
               onComponentesDetectados={setComponentes}
+              onAristasDetectadas={(segmentos, radioIman, zoomMinimo) => {
+                segmentosAristaRef.current = segmentos;
+                radioImanRef.current = radioIman;
+                limitesZoomRef.current = { min: zoomMinimo, max: 60 };
+              }}
             />
           </Suspense>
         </LimiteDeError>
