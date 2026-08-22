@@ -60,6 +60,14 @@ export default function EstadisticasScreen({ route }) {
   const [costoFecha, setCostoFecha] = useState('');
   const [guardandoCosto, setGuardandoCosto] = useState(false);
 
+  // Categorías de costo (Carpintería, Ferretería, Estuco, etc.), reutilizables en toda la
+  // empresa — se cargan una vez y se usan como chips seleccionables en el modal de costo, con
+  // opción de escribir y crear una nueva al vuelo si no existe todavía.
+  const [categorias, setCategorias] = useState([]);
+  const [costoCategoriaId, setCostoCategoriaId] = useState(null);
+  const [nuevaCategoriaTexto, setNuevaCategoriaTexto] = useState('');
+  const [creandoCategoria, setCreandoCategoria] = useState(false);
+
   const [modalAbonoVisible, setModalAbonoVisible] = useState(false);
   const [abonoValor, setAbonoValor] = useState('');
   const [abonoFecha, setAbonoFecha] = useState('');
@@ -67,7 +75,40 @@ export default function EstadisticasScreen({ route }) {
 
   useEffect(() => {
     cargarProyectos();
+    cargarCategorias();
   }, []);
+
+  const cargarCategorias = async () => {
+    try {
+      const res = await axios.get(`https://backend-app-mediterraneo.onrender.com/api/estadisticas/categorias/${empresa.id}`);
+      setCategorias(res.data.categorias);
+    } catch (error) {
+      console.error('Error cargando categorías de costo:', error);
+    }
+  };
+
+  const crearCategoria = async () => {
+    if (!nuevaCategoriaTexto.trim()) return;
+    setCreandoCategoria(true);
+    try {
+      const res = await axios.post(`https://backend-app-mediterraneo.onrender.com/api/estadisticas/categorias`, {
+        empresa_id: empresa.id,
+        nombre: nuevaCategoriaTexto.trim(),
+      });
+      const nueva = res.data.categoria;
+      setCategorias((anteriores) => {
+        if (anteriores.some((c) => c.id === nueva.id)) return anteriores;
+        return [...anteriores, nueva].sort((a, b) => a.nombre.localeCompare(b.nombre));
+      });
+      setCostoCategoriaId(nueva.id);
+      setNuevaCategoriaTexto('');
+    } catch (error) {
+      console.error('Error creando categoría de costo:', error);
+      Alert.alert('Error', 'No se pudo crear la categoría.');
+    } finally {
+      setCreandoCategoria(false);
+    }
+  };
 
   const cargarProyectos = async () => {
     setCargandoProyectos(true);
@@ -109,6 +150,8 @@ export default function EstadisticasScreen({ route }) {
     setCostoDetalle('');
     setCostoValor('');
     setCostoFecha(fechaHoyDdMmAa());
+    setCostoCategoriaId(null);
+    setNuevaCategoriaTexto('');
     setModalCostoVisible(true);
   };
 
@@ -129,6 +172,7 @@ export default function EstadisticasScreen({ route }) {
         detalle: costoDetalle || null,
         valor: parseFloat(costoValor),
         fecha: fechaIso,
+        categoria_id: costoCategoriaId,
       });
       setModalCostoVisible(false);
       seleccionarProyecto(proyectoSeleccionado);
@@ -281,6 +325,20 @@ export default function EstadisticasScreen({ route }) {
                 </TouchableOpacity>
               </View>
 
+              {estadisticas.resumen_por_categoria && estadisticas.resumen_por_categoria.length > 0 && (
+                <>
+                  <Text style={styles.seccionTitulo}>Costos por categoría</Text>
+                  <View style={styles.resumenCard}>
+                    {estadisticas.resumen_por_categoria.map((cat) => (
+                      <View key={cat.categoria_id} style={[styles.resumenFila, { paddingVertical: 8 }]}>
+                        <Text style={styles.resumenLabel}>{cat.categoria_nombre}</Text>
+                        <Text style={styles.resumenValor}>{formatearMoneda(cat.total)}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </>
+              )}
+
               <Text style={styles.seccionTitulo}>Historial de costos</Text>
               {estadisticas.movimientos_costos.length === 0 ? (
                 <Text style={styles.vacioTexto}>Aún no hay costos registrados.</Text>
@@ -288,7 +346,10 @@ export default function EstadisticasScreen({ route }) {
                 estadisticas.movimientos_costos.map((mov) => (
                   <View key={mov.id} style={styles.abonoCard}>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.movimientoTipo}>{ETIQUETAS_TIPO_COSTO[mov.tipo] || mov.tipo}</Text>
+                      <Text style={styles.movimientoTipo}>
+                        {ETIQUETAS_TIPO_COSTO[mov.tipo] || mov.tipo}
+                        {mov.categoria_nombre ? ` · ${mov.categoria_nombre}` : ''}
+                      </Text>
                       {mov.detalle ? <Text style={styles.movimientoDetalle}>{mov.detalle}</Text> : null}
                       <Text style={styles.abonoFecha}>{formatearFecha(mov.fecha)}</Text>
                     </View>
@@ -321,6 +382,42 @@ export default function EstadisticasScreen({ route }) {
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <ScrollView style={styles.modalContainer} contentContainerStyle={{ padding: 20, paddingBottom: 60 }}>
             <Text style={styles.modalTitulo}>Agregar Costo · {ETIQUETAS_TIPO_COSTO[costoTipo]}</Text>
+
+            <Text style={styles.label}>Categoría (opcional, ej: Carpintería, Ferretería, Estuco)</Text>
+            <View style={styles.chipsContenedor}>
+              {categorias.map((cat) => {
+                const seleccionada = costoCategoriaId === cat.id;
+                return (
+                  <TouchableOpacity
+                    key={cat.id}
+                    style={[styles.chip, seleccionada && styles.chipSeleccionado]}
+                    onPress={() => setCostoCategoriaId(seleccionada ? null : cat.id)}
+                  >
+                    <Text style={[styles.chipTexto, seleccionada && styles.chipTextoSeleccionado]}>{cat.nombre}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            <View style={styles.filaNuevaCategoria}>
+              <TextInput
+                style={[styles.input, { flex: 1 }]}
+                value={nuevaCategoriaTexto}
+                onChangeText={setNuevaCategoriaTexto}
+                placeholder="Escribe para crear una categoría nueva"
+                placeholderTextColor="#999"
+              />
+              <TouchableOpacity
+                style={styles.botonAgregarCategoria}
+                onPress={crearCategoria}
+                disabled={creandoCategoria || !nuevaCategoriaTexto.trim()}
+              >
+                {creandoCategoria ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={styles.botonAgregarCategoriaTexto}>+</Text>
+                )}
+              </TouchableOpacity>
+            </View>
 
             <Text style={styles.label}>Detalle</Text>
             <TextInput
@@ -452,6 +549,28 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#ddd',
   },
+  chipsContenedor: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chip: {
+    backgroundColor: '#f5f5f5',
+    borderRadius: 16,
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: '#ddd',
+  },
+  chipSeleccionado: { backgroundColor: '#1E90FF', borderColor: '#1E90FF' },
+  chipTexto: { color: '#444', fontSize: 13, fontWeight: '600' },
+  chipTextoSeleccionado: { color: '#fff' },
+  filaNuevaCategoria: { flexDirection: 'row', gap: 8, marginTop: 10, alignItems: 'center' },
+  botonAgregarCategoria: {
+    backgroundColor: '#1E90FF',
+    borderRadius: 8,
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  botonAgregarCategoriaTexto: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
   botonGuardar: { backgroundColor: '#1E90FF', borderRadius: 8, padding: 16, alignItems: 'center', marginTop: 28 },
   botonGuardarTexto: { color: '#fff', fontSize: 15, fontWeight: 'bold' },
   botonCancelar: { alignItems: 'center', marginTop: 12, padding: 10 },

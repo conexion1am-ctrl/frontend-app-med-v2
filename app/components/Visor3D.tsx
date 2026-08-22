@@ -175,7 +175,7 @@ function buscarPuntoDeAristaMasCercano(punto, segmentosDeArista, radioIman) {
 }
 
 // Lee los grupos/componentes reales del modelo (los mismos nombres que tenían en SketchUp, ej.
-// "Cajon 1", "Cajon 2", "Estructura") y arma la lista que se muestra en el panel de
+// "Cajon 1", "Cajon 2", "Estructura") y arma el ÁRBOL que se muestra en el panel de
 // Mostrar/Ocultar. Si el .glb no trae nombres reales (todo suelto sin agrupar), cae de vuelta a
 // listar cada Mesh individual para que el panel no quede vacío.
 //
@@ -185,6 +185,12 @@ function buscarPuntoDeAristaMasCercano(punto, segmentosDeArista, radioIman) {
 // tuviera varias piezas nombradas más abajo. Por eso esta función "baja" automáticamente por la
 // jerarquía mientras encuentre un único hijo contenedor (un envoltorio sin hermanos), hasta
 // llegar al nivel real donde el modelo se separa en dos o más piezas.
+//
+// Además, cada pieza detectada puede a su vez contener sub-piezas/sub-grupos adentro (ej.
+// "Cajon 1" que por dentro tiene "Frente", "Fondo", "Guías") — por eso esta función es
+// RECURSIVA: cada nodo de la lista trae su propio array `hijos` (vacío si es una pieza sólida
+// sin nada más adentro), y el panel se encarga de mostrar una flecha para expandir cuando
+// `hijos.length > 0`.
 function detectarComponentes(scene) {
   let nivelActual = scene;
   // Mientras el nivel actual tenga exactamente un hijo que a su vez tenga hijos propios (es
@@ -197,14 +203,52 @@ function detectarComponentes(scene) {
     nivelActual = nivelActual.children[0];
   }
 
-  const candidatos = nivelActual.children.filter((hijo) => hijo.type !== 'Object3D' || hijo.children.length > 0);
+  return construirArbolComponentes(nivelActual);
+}
+
+// Construye recursivamente el árbol de piezas a partir de un nodo de Three.js. Un nodo se
+// considera "hoja" (sin más nada que expandir) si es un Mesh sin hijos propios, o si ninguno de
+// sus hijos aporta información nueva (por ejemplo un Mesh con una sola línea de contorno interna
+// ya agregada por agregarContornosDePiezas, que no debe listarse como "sub-pieza").
+function construirArbolComponentes(nivelActual) {
+  const candidatos = nivelActual.children.filter((hijo) => {
+    if (hijo.isLineSegments) return false; // contornos agregados por agregarContornosDePiezas, no son piezas
+    return hijo.type !== 'Object3D' || hijo.children.length > 0 || hijo.isMesh;
+  });
   const base = candidatos.length > 0 ? candidatos : nivelActual.children;
 
-  return base.map((nodo, indice) => ({
-    id: nodo.uuid,
-    nombre: nodo.name && nodo.name.trim() ? nodo.name : `Pieza ${indice + 1}`,
-    nodo,
-  }));
+  return base.map((nodo, indice) => {
+    // Sub-hijos reales del nodo (mismo filtro, para no contar los contornos como sub-piezas).
+    const subHijos = (nodo.children || []).filter((hijo) => !hijo.isLineSegments);
+    // Solo vale la pena bajar un nivel más si hay 2+ sub-piezas reales, o 1 sub-grupo que a su
+    // vez tenga más adentro — un Mesh con un único hijo trivial no necesita expandirse.
+    const tieneSubgrupoUnico = subHijos.length === 1 && subHijos[0].children?.length > 0 && !subHijos[0].isMesh;
+    const hijos =
+      subHijos.length > 1
+        ? construirArbolComponentes(nodo)
+        : tieneSubgrupoUnico
+        ? construirArbolComponentes(subHijos[0])
+        : [];
+
+    return {
+      id: nodo.uuid,
+      nombre: nodo.name && nodo.name.trim() ? nodo.name : `Pieza ${indice + 1}`,
+      nodo,
+      hijos,
+    };
+  });
+}
+
+// Junta, en una sola lista plana, TODOS los ids del árbol (el nodo y todos sus descendientes) —
+// usado para ocultar/mostrar de golpe una pieza padre junto con todo lo que tiene adentro.
+function idsDelArbol(pieza) {
+  return [pieza.id, ...pieza.hijos.flatMap(idsDelArbol)];
+}
+
+// Recorre el árbol completo y devuelve la lista aplanada de TODAS las piezas (padres e hijos),
+// usada por el useEffect que aplica node.visible = true/false sobre cada nodo real de Three.js.
+function aplanarArbol(piezas) {
+  return piezas.flatMap((pieza) => [pieza, ...aplanarArbol(pieza.hijos)]);
 }
 
 function Modelo({ uri, camState, escenaRef, modeloRef, listoParaposicionarRef, onCargado, onComponentesDetectados, onAristasDetectadas }) {
@@ -250,6 +294,50 @@ function Modelo({ uri, camState, escenaRef, modeloRef, listoParaposicionarRef, o
   return <primitive object={scene} />;
 }
 
+// Una fila del panel de Piezas, recursiva: si la pieza tiene sub-piezas (hijos.length > 0),
+// muestra una flecha para expandir/colapsar y, al expandirse, dibuja sus hijos debajo con un
+// poco más de indentación (nivel + 1) — así de "Cajon 1" se puede desplegar "Frente", "Fondo",
+// "Guías", etc., a cualquier profundidad que tenga el modelo real.
+function FilaPieza({ pieza, nivel, ocultos, expandidos, onAlternarVisibilidad, onAlternarExpandido }) {
+  const tieneHijos = pieza.hijos.length > 0;
+  const expandida = expandidos.has(pieza.id);
+  return (
+    <View>
+      <View style={[styles.panelPiezaFila, { paddingLeft: 4 + nivel * 18 }]}>
+        {tieneHijos ? (
+          <TouchableOpacity onPress={() => onAlternarExpandido(pieza.id)} style={styles.panelPiezaFlecha} hitSlop={8}>
+            <Text style={styles.panelPiezaFlechaTexto}>{expandida ? '▾' : '▸'}</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.panelPiezaFlecha} />
+        )}
+        <Text style={styles.panelPiezaNombre} numberOfLines={1}>
+          {pieza.nombre}
+        </Text>
+        <Switch
+          value={!ocultos.has(pieza.id)}
+          onValueChange={() => onAlternarVisibilidad(pieza)}
+          trackColor={{ false: '#555', true: '#1E90FF' }}
+          thumbColor="#fff"
+        />
+      </View>
+      {tieneHijos &&
+        expandida &&
+        pieza.hijos.map((hijo) => (
+          <FilaPieza
+            key={hijo.id}
+            pieza={hijo}
+            nivel={nivel + 1}
+            ocultos={ocultos}
+            expandidos={expandidos}
+            onAlternarVisibilidad={onAlternarVisibilidad}
+            onAlternarExpandido={onAlternarExpandido}
+          />
+        ))}
+    </View>
+  );
+}
+
 export default function Visor3D({ uri }) {
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
@@ -257,15 +345,35 @@ export default function Visor3D({ uri }) {
   const [puntosMedicion, setPuntosMedicion] = useState([]); // hasta 2 puntos THREE.Vector3
   const [distanciaMedida, setDistanciaMedida] = useState(null);
   const modoMedirRef = useRef(false); // espejo síncrono de modoMedir, legible dentro de los gestos
+  const puntosMedicionRef = useRef([]); // espejo síncrono de puntosMedicion, legible dentro de los gestos
+  const marcadorArrastradoRef = useRef(null); // índice (0 o 1) del marcador que se está arrastrando, o null
 
-  // Lista de piezas/componentes detectados en el modelo (para el panel de Mostrar/Ocultar) y
-  // el set de ids actualmente OCULTOS (todo empieza visible, por eso el set arranca vacío).
-  const [componentes, setComponentes] = useState([]); // [{ id, nombre, nodo }]
+  // Árbol de piezas/componentes detectados en el modelo (para el panel de Mostrar/Ocultar,
+  // ahora con sub-piezas anidadas: cada pieza trae su propio `hijos`) y el set de ids
+  // actualmente OCULTOS (todo empieza visible, por eso el set arranca vacío).
+  const [componentes, setComponentes] = useState([]); // [{ id, nombre, nodo, hijos }]
   const [ocultos, setOcultos] = useState(() => new Set());
+  const [expandidos, setExpandidos] = useState(() => new Set()); // ids de piezas con sub-piezas desplegadas
   const [panelAbierto, setPanelAbierto] = useState(false);
 
-  const alternarVisibilidadComponente = (id) => {
+  // Ocultar/mostrar una pieza afecta también a TODAS sus sub-piezas de golpe (confirmado con el
+  // usuario: si ocultas "Cajon 1" completo, todo lo que tiene adentro se oculta junto, sin
+  // importar si alguna sub-pieza estaba marcada visible individualmente antes).
+  const alternarVisibilidadComponente = (pieza) => {
+    const idsAfectados = idsDelArbol(pieza);
     setOcultos((anteriores) => {
+      const nuevos = new Set(anteriores);
+      const ocultarla = !nuevos.has(pieza.id); // si estaba visible, la vamos a ocultar (y viceversa)
+      idsAfectados.forEach((id) => {
+        if (ocultarla) nuevos.add(id);
+        else nuevos.delete(id);
+      });
+      return nuevos;
+    });
+  };
+
+  const alternarExpandido = (id) => {
+    setExpandidos((anteriores) => {
       const nuevos = new Set(anteriores);
       if (nuevos.has(id)) nuevos.delete(id);
       else nuevos.add(id);
@@ -357,6 +465,24 @@ export default function Visor3D({ uri }) {
     lineaMedicionRef.current = linea;
   };
 
+  // El radio del imán guardado en radioImanRef es una fracción FIJA del tamaño del modelo (en
+  // metros). Eso funcionaba bien con el zoom limitado de antes, pero ahora que el zoom es libre
+  // (se puede acercar hasta casi tocar la superficie, o alejar mucho) ese mismo radio en metros
+  // se ve gigante de lejos y casi invisible de cerca en términos de qué tan fácil es acertarle
+  // con el dedo en la pantalla. Por eso el radio efectivo se calcula combinando el radio base
+  // con la distancia real cámara→punto: de cerca, un radio pequeño en metros ya alcanza para
+  // cubrir una zona cómoda en pantalla; de lejos, hace falta un radio más grande en metros para
+  // esa misma comodidad en pantalla. El máximo entre ambos asegura que el imán nunca se sienta
+  // "muerto" en ningún nivel de zoom.
+  const radioImanEfectivo = (puntoDeSuperficie) => {
+    const cam = camaraRef.current;
+    const base = radioImanRef.current;
+    if (!cam) return base;
+    const distancia = cam.position.distanceTo(puntoDeSuperficie);
+    // 4% de la distancia a la cámara, con el radio base como piso mínimo.
+    return Math.max(base, distancia * 0.04);
+  };
+
   const manejarToqueMedicion = (x, y) => {
     const puntoDeSuperficie = tocarModelo(x, y);
     if (!puntoDeSuperficie) return;
@@ -364,7 +490,7 @@ export default function Visor3D({ uri }) {
     // Imanta el punto tocado a la arista/vértice real más cercana del modelo, igual que hace
     // SketchUp — las mediciones reales se hacen de arista a arista, no en cualquier punto
     // arbitrario de una cara plana.
-    const punto = buscarPuntoDeAristaMasCercano(puntoDeSuperficie, segmentosAristaRef.current, radioImanRef.current);
+    const punto = buscarPuntoDeAristaMasCercano(puntoDeSuperficie, segmentosAristaRef.current, radioImanEfectivo(puntoDeSuperficie));
 
     setPuntosMedicion((anteriores) => {
       let nuevos;
@@ -382,8 +508,65 @@ export default function Visor3D({ uri }) {
       } else {
         setDistanciaMedida(null);
       }
+      puntosMedicionRef.current = nuevos;
       return nuevos;
     });
+  };
+
+  // Convierte un toque de pantalla a coordenadas normalizadas y devuelve, además del punto 3D
+  // tocado, la posición en pantalla (en puntos, no normalizada) — usado para saber a qué
+  // distancia EN PANTALLA está el dedo de cada marcador ya puesto, y así decidir si el usuario
+  // está intentando agarrar uno de ellos para arrastrarlo.
+  const proyectarAPantalla = (punto3D) => {
+    const cam = camaraRef.current;
+    if (!cam) return null;
+    const { width, height } = layoutRef.current;
+    const proyectado = punto3D.clone().project(cam);
+    return {
+      x: ((proyectado.x + 1) / 2) * width,
+      y: ((1 - proyectado.y) / 2) * height,
+    };
+  };
+
+  // Busca si el toque (x, y en pantalla) cayó suficientemente cerca de alguno de los marcadores
+  // ya colocados (índice 0 o 1), para permitir agarrarlo y arrastrarlo. Devuelve el índice del
+  // marcador más cercano dentro del radio de agarre, o null si no hay ninguno cerca.
+  const buscarMarcadorCercano = (x, y) => {
+    const puntos = puntosMedicionRef.current;
+    let mejorIndice = null;
+    let mejorDistancia = 40; // radio de agarre en puntos de pantalla, generoso para el dedo
+    puntos.forEach((punto, indice) => {
+      const enPantalla = proyectarAPantalla(punto);
+      if (!enPantalla) return;
+      const distancia = Math.hypot(enPantalla.x - x, enPantalla.y - y);
+      if (distancia < mejorDistancia) {
+        mejorDistancia = distancia;
+        mejorIndice = indice;
+      }
+    });
+    return mejorIndice;
+  };
+
+  // Mueve el marcador ya colocado en `indice` a un nuevo punto (con snap magnético incluido),
+  // actualizando la esfera roja, la línea azul y la distancia medida en tiempo real mientras el
+  // usuario arrastra el dedo.
+  const arrastrarMarcador = (indice, x, y) => {
+    const puntoDeSuperficie = tocarModelo(x, y);
+    if (!puntoDeSuperficie) return;
+    const punto = buscarPuntoDeAristaMasCercano(puntoDeSuperficie, segmentosAristaRef.current, radioImanEfectivo(puntoDeSuperficie));
+
+    const esfera = marcadoresRef.current[indice];
+    if (esfera) esfera.position.copy(punto);
+
+    const nuevos = [...puntosMedicionRef.current];
+    nuevos[indice] = punto;
+    puntosMedicionRef.current = nuevos;
+    setPuntosMedicion(nuevos);
+
+    if (nuevos.length === 2) {
+      dibujarLineaMedicion(nuevos[0], nuevos[1]);
+      setDistanciaMedida(nuevos[0].distanceTo(nuevos[1]));
+    }
   };
 
   // IMPORTANTE — .runOnJS(true) en los 4 gestos de abajo:
@@ -399,16 +582,42 @@ export default function Visor3D({ uri }) {
   // SÍ se puede tocar refs y objetos de Three.js sin problema, tal como estaba pensado este
   // componente desde el principio.
 
-  // Toque simple: en modo medir, marca un punto.
+  // Toque simple: en modo medir, marca un punto (si no cayó sobre un marcador ya puesto — en ese
+  // caso el gesto de arrastre, más abajo, se encarga).
   const gestoToque = Gesture.Tap()
     .runOnJS(true)
     .maxDuration(250)
     .onEnd((evt, exitoso) => {
       if (!exitoso || !modoMedirRef.current) return;
+      if (buscarMarcadorCercano(evt.x, evt.y) != null) return; // ya se movió con el arrastre
       manejarToqueMedicion(evt.x, evt.y);
     });
 
+  // En modo medir: tocar y mantener sobre un punto rojo ya puesto, y arrastrarlo hasta otra
+  // posición — con el mismo imán a aristas/vértices aplicándose en tiempo real mientras se
+  // mueve el dedo, para poder corregir una medición sin tener que reiniciarla.
+  const gestoArrastrarMarcador = Gesture.Pan()
+    .runOnJS(true)
+    .minPointers(1)
+    .maxPointers(1)
+    .onStart((evt) => {
+      if (!modoMedirRef.current) {
+        marcadorArrastradoRef.current = null;
+        return;
+      }
+      marcadorArrastradoRef.current = buscarMarcadorCercano(evt.x, evt.y);
+    })
+    .onUpdate((evt) => {
+      if (marcadorArrastradoRef.current == null) return;
+      arrastrarMarcador(marcadorArrastradoRef.current, evt.x, evt.y);
+    })
+    .onEnd(() => {
+      marcadorArrastradoRef.current = null;
+    });
+
   // Un dedo: orbita la cámara alrededor del modelo. Dos dedos: mueve el centro de la cámara.
+  // Si el dedo agarró un marcador (ver gestoArrastrarMarcador, que corre en simultáneo), no debe
+  // orbitar también — se descarta el movimiento de cámara mientras se está arrastrando un punto.
   const gestoOrbitar = Gesture.Pan()
     .runOnJS(true)
     .minPointers(1)
@@ -417,7 +626,7 @@ export default function Visor3D({ uri }) {
       inicioGestoRef.current = { ...camState.current, centro: camState.current.centro.clone() };
     })
     .onUpdate((evt) => {
-      if (modoMedirRef.current) return; // en modo medir, un dedo solo marca puntos, no orbita
+      if (modoMedirRef.current) return; // en modo medir, un dedo solo marca/arrastra puntos, no orbita
       const inicio = inicioGestoRef.current;
       camState.current.azimut = inicio.azimut - evt.translationX * 0.008;
       camState.current.elevacion = inicio.elevacion + evt.translationY * 0.008;
@@ -439,7 +648,16 @@ export default function Visor3D({ uri }) {
       const derecha = new THREE.Vector3().crossVectors(direccionCamara, new THREE.Vector3(0, 1, 0)).normalize();
       const arribaCamara = new THREE.Vector3().crossVectors(derecha, direccionCamara).normalize();
 
-      const escala = camState.current.radio * 0.0015;
+      // La escala del desplazamiento se basaba en `radio` (la distancia orbital fija con la que
+      // arrancó el modelo), pero desde que el zoom es libre tipo dron, acercarse mueve `centro`
+      // -no `radio`-, así que `radio` se queda fijo en su valor inicial sin importar qué tan
+      // cerca esté la cámara. Resultado: mover con 2 dedos siempre desplazaba la misma distancia
+      // en metros, y de cerca esa distancia se siente gigante en pantalla (te saca del área que
+      // querías ver). El fix: usar la distancia REAL cámara→centro (que sí cambia con el zoom
+      // libre) para escalar el desplazamiento — de cerca, el mismo gesto mueve pocos centímetros;
+      // de lejos, sigue moviendo a la velocidad de siempre.
+      const distanciaCamaraCentro = cam.position.distanceTo(inicio.centro);
+      const escala = distanciaCamaraCentro * 0.0015;
       const desplazamiento = new THREE.Vector3()
         .addScaledVector(derecha, -evt.translationX * escala)
         .addScaledVector(arribaCamara, evt.translationY * escala);
@@ -483,10 +701,20 @@ export default function Visor3D({ uri }) {
       camState.current.centro = inicio.centro.clone().addScaledVector(direccion, avance);
     });
 
-  const gestoCompuesto = Gesture.Simultaneous(
-    gestoToque,
-    Gesture.Race(gestoOrbitar, Gesture.Simultaneous(gestoMover, gestoZoom))
-  );
+  // Antes, gestoOrbitar (1 dedo) y el par gestoMover+gestoZoom (2 dedos) estaban en un mismo
+  // Gesture.Race: como orbitar solo necesita 1 dedo, "arrancaba a correr" apenas tocaba el
+  // primer dedo, y casi siempre ganaba la carrera antes de que el segundo dedo del pellizco
+  // llegara a la pantalla — por eso había que poner los dos dedos casi perfectamente juntos y
+  // despacio para que el zoom funcionara. La solución: decirle explícitamente a gestoOrbitar que
+  // ESPERE a que el gesto de 2 dedos falle antes de activarse (.requireExternalGestureToFail),
+  // en vez de competir por quién se activa primero. Así, en cuanto aparece un segundo dedo,
+  // gesture-handler le da la oportunidad al pellizco/mover de tomar el control, y orbitar con 1
+  // dedo solo gana cuando de verdad nunca aparece un segundo dedo.
+  const gestoDosDedos = Gesture.Simultaneous(gestoMover, gestoZoom);
+  const gestoOrbitarConEspera = gestoOrbitar.requireExternalGestureToFail(gestoDosDedos);
+  const gestoUnDedo = Gesture.Race(gestoArrastrarMarcador, gestoOrbitarConEspera);
+
+  const gestoCompuesto = Gesture.Simultaneous(gestoToque, gestoDosDedos, gestoUnDedo);
 
   const reiniciarVista = () => {
     if (!modeloRef.current) return;
@@ -511,9 +739,11 @@ export default function Visor3D({ uri }) {
 
   // Aplica la visibilidad real en Three.js cada vez que el usuario oculta/muestra una pieza
   // desde el panel. No se quita del modelo (eso perdería la referencia), solo se marca
-  // node.visible = false, que Three.js respeta al dibujar cada frame.
+  // node.visible = false, que Three.js respeta al dibujar cada frame. Se recorre el árbol
+  // COMPLETO aplanado (padres e hijos a cualquier profundidad), no solo el primer nivel, para
+  // que las sub-piezas también respeten su propio estado oculto/visible.
   useEffect(() => {
-    componentes.forEach(({ id, nodo }) => {
+    aplanarArbol(componentes).forEach(({ id, nodo }) => {
       nodo.visible = !ocultos.has(id);
     });
   }, [ocultos, componentes]);
@@ -652,18 +882,16 @@ export default function Visor3D({ uri }) {
                 )}
               </View>
               <ScrollView style={styles.panelPiezasLista}>
-                {componentes.map(({ id, nombre }) => (
-                  <View key={id} style={styles.panelPiezaFila}>
-                    <Text style={styles.panelPiezaNombre} numberOfLines={1}>
-                      {nombre}
-                    </Text>
-                    <Switch
-                      value={!ocultos.has(id)}
-                      onValueChange={() => alternarVisibilidadComponente(id)}
-                      trackColor={{ false: '#555', true: '#1E90FF' }}
-                      thumbColor="#fff"
-                    />
-                  </View>
+                {componentes.map((pieza) => (
+                  <FilaPieza
+                    key={pieza.id}
+                    pieza={pieza}
+                    nivel={0}
+                    ocultos={ocultos}
+                    expandidos={expandidos}
+                    onAlternarVisibilidad={alternarVisibilidadComponente}
+                    onAlternarExpandido={alternarExpandido}
+                  />
                 ))}
               </ScrollView>
             </View>
@@ -685,7 +913,9 @@ export default function Visor3D({ uri }) {
                   : 'Toca dos puntos sobre el modelo para medir'}
               </Text>
               <Text style={styles.avisoMedicionNota}>
-                Medición aproximada, depende de la escala real del archivo exportado.
+                {distanciaMedida != null
+                  ? 'Puedes arrastrar cualquiera de los dos puntos rojos para ajustarlos.'
+                  : 'Medición aproximada, depende de la escala real del archivo exportado.'}
               </Text>
             </View>
           )}
@@ -773,4 +1003,6 @@ const styles = StyleSheet.create({
     borderBottomColor: 'rgba(255,255,255,0.15)',
   },
   panelPiezaNombre: { color: '#fff', fontSize: 13, flex: 1, marginRight: 10 },
+  panelPiezaFlecha: { width: 22, alignItems: 'center', justifyContent: 'center' },
+  panelPiezaFlechaTexto: { color: 'rgba(255,255,255,0.7)', fontSize: 13 },
 });
