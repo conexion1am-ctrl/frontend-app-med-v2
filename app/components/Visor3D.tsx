@@ -74,7 +74,11 @@ function ControladorCamara({ camState, camaraRef, luzCamaraRef, marcadoresRef })
     if (marcadoresRef?.current?.length) {
       marcadoresRef.current.forEach((esfera) => {
         const distancia = camera.position.distanceTo(esfera.position);
-        const escala = distancia * 0.02;
+        // Bajado de 0.02 a 0.008 (60% más chico): el usuario reportó que de cerca los círculos
+        // rojos eran tan grandes que tapaban la esquina/arista exacta que quería medir, dificultando
+        // ver dónde había quedado el punto realmente. Un punto más discreto sigue siendo visible
+        // pero no esconde el detalle del modelo debajo.
+        const escala = distancia * 0.008;
         esfera.scale.setScalar(escala);
       });
     }
@@ -584,12 +588,21 @@ export default function Visor3D({ uri }) {
 
   // Toque simple: en modo medir, marca un punto (si no cayó sobre un marcador ya puesto — en ese
   // caso el gesto de arrastre, más abajo, se encarga).
+  //
+  // OJO: no se puede decidir esto mirando dónde el dedo TERMINÓ el toque (evt.x, evt.y del Tap),
+  // porque si el usuario arrastró un marcador lejos de su posición original, para cuando suelta
+  // el dedo ya no hay ningún marcador cerca de esa posición final — buscarMarcadorCercano ahí
+  // daría "no hay nada cerca" y el Tap terminaría creando un punto nuevo por accidente, aunque en
+  // realidad se estaba arrastrando uno existente. Por eso se usa marcadorArrastradoRef (puesto
+  // por gestoArrastrarMarcador en su onStart, con la posición INICIAL del toque) como la fuente
+  // real de verdad: si el arrastre agarró un marcador en este mismo gesto, el Tap no debe hacer
+  // nada, sin importar dónde terminó soltando el dedo.
   const gestoToque = Gesture.Tap()
     .runOnJS(true)
     .maxDuration(250)
     .onEnd((evt, exitoso) => {
       if (!exitoso || !modoMedirRef.current) return;
-      if (buscarMarcadorCercano(evt.x, evt.y) != null) return; // ya se movió con el arrastre
+      if (marcadorArrastradoRef.current != null) return; // este toque ya movió un marcador existente
       manejarToqueMedicion(evt.x, evt.y);
     });
 
@@ -601,27 +614,38 @@ export default function Visor3D({ uri }) {
     .minPointers(1)
     .maxPointers(1)
     .onStart((evt) => {
-      if (!modoMedirRef.current) {
-        marcadorArrastradoRef.current = null;
-        return;
-      }
-      marcadorArrastradoRef.current = buscarMarcadorCercano(evt.x, evt.y);
+      marcadorArrastradoRef.current = modoMedirRef.current ? buscarMarcadorCercano(evt.x, evt.y) : null;
     })
     .onUpdate((evt) => {
       if (marcadorArrastradoRef.current == null) return;
       arrastrarMarcador(marcadorArrastradoRef.current, evt.x, evt.y);
     })
-    .onEnd(() => {
+    .onFinalize(() => {
+      // onFinalize (no onEnd): se ejecuta SIEMPRE que el gesto termina, tanto si llegó a
+      // "activarse" con movimiento real como si el dedo apenas tocó y se levantó sin mover nada
+      // (que es exactamente el caso de un toque corto sobre un marcador, donde gestoToque es el
+      // que debe actuar). onEnd de Pan a veces no se dispara si el gesto nunca llegó a
+      // considerarse "activo" por falta de movimiento — onFinalize sí, así que es más confiable
+      // para resetear marcadorArrastradoRef a tiempo antes de que gestoToque lo consulte arriba.
       marcadorArrastradoRef.current = null;
     });
 
   // Un dedo: orbita la cámara alrededor del modelo. Dos dedos: mueve el centro de la cámara.
   // Si el dedo agarró un marcador (ver gestoArrastrarMarcador, que corre en simultáneo), no debe
   // orbitar también — se descarta el movimiento de cámara mientras se está arrastrando un punto.
+  //
+  // .minDistance(12): un Pan normal se "activa" (se declara ganador y empieza a mover la cámara)
+  // apenas detecta un par de píxeles de movimiento — eso pasaba ANTES de que gesture-handler
+  // tuviera tiempo de notar que llegó un segundo dedo, así que orbitar casi siempre le ganaba la
+  // carrera al pellizco/mover. Exigiendo 12 puntos de movimiento antes de activarse, se le da a
+  // los gestos de 2 dedos una ventana real para reconocerse primero — apenas gesture-handler ve
+  // el segundo dedo, automáticamente cancela este Pan (por maxPointers(1)), sin que el usuario
+  // note ningún retraso al rotar con un solo dedo de verdad.
   const gestoOrbitar = Gesture.Pan()
     .runOnJS(true)
     .minPointers(1)
     .maxPointers(1)
+    .minDistance(12)
     .onStart(() => {
       inicioGestoRef.current = { ...camState.current, centro: camState.current.centro.clone() };
     })
@@ -701,18 +725,30 @@ export default function Visor3D({ uri }) {
       camState.current.centro = inicio.centro.clone().addScaledVector(direccion, avance);
     });
 
-  // Antes, gestoOrbitar (1 dedo) y el par gestoMover+gestoZoom (2 dedos) estaban en un mismo
-  // Gesture.Race: como orbitar solo necesita 1 dedo, "arrancaba a correr" apenas tocaba el
-  // primer dedo, y casi siempre ganaba la carrera antes de que el segundo dedo del pellizco
-  // llegara a la pantalla — por eso había que poner los dos dedos casi perfectamente juntos y
-  // despacio para que el zoom funcionara. La solución: decirle explícitamente a gestoOrbitar que
-  // ESPERE a que el gesto de 2 dedos falle antes de activarse (.requireExternalGestureToFail),
-  // en vez de competir por quién se activa primero. Así, en cuanto aparece un segundo dedo,
-  // gesture-handler le da la oportunidad al pellizco/mover de tomar el control, y orbitar con 1
-  // dedo solo gana cuando de verdad nunca aparece un segundo dedo.
+  // HISTORIAL DE ESTE BLOQUE (para no repetir intentos que ya fallaron):
+  //
+  // Intento 1: gestoOrbitar (1 dedo) y gestoMover+gestoZoom (2 dedos) en un mismo Gesture.Race.
+  // Como orbitar solo necesita 1 dedo, "arrancaba a correr" apenas tocaba el primer dedo y casi
+  // siempre ganaba la carrera antes de que el segundo dedo del pellizco llegara a la pantalla —
+  // había que ser muy preciso y lento para que el zoom funcionara.
+  //
+  // Intento 2: gestoOrbitar.requireExternalGestureToFail(gestoDosDedos), reutilizando la MISMA
+  // instancia de gestoDosDedos tanto como participante normal de Gesture.Simultaneous como
+  // referencia externa de requireExternalGestureToFail. Esto rompió TODO: rotar y pellizco
+  // dejaron de responder casi por completo, solo mover con 2 dedos funcionaba, y el arrastre de
+  // puntos quedó errático ("a tropezones"). Causa: en react-native-gesture-handler, pasar la
+  // MISMA instancia de un gesto compuesto a dos lugares del árbol (una vez montado normalmente,
+  // otra vez como referencia externa) confunde al manager nativo sobre a qué handler pertenece
+  // cada relación — es un antipatrón conocido, las referencias externas deben ser independientes.
+  //
+  // Intento 3 (este, más simple): en vez de relaciones explícitas entre gestos, se le da a
+  // gestoOrbitar un pequeño minDistance (ver su definición arriba) — así el Pan de 1 dedo no se
+  // "declara ganador" hasta que el dedo se mueve una distancia mínima, dándole tiempo real a
+  // gesture-handler para reconocer un segundo dedo si está por llegar. Con eso, la relación
+  // normal de Gesture.Simultaneous + maxPointers ya alcanza para que orbitar se cancele solo en
+  // cuanto aparece el segundo dedo, sin necesitar bloqueos ni "esperas" explícitas entre gestos.
+  const gestoUnDedo = Gesture.Race(gestoArrastrarMarcador, gestoOrbitar);
   const gestoDosDedos = Gesture.Simultaneous(gestoMover, gestoZoom);
-  const gestoOrbitarConEspera = gestoOrbitar.requireExternalGestureToFail(gestoDosDedos);
-  const gestoUnDedo = Gesture.Race(gestoArrastrarMarcador, gestoOrbitarConEspera);
 
   const gestoCompuesto = Gesture.Simultaneous(gestoToque, gestoDosDedos, gestoUnDedo);
 
