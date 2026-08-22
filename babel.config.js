@@ -1,13 +1,15 @@
 module.exports = function (api) {
   api.cache(true);
   return {
+    // babel-preset-expo YA detecta react-native-worklets instalado y agrega su plugin
+    // automáticamente — NO hay que declararlo aquí a mano. Se probó agregarlo manualmente
+    // (plugins: ['react-native-worklets/plugin']) pensando que hacía falta, pero eso hizo
+    // que el plugin se aplicara DOS VECES sobre el mismo código (una vez por el preset, otra
+    // por esta línea manual), generando el código de gestos corrupto que causaba el crash
+    // "Property 'WorkletsError' doesn't exist" al tocar la pantalla del Visor 3D. Confirmado
+    // revisando el código fuente de babel-preset-expo (node_modules/babel-preset-expo/build/
+    // index.js), que inyecta require('react-native-worklets/plugin') por su cuenta si
+    // detecta el paquete en node_modules.
     presets: ['babel-preset-expo'],
-    // Reanimated 4 movió el motor de "worklets" (el código que corre los gestos táctiles
-    // en un hilo nativo aparte) a su propio paquete, react-native-worklets. Sin este plugin
-    // explícito, el código de gestos se compila mal: no revienta al compilar ni al abrir
-    // la app, pero SÍ en cuanto el usuario dispara un gesto real (tocar/arrastrar la
-    // pantalla), con el crash "Property 'WorkletsError' doesn't exist" — visto en el
-    // Visor 3D al intentar rotar/mover/hacer zoom. Debe ir último en la lista de plugins.
-    plugins: ['react-native-worklets/plugin'],
   };
 };
