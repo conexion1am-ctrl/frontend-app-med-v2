@@ -151,7 +151,39 @@ function agregarContornosDePiezas(raiz) {
 // aristas" de SketchUp. radioIman limita qué tan lejos puede estar la arista para que aplique
 // el snap (en las mismas unidades que el modelo, normalmente metros); si el punto tocado está
 // más lejos que eso de cualquier arista, se devuelve tal cual, sin imanar.
+//
+// PRIORIDAD A VÉRTICES: en una esquina, varias aristas se juntan en un mismo punto (el vértice),
+// pero la proyección sobre CADA arista por separado casi nunca cae exactamente ahí — cae un poco
+// antes o después, sobre la línea recta de esa arista. El resultado es que, tocando justo la
+// esquina, el snap "elegía" la proyección de la arista que primero encontraba en la lista, un
+// poco corrida del vértice real. SketchUp resuelve esto dándole PRIORIDAD a los vértices (los
+// extremos de los segmentos) sobre cualquier punto intermedio de una arista: primero se busca si
+// hay un extremo cerca (con un radio un poco más generoso, porque un vértice es el lugar donde
+// más frecuentemente se quiere medir) y solo si no hay ninguno, se cae a la proyección sobre la
+// arista más cercana.
 function buscarPuntoDeAristaMasCercano(punto, segmentosDeArista, radioIman) {
+  // Paso 1: buscar el VÉRTICE (extremo de cualquier segmento) más cercano. Radio 1.6x más
+  // generoso que el de aristas, porque tocar "cerca de una esquina" con el dedo es menos preciso
+  // que tocar sobre el largo recto de una arista, y el usuario casi siempre quiere el vértice
+  // exacto cuando toca cerca de uno.
+  let mejorVertice = null;
+  let mejorDistanciaVertice = radioIman * 1.6;
+  for (const { a, b } of segmentosDeArista) {
+    const distanciaA = a.distanceTo(punto);
+    if (distanciaA < mejorDistanciaVertice) {
+      mejorDistanciaVertice = distanciaA;
+      mejorVertice = a;
+    }
+    const distanciaB = b.distanceTo(punto);
+    if (distanciaB < mejorDistanciaVertice) {
+      mejorDistanciaVertice = distanciaB;
+      mejorVertice = b;
+    }
+  }
+  if (mejorVertice) return mejorVertice.clone();
+
+  // Paso 2: no hay ningún vértice cerca — imantar al punto más cercano sobre el LARGO de
+  // cualquier arista (proyección recortada al segmento, igual que antes).
   let mejorPunto = null;
   let mejorDistancia = radioIman;
 
@@ -159,9 +191,6 @@ function buscarPuntoDeAristaMasCercano(punto, segmentosDeArista, radioIman) {
   const puntoEnSegmento = new THREE.Vector3();
 
   for (const { a, b } of segmentosDeArista) {
-    // Proyecta `punto` sobre el segmento a→b y recorta el resultado para que quede DENTRO del
-    // segmento (t entre 0 y 1) — así el imán encuentra tanto los extremos (vértices) como
-    // cualquier punto intermedio de la arista, tal como espera un carpintero midiendo un borde.
     segmentoAux.subVectors(b, a);
     const largoAlCuadrado = segmentoAux.lengthSq();
     let t = largoAlCuadrado > 0 ? punto.clone().sub(a).dot(segmentoAux) / largoAlCuadrado : 0;
@@ -633,19 +662,10 @@ export default function Visor3D({ uri }) {
   // Un dedo: orbita la cámara alrededor del modelo. Dos dedos: mueve el centro de la cámara.
   // Si el dedo agarró un marcador (ver gestoArrastrarMarcador, que corre en simultáneo), no debe
   // orbitar también — se descarta el movimiento de cámara mientras se está arrastrando un punto.
-  //
-  // .minDistance(12): un Pan normal se "activa" (se declara ganador y empieza a mover la cámara)
-  // apenas detecta un par de píxeles de movimiento — eso pasaba ANTES de que gesture-handler
-  // tuviera tiempo de notar que llegó un segundo dedo, así que orbitar casi siempre le ganaba la
-  // carrera al pellizco/mover. Exigiendo 12 puntos de movimiento antes de activarse, se le da a
-  // los gestos de 2 dedos una ventana real para reconocerse primero — apenas gesture-handler ve
-  // el segundo dedo, automáticamente cancela este Pan (por maxPointers(1)), sin que el usuario
-  // note ningún retraso al rotar con un solo dedo de verdad.
   const gestoOrbitar = Gesture.Pan()
     .runOnJS(true)
     .minPointers(1)
     .maxPointers(1)
-    .minDistance(12)
     .onStart(() => {
       inicioGestoRef.current = { ...camState.current, centro: camState.current.centro.clone() };
     })
@@ -741,16 +761,26 @@ export default function Visor3D({ uri }) {
   // otra vez como referencia externa) confunde al manager nativo sobre a qué handler pertenece
   // cada relación — es un antipatrón conocido, las referencias externas deben ser independientes.
   //
-  // Intento 3 (este, más simple): en vez de relaciones explícitas entre gestos, se le da a
-  // gestoOrbitar un pequeño minDistance (ver su definición arriba) — así el Pan de 1 dedo no se
-  // "declara ganador" hasta que el dedo se mueve una distancia mínima, dándole tiempo real a
-  // gesture-handler para reconocer un segundo dedo si está por llegar. Con eso, la relación
-  // normal de Gesture.Simultaneous + maxPointers ya alcanza para que orbitar se cancele solo en
-  // cuanto aparece el segundo dedo, sin necesitar bloqueos ni "esperas" explícitas entre gestos.
+  // Intento 3: gestoOrbitar con minDistance(12), para darle tiempo a gesture-handler de detectar
+  // un segundo dedo antes de que orbitar "gane" con el primero. En la práctica esto rompió MÁS
+  // cosas: el usuario reportó que el pellizco seguía siendo intermitente, rotar con 1 dedo quedó
+  // completamente deshabilitado, y medir siguió siendo impreciso — probablemente porque
+  // minDistance también retrasaba/bloqueaba a gestoArrastrarMarcador (que corre en el mismo
+  // Gesture.Race que gestoOrbitar) de una forma que no se había anticipado.
+  //
+  // Intento 4 (actual): volver a la arquitectura simple de Gesture.Race entre el bloque de 1 dedo
+  // y el bloque de 2 dedos, SIN minDistance y SIN relaciones cruzadas (requireExternalGestureToFail).
+  // Gesture.Race dice "el primer gesto de esta lista que reconoce el patrón de dedos correcto se
+  // queda con el toque, los demás se cancelan" — como gestoDosDedos exige minPointers(2), en
+  // cuanto el segundo dedo toca la pantalla gesture-handler lo reconoce y cancela automáticamente
+  // a gestoUnDedo, sin necesitar trucos de tiempo. Es la configuración que el usuario confirma que
+  // "obedecía a todos los gestos" antes de que se intentaran los ajustes 2 y 3 — el único defecto
+  // que tenía (desplazamiento brusco de cerca con 2 dedos) ya se resolvió aparte, escalando
+  // gestoMover por la distancia real cámara→centro en vez de por el radio orbital fijo.
   const gestoUnDedo = Gesture.Race(gestoArrastrarMarcador, gestoOrbitar);
   const gestoDosDedos = Gesture.Simultaneous(gestoMover, gestoZoom);
 
-  const gestoCompuesto = Gesture.Simultaneous(gestoToque, gestoDosDedos, gestoUnDedo);
+  const gestoCompuesto = Gesture.Simultaneous(gestoToque, Gesture.Race(gestoDosDedos, gestoUnDedo));
 
   const reiniciarVista = () => {
     if (!modeloRef.current) return;

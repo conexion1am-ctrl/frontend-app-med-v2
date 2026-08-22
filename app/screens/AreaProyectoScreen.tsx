@@ -964,7 +964,12 @@ export default function AreaProyectoScreen({ route }) {
             gestos esté bien. Mismo motivo por el que el Modal de fotoAmpliada, más arriba, ya
             lo tenía. */}
         <GestureHandlerRootView style={{ flex: 1 }}>
-          <View style={styles.plano3dModalContainer}>
+          {/* Este Modal se dibuja en Android por debajo de la barra de notificaciones/hora y, con
+              navegación gesticular, también puede montarse detrás de los botones nativos de abajo
+              (el usuario reportó el header y el aviso inferior tapados). paddingTop/paddingBottom
+              con los insets reales del dispositivo (useSafeAreaInsets, ya usado en el resto de esta
+              pantalla) evita que el header y los avisos del visor queden tapados por esas zonas. */}
+          <View style={[styles.plano3dModalContainer, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
             <View style={styles.plano3dHeader}>
               <TouchableOpacity onPress={() => setPlano3dAbierto(null)}>
                 <Text style={styles.chatVolver}>‹ Volver</Text>
@@ -1352,7 +1357,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 16,
-    paddingTop: Platform.OS === 'ios' ? 50 : 16,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
