@@ -189,8 +189,22 @@ export default function Visor3D({ uri }) {
     });
   };
 
+  // IMPORTANTE — .runOnJS(true) en los 4 gestos de abajo:
+  // Por defecto, react-native-gesture-handler 2.x + react-native-reanimated 4.x ejecutan los
+  // callbacks de gestos (.onStart/.onUpdate/.onEnd) como "worklets": código que corre en un
+  // hilo nativo aparte (el "UI runtime"), separado del hilo normal de JavaScript. Ese hilo
+  // especial NO puede tocar objetos JS complejos como refs de React (camState.current,
+  // inicioGestoRef.current) ni instancias de clases de Three.js (THREE.Vector3, con métodos
+  // como .clone()) — solo puede recibir datos simples. Al intentarlo, revienta con
+  // "[Worklets] Trying to access property `clone` of an object which cannot be sent to the UI
+  // runtime" (visto en logs reales del dispositivo). .runOnJS(true) le dice al gesto: "no me
+  // conviertas en worklet, ejecuta este callback en el hilo de JS de siempre" — que es donde
+  // SÍ se puede tocar refs y objetos de Three.js sin problema, tal como estaba pensado este
+  // componente desde el principio.
+
   // Toque simple: en modo medir, marca un punto.
   const gestoToque = Gesture.Tap()
+    .runOnJS(true)
     .maxDuration(250)
     .onEnd((evt, exitoso) => {
       if (!exitoso || !modoMedirRef.current) return;
@@ -199,6 +213,7 @@ export default function Visor3D({ uri }) {
 
   // Un dedo: orbita la cámara alrededor del modelo. Dos dedos: mueve el centro de la cámara.
   const gestoOrbitar = Gesture.Pan()
+    .runOnJS(true)
     .minPointers(1)
     .maxPointers(1)
     .onStart(() => {
@@ -212,6 +227,7 @@ export default function Visor3D({ uri }) {
     });
 
   const gestoMover = Gesture.Pan()
+    .runOnJS(true)
     .minPointers(2)
     .maxPointers(2)
     .onStart(() => {
@@ -235,6 +251,7 @@ export default function Visor3D({ uri }) {
     });
 
   const gestoZoom = Gesture.Pinch()
+    .runOnJS(true)
     .onStart(() => {
       inicioGestoRef.current = { ...camState.current, centro: camState.current.centro.clone() };
     })
