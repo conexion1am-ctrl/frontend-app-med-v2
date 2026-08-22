@@ -73,6 +73,21 @@ export default function EstadisticasScreen({ route }) {
   const [abonoFecha, setAbonoFecha] = useState('');
   const [guardandoAbono, setGuardandoAbono] = useState(false);
 
+  // Categoría actualmente abierta (ej. "Carpintería"): cuando no es null, en vez del resumen
+  // general se muestra solo el historial de costos de esa categoría, para no mezclar todo en
+  // una sola lista larga y desordenada.
+  const [categoriaAbierta, setCategoriaAbierta] = useState(null); // { categoria_id, categoria_nombre } | null
+
+  // Menú de opciones (Editar / Eliminar) que aparece al mantener presionado un movimiento de
+  // costo — igual patrón que ya se usa en Fotos de avance y Planos 3D.
+  const [menuMovimiento, setMenuMovimiento] = useState(null); // el movimiento sobre el que se hizo long-press
+
+  // Modal de edición de un movimiento ya existente (arreglar un valor mal digitado, cambiar la
+  // categoría, la fecha o el detalle).
+  const [modalEditarVisible, setModalEditarVisible] = useState(false);
+  const [editando, setEditando] = useState(null); // movimiento que se está editando
+  const [guardandoEdicion, setGuardandoEdicion] = useState(false);
+
   useEffect(() => {
     cargarProyectos();
     cargarCategorias();
@@ -127,6 +142,7 @@ export default function EstadisticasScreen({ route }) {
     setProyectoSeleccionado(proyecto);
     setCargandoStats(true);
     setSinDatos(false);
+    setCategoriaAbierta(null);
     try {
       const res = await axios.get(`https://backend-app-mediterraneo.onrender.com/api/estadisticas/${proyecto.id}`);
       setEstadisticas(res.data);
@@ -183,6 +199,72 @@ export default function EstadisticasScreen({ route }) {
     } finally {
       setGuardandoCosto(false);
     }
+  };
+
+  // Abre el menú (Editar / Eliminar) al mantener presionado un movimiento de costo.
+  const abrirMenuMovimiento = (mov) => setMenuMovimiento(mov);
+  const cerrarMenuMovimiento = () => setMenuMovimiento(null);
+
+  const abrirEditarMovimiento = (mov) => {
+    setEditando({
+      id: mov.id,
+      tipo: mov.tipo,
+      detalle: mov.detalle || '',
+      valor: String(mov.valor),
+      fecha: formatearFecha(mov.fecha), // ya viene en DD-MM-AA
+      categoria_id: mov.categoria_id || null,
+    });
+    setModalEditarVisible(true);
+  };
+
+  const guardarEdicionMovimiento = async () => {
+    if (!editando?.valor) {
+      Alert.alert('Campo obligatorio', 'El valor es obligatorio.');
+      return;
+    }
+    const fechaIso = convertirADdMmAaAIso(editando.fecha);
+    if (!fechaIso) {
+      Alert.alert('Fecha inválida', 'Escribe la fecha en formato DD-MM-AA, por ejemplo: 15-08-26');
+      return;
+    }
+    setGuardandoEdicion(true);
+    try {
+      await axios.put(`https://backend-app-mediterraneo.onrender.com/api/estadisticas/movimiento/${editando.id}`, {
+        tipo: editando.tipo,
+        detalle: editando.detalle || null,
+        valor: parseFloat(editando.valor),
+        fecha: fechaIso,
+        categoria_id: editando.categoria_id,
+      });
+      setModalEditarVisible(false);
+      setEditando(null);
+      seleccionarProyecto(proyectoSeleccionado);
+    } catch (error) {
+      console.error('Error editando movimiento de costo:', error);
+      const mensaje = error.response?.data?.error || 'No se pudo guardar el cambio.';
+      Alert.alert('Error', mensaje);
+    } finally {
+      setGuardandoEdicion(false);
+    }
+  };
+
+  const eliminarMovimiento = (mov) => {
+    Alert.alert('Eliminar costo', '¿Seguro que quieres eliminar este registro de costo? Esta acción no se puede deshacer.', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Eliminar',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await axios.delete(`https://backend-app-mediterraneo.onrender.com/api/estadisticas/movimiento/${mov.id}`);
+            seleccionarProyecto(proyectoSeleccionado);
+          } catch (error) {
+            console.error('Error eliminando movimiento de costo:', error);
+            Alert.alert('Error', 'No se pudo eliminar el costo.');
+          }
+        },
+      },
+    ]);
   };
 
   const abrirModalAbono = () => {
@@ -253,14 +335,62 @@ export default function EstadisticasScreen({ route }) {
   return (
     <View style={[styles.container, { backgroundColor: empresa.color_hex || '#1E90FF' }]}>
       <EncabezadoLogo empresa={empresa} />
-      <TouchableOpacity style={styles.botonVolver} onPress={() => setProyectoSeleccionado(null)}>
-        <Text style={styles.botonVolverTexto}>‹ Elegir otro proyecto</Text>
+      <TouchableOpacity
+        style={styles.botonVolver}
+        onPress={() => (categoriaAbierta ? setCategoriaAbierta(null) : setProyectoSeleccionado(null))}
+      >
+        <Text style={styles.botonVolverTexto}>
+          {categoriaAbierta ? '‹ Volver a Estadísticas' : '‹ Elegir otro proyecto'}
+        </Text>
       </TouchableOpacity>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <Text style={styles.tituloProyecto}>{proyectoSeleccionado.nombre}</Text>
 
-        {cargandoStats ? (
+        {cargandoStats ? null : sinDatos ? null : categoriaAbierta && estadisticas ? (
+          <>
+            <Text style={styles.seccionTitulo}>{categoriaAbierta.categoria_nombre}</Text>
+            {(() => {
+              const movimientosCategoria = estadisticas.movimientos_costos.filter(
+                (m) => m.categoria_id === categoriaAbierta.categoria_id
+              );
+              const totalCategoria = movimientosCategoria.reduce((sum, m) => sum + parseFloat(m.valor), 0);
+              return (
+                <>
+                  <View style={styles.resumenCard}>
+                    <View style={styles.resumenFila}>
+                      <Text style={styles.resumenLabelDestacado}>Total {categoriaAbierta.categoria_nombre}</Text>
+                      <Text style={styles.resumenValorDestacado}>{formatearMoneda(totalCategoria)}</Text>
+                    </View>
+                  </View>
+
+                  <Text style={styles.seccionTitulo}>Historial</Text>
+                  {movimientosCategoria.length === 0 ? (
+                    <Text style={styles.vacioTexto}>Aún no hay costos registrados en esta categoría.</Text>
+                  ) : (
+                    movimientosCategoria.map((mov) => (
+                      <TouchableOpacity
+                        key={mov.id}
+                        style={styles.abonoCard}
+                        onLongPress={() => abrirMenuMovimiento(mov)}
+                        delayLongPress={350}
+                      >
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.movimientoTipo}>{ETIQUETAS_TIPO_COSTO[mov.tipo] || mov.tipo}</Text>
+                          {mov.detalle ? <Text style={styles.movimientoDetalle}>{mov.detalle}</Text> : null}
+                          <Text style={styles.abonoFecha}>{formatearFecha(mov.fecha)}</Text>
+                        </View>
+                        <Text style={styles.abonoValor}>{formatearMoneda(mov.valor)}</Text>
+                      </TouchableOpacity>
+                    ))
+                  )}
+                </>
+              );
+            })()}
+          </>
+        ) : null}
+
+        {categoriaAbierta ? null : cargandoStats ? (
           <ActivityIndicator size="large" color={empresa.color_hex || '#1E90FF'} style={{ marginTop: 30 }} />
         ) : sinDatos ? (
           <Text style={styles.vacioTexto}>
@@ -330,32 +460,46 @@ export default function EstadisticasScreen({ route }) {
                   <Text style={styles.seccionTitulo}>Costos por categoría</Text>
                   <View style={styles.resumenCard}>
                     {estadisticas.resumen_por_categoria.map((cat) => (
-                      <View key={cat.categoria_id} style={[styles.resumenFila, { paddingVertical: 8 }]}>
+                      <TouchableOpacity
+                        key={cat.categoria_id}
+                        style={[styles.resumenFila, { paddingVertical: 10 }]}
+                        onPress={() => setCategoriaAbierta({ categoria_id: cat.categoria_id, categoria_nombre: cat.categoria_nombre })}
+                      >
                         <Text style={styles.resumenLabel}>{cat.categoria_nombre}</Text>
-                        <Text style={styles.resumenValor}>{formatearMoneda(cat.total)}</Text>
-                      </View>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                          <Text style={styles.resumenValor}>{formatearMoneda(cat.total)}</Text>
+                          <Text style={styles.categoriaFlecha}>›</Text>
+                        </View>
+                      </TouchableOpacity>
                     ))}
                   </View>
                 </>
               )}
 
-              <Text style={styles.seccionTitulo}>Historial de costos</Text>
-              {estadisticas.movimientos_costos.length === 0 ? (
-                <Text style={styles.vacioTexto}>Aún no hay costos registrados.</Text>
+              <Text style={styles.seccionTitulo}>Historial de costos sin categoría</Text>
+              {estadisticas.movimientos_costos.filter((m) => !m.categoria_id).length === 0 ? (
+                <Text style={styles.vacioTexto}>
+                  Todos los costos registrados ya tienen una categoría asignada. Los que agregues sin elegir
+                  categoría aparecerán aquí.
+                </Text>
               ) : (
-                estadisticas.movimientos_costos.map((mov) => (
-                  <View key={mov.id} style={styles.abonoCard}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.movimientoTipo}>
-                        {ETIQUETAS_TIPO_COSTO[mov.tipo] || mov.tipo}
-                        {mov.categoria_nombre ? ` · ${mov.categoria_nombre}` : ''}
-                      </Text>
-                      {mov.detalle ? <Text style={styles.movimientoDetalle}>{mov.detalle}</Text> : null}
-                      <Text style={styles.abonoFecha}>{formatearFecha(mov.fecha)}</Text>
-                    </View>
-                    <Text style={styles.abonoValor}>{formatearMoneda(mov.valor)}</Text>
-                  </View>
-                ))
+                estadisticas.movimientos_costos
+                  .filter((m) => !m.categoria_id)
+                  .map((mov) => (
+                    <TouchableOpacity
+                      key={mov.id}
+                      style={styles.abonoCard}
+                      onLongPress={() => abrirMenuMovimiento(mov)}
+                      delayLongPress={350}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.movimientoTipo}>{ETIQUETAS_TIPO_COSTO[mov.tipo] || mov.tipo}</Text>
+                        {mov.detalle ? <Text style={styles.movimientoDetalle}>{mov.detalle}</Text> : null}
+                        <Text style={styles.abonoFecha}>{formatearFecha(mov.fecha)}</Text>
+                      </View>
+                      <Text style={styles.abonoValor}>{formatearMoneda(mov.valor)}</Text>
+                    </TouchableOpacity>
+                  ))
               )}
 
               <Text style={styles.seccionTitulo}>Abonos recibidos</Text>
@@ -479,6 +623,117 @@ export default function EstadisticasScreen({ route }) {
           </ScrollView>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* MENÚ: Editar / Eliminar, al mantener presionado un movimiento de costo */}
+      <Modal visible={!!menuMovimiento} transparent animationType="fade" onRequestClose={cerrarMenuMovimiento}>
+        <TouchableOpacity style={styles.menuFondo} activeOpacity={1} onPress={cerrarMenuMovimiento}>
+          <View style={styles.menuCaja}>
+            <TouchableOpacity
+              style={styles.menuOpcion}
+              onPress={() => {
+                const mov = menuMovimiento;
+                cerrarMenuMovimiento();
+                abrirEditarMovimiento(mov);
+              }}
+            >
+              <Text style={styles.menuOpcionTexto}>✏️ Editar</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.menuOpcion}
+              onPress={() => {
+                const mov = menuMovimiento;
+                cerrarMenuMovimiento();
+                eliminarMovimiento(mov);
+              }}
+            >
+              <Text style={[styles.menuOpcionTexto, { color: '#c62828' }]}>🗑️ Eliminar</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.menuOpcion} onPress={cerrarMenuMovimiento}>
+              <Text style={styles.menuOpcionTexto}>Cancelar</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* MODAL: Editar un costo ya registrado (arreglar valor, fecha, detalle o categoría) */}
+      <Modal visible={modalEditarVisible} animationType="slide">
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <ScrollView style={styles.modalContainer} contentContainerStyle={{ padding: 20, paddingBottom: 60 }}>
+            <Text style={styles.modalTitulo}>Editar Costo</Text>
+
+            <Text style={styles.label}>Tipo</Text>
+            <View style={styles.chipsContenedor}>
+              {Object.entries(ETIQUETAS_TIPO_COSTO).map(([valor, etiqueta]) => {
+                const seleccionado = editando?.tipo === valor;
+                return (
+                  <TouchableOpacity
+                    key={valor}
+                    style={[styles.chip, seleccionado && styles.chipSeleccionado]}
+                    onPress={() => setEditando((ant) => ({ ...ant, tipo: valor }))}
+                  >
+                    <Text style={[styles.chipTexto, seleccionado && styles.chipTextoSeleccionado]}>{etiqueta}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <Text style={styles.label}>Categoría (opcional)</Text>
+            <View style={styles.chipsContenedor}>
+              {categorias.map((cat) => {
+                const seleccionada = editando?.categoria_id === cat.id;
+                return (
+                  <TouchableOpacity
+                    key={cat.id}
+                    style={[styles.chip, seleccionada && styles.chipSeleccionado]}
+                    onPress={() => setEditando((ant) => ({ ...ant, categoria_id: seleccionada ? null : cat.id }))}
+                  >
+                    <Text style={[styles.chipTexto, seleccionada && styles.chipTextoSeleccionado]}>{cat.nombre}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <Text style={styles.label}>Detalle</Text>
+            <TextInput
+              style={styles.input}
+              value={editando?.detalle || ''}
+              onChangeText={(texto) => setEditando((ant) => ({ ...ant, detalle: texto }))}
+              placeholder="Ej: Compra de materiales, pago a proveedor, etc."
+              placeholderTextColor="#999"
+            />
+
+            <Text style={styles.label}>Valor *</Text>
+            <InputMoneda
+              style={styles.input}
+              value={editando?.valor || ''}
+              onChangeValor={(valor) => setEditando((ant) => ({ ...ant, valor }))}
+            />
+
+            <Text style={styles.label}>Fecha * (DD-MM-AA)</Text>
+            <TextInput
+              style={styles.input}
+              value={editando?.fecha || ''}
+              onChangeText={(texto) => setEditando((ant) => ({ ...ant, fecha: texto }))}
+              placeholder="Ej: 15-08-26"
+              placeholderTextColor="#999"
+              keyboardType="numbers-and-punctuation"
+            />
+
+            <TouchableOpacity style={styles.botonGuardar} onPress={guardarEdicionMovimiento} disabled={guardandoEdicion}>
+              {guardandoEdicion ? <ActivityIndicator color="#fff" /> : <Text style={styles.botonGuardarTexto}>GUARDAR CAMBIOS</Text>}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.botonCancelar}
+              onPress={() => {
+                setModalEditarVisible(false);
+                setEditando(null);
+              }}
+            >
+              <Text style={styles.botonCancelarTexto}>Cancelar</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -575,4 +830,9 @@ const styles = StyleSheet.create({
   botonGuardarTexto: { color: '#fff', fontSize: 15, fontWeight: 'bold' },
   botonCancelar: { alignItems: 'center', marginTop: 12, padding: 10 },
   botonCancelarTexto: { color: '#888', fontSize: 14 },
+  categoriaFlecha: { fontSize: 18, color: '#ccc' },
+  menuFondo: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
+  menuCaja: { backgroundColor: '#fff', borderTopLeftRadius: 14, borderTopRightRadius: 14, paddingBottom: 20 },
+  menuOpcion: { paddingVertical: 16, paddingHorizontal: 20, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#eee' },
+  menuOpcionTexto: { fontSize: 16, color: '#222', textAlign: 'center' },
 });

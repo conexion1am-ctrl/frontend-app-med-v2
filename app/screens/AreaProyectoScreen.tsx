@@ -113,6 +113,10 @@ export default function AreaProyectoScreen({ route }) {
   const [modalAsignarVisible, setModalAsignarVisible] = useState(false);
   const [personalDisponible, setPersonalDisponible] = useState([]);
 
+  // Menú (Pausar asignación / Eliminar chat / Eliminar) que aparece al mantener presionada una
+  // persona del equipo — mismo patrón que ya se usa en Fotos, Planos 3D y Estadísticas.
+  const [menuPersona, setMenuPersona] = useState(null); // la persona (item de `equipo`) sobre la que se hizo long-press
+
   const [chatAbierto, setChatAbierto] = useState(null);
   const [mensajes, setMensajes] = useState([]);
   const [nuevoMensaje, setNuevoMensaje] = useState('');
@@ -434,6 +438,80 @@ export default function AreaProyectoScreen({ route }) {
     }
   };
 
+  const abrirMenuPersona = (persona) => setMenuPersona(persona);
+  const cerrarMenuPersona = () => setMenuPersona(null);
+
+  // Pausa (o reanuda, si ya estaba pausada) el acceso de esta persona a este proyecto. Mientras
+  // está pausada, deja de ver este proyecto en su lista — es un bloqueo real de acceso, no solo
+  // visual (ver PUT /equipo/:id/pausar en el backend).
+  const alternarPausaPersona = async (persona) => {
+    try {
+      const res = await axios.put(
+        `https://backend-app-mediterraneo.onrender.com/api/proyectos/equipo/${persona.asignacion_id}/pausar`
+      );
+      Alert.alert(res.data.asignacion.pausado ? 'Asignación pausada' : 'Asignación reanudada');
+      cargarEquipo();
+    } catch (error) {
+      console.error('Error pausando/reanudando asignación:', error);
+      Alert.alert('Error', 'No se pudo cambiar el estado de la asignación.');
+    }
+  };
+
+  // Vacía por completo el chat con esta persona en esta área/proyecto (mensajes y archivos
+  // adjuntos), sin quitarla del proyecto.
+  const eliminarChatPersona = (persona) => {
+    Alert.alert(
+      'Eliminar chat',
+      `¿Vaciar completamente el chat con ${persona.nombre}? Se eliminarán todos los mensajes y archivos. Esta acción no se puede deshacer.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar chat',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await axios.delete(
+                `https://backend-app-mediterraneo.onrender.com/api/mensajes/vaciar/${proyecto.id}/${area.id}/${persona.usuario_id}/${usuario.id}`
+              );
+              Alert.alert('Listo', 'El chat fue eliminado.');
+            } catch (error) {
+              console.error('Error eliminando chat:', error);
+              Alert.alert('Error', 'No se pudo eliminar el chat.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  // Elimina a la persona del proyecto por completo (pierde acceso) y, junto con eso, vacía el
+  // chat que tuvieron en esta área — confirmado con el usuario que ambas cosas van juntas.
+  const eliminarPersonaDelProyecto = (persona) => {
+    Alert.alert(
+      'Eliminar del proyecto',
+      `¿Eliminar a ${persona.nombre} de este proyecto? Perderá el acceso y se borrará también el chat que tuvieron. Esta acción no se puede deshacer.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await axios.delete(
+                `https://backend-app-mediterraneo.onrender.com/api/proyectos/equipo/${persona.asignacion_id}`,
+                { data: { usuario_solicitante_id: usuario.id } }
+              );
+              cargarEquipo();
+            } catch (error) {
+              console.error('Error eliminando persona del proyecto:', error);
+              Alert.alert('Error', 'No se pudo eliminar a la persona del proyecto.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const abrirAsignar = async () => {
     try {
       const response = await axios.get(`https://backend-app-mediterraneo.onrender.com/api/areas/personal/${empresa.id}`);
@@ -714,8 +792,10 @@ export default function AreaProyectoScreen({ route }) {
                 return (
                   <TouchableOpacity
                     style={styles.personaCard}
-                    onPress={() => !esPendiente && abrirChat(item)}
-                    disabled={esPendiente}
+                    onPress={() => !esPendiente && !item.pausado && abrirChat(item)}
+                    onLongPress={() => permisos.asignarPersonal && abrirMenuPersona(item)}
+                    delayLongPress={350}
+                    disabled={esPendiente && !permisos.asignarPersonal}
                   >
                     <View>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -725,12 +805,21 @@ export default function AreaProyectoScreen({ route }) {
                             <Text style={styles.etiquetaPendienteTexto}>Pendiente</Text>
                           </View>
                         )}
+                        {item.pausado && (
+                          <View style={styles.etiquetaPausado}>
+                            <Text style={styles.etiquetaPendienteTexto}>Pausado</Text>
+                          </View>
+                        )}
                       </View>
                       <Text style={styles.personaSubtexto}>
-                        {esPendiente ? 'Todavía no acepta la invitación · el chat se habilita al aceptar' : 'Toca para abrir el chat'}
+                        {esPendiente
+                          ? 'Todavía no acepta la invitación · el chat se habilita al aceptar'
+                          : item.pausado
+                          ? 'Acceso pausado a este proyecto'
+                          : 'Toca para abrir el chat'}
                       </Text>
                     </View>
-                    {!esPendiente && <Text style={styles.personaFlecha}>›</Text>}
+                    {!esPendiente && !item.pausado && <Text style={styles.personaFlecha}>›</Text>}
                   </TouchableOpacity>
                 );
               }}
@@ -974,6 +1063,51 @@ export default function AreaProyectoScreen({ route }) {
         </TouchableOpacity>
       </Modal>
 
+      <Modal visible={!!menuPersona} animationType="fade" transparent>
+        <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={cerrarMenuPersona}>
+          <View style={styles.menuBox}>
+            <Text style={styles.menuTitulo}>{menuPersona?.nombre}</Text>
+            <TouchableOpacity
+              style={styles.menuOpcion}
+              onPress={() => {
+                const persona = menuPersona;
+                cerrarMenuPersona();
+                alternarPausaPersona(persona);
+              }}
+            >
+              <Text style={styles.menuOpcionTexto}>
+                {menuPersona?.pausado ? '▶️  Reanudar asignación' : '⏸️  Pausar asignación'}
+              </Text>
+            </TouchableOpacity>
+            {menuPersona?.estado === 'vinculado' && (
+              <TouchableOpacity
+                style={styles.menuOpcion}
+                onPress={() => {
+                  const persona = menuPersona;
+                  cerrarMenuPersona();
+                  eliminarChatPersona(persona);
+                }}
+              >
+                <Text style={[styles.menuOpcionTexto, { color: '#DC143C' }]}>🗑️  Eliminar chat</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              style={styles.menuOpcion}
+              onPress={() => {
+                const persona = menuPersona;
+                cerrarMenuPersona();
+                eliminarPersonaDelProyecto(persona);
+              }}
+            >
+              <Text style={[styles.menuOpcionTexto, { color: '#DC143C' }]}>❌  Eliminar</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.menuOpcion} onPress={cerrarMenuPersona}>
+              <Text style={[styles.menuOpcionTexto, { color: '#888' }]}>Cancelar</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
       <Modal visible={modalAsignarVisible} animationType="slide">
         <View style={styles.modalContainer}>
           <Text style={styles.modalTitulo}>Asignar a {area.nombre}</Text>
@@ -1150,6 +1284,7 @@ const styles = StyleSheet.create({
   opcionPersonaCelular: { fontSize: 13, color: '#777', marginTop: 2 },
   etiquetaPendiente: { backgroundColor: '#FFF3CD', borderRadius: 12, paddingVertical: 3, paddingHorizontal: 9 },
   etiquetaPendienteTexto: { fontSize: 11, color: '#8A6D00', fontWeight: '700' },
+  etiquetaPausado: { backgroundColor: '#F0F0F0', borderRadius: 12, paddingVertical: 3, paddingHorizontal: 9 },
   botonCancelar: { alignItems: 'center', marginTop: 16, padding: 12 },
   botonCancelarTexto: { color: '#888', fontSize: 14 },
   chatModalContainer: { flex: 1, backgroundColor: '#f5f5f5' },
