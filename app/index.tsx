@@ -117,6 +117,7 @@ export default function App() {
               proyecto: ultimaPantalla.proyecto,
               area: ultimaPantalla.area,
               usuario: ultimaPantalla.usuario || usuario,
+              tabInicial: ultimaPantalla.tab,
             });
             return;
           }

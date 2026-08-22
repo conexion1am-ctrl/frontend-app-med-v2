@@ -80,23 +80,32 @@ export default function AreaProyectoScreen({ route }) {
   const { empresa, proyecto, area, usuario } = route.params;
   const insets = useSafeAreaInsets();
 
-  // Guardamos en qué pantalla está el usuario ahora mismo. Si Android mata la app por falta de
-  // memoria mientras la cámara está abierta (algo fuera de nuestro control) y luego la revive,
-  // toda la navegación en memoria se pierde y normalmente el usuario aterrizaría de nuevo en
-  // "Seleccionar Empresa". Con este dato guardado, revisarSesion() en index.tsx puede detectar
-  // que venía de aquí y devolverlo directo a esta misma área de proyecto en vez de preguntarle
-  // la empresa otra vez. Se guarda con un timestamp para no aplicar esto si el usuario cerró la
-  // app hace horas y la abre de nuevo normalmente (en ese caso sí queremos el flujo normal).
+  const permisos = permisosDe(empresa);
+  const pestanasVisibles = pestanasAreaProyecto(empresa); // ['equipo', 'fotos', 'planos3d'] o subconjunto
+  // tabInicial: viene de index.tsx cuando se restaura la posición del usuario tras un reinicio
+  // de la app (ver "ultimaPantalla" en index.tsx). Si no viene, se usa la primera pestaña visible
+  // como siempre.
+  const [tab, setTab] = useState(
+    route.params.tabInicial && pestanasVisibles.includes(route.params.tabInicial)
+      ? route.params.tabInicial
+      : pestanasVisibles[0]
+  ); // 'equipo' | 'fotos' | 'planos3d' | 'contrato'
+
+  // Guardamos en qué pantalla y pestaña está el usuario ahora mismo. Si Android mata la app por
+  // falta de memoria (por ejemplo mientras la cámara está abierta) y luego la revive, toda la
+  // navegación en memoria se pierde y normalmente el usuario aterrizaría de nuevo en "Seleccionar
+  // Empresa". Con este dato guardado, revisarSesion() en index.tsx puede detectar que venía de
+  // aquí y devolverlo directo a esta misma área Y pestaña (ej. Fotos), en vez de preguntarle la
+  // empresa otra vez o dejarlo en la pestaña por defecto (Equipo). Depende de `tab` para
+  // actualizarse cada vez que el usuario cambia de pestaña, no solo al entrar a la pantalla.
+  // Se guarda con un timestamp para no aplicar esto si el usuario cerró la app hace horas y la
+  // abre de nuevo normalmente (en ese caso sí queremos el flujo normal).
   useEffect(() => {
     AsyncStorage.setItem(
       'ultimaPantalla',
-      JSON.stringify({ pantalla: 'AreaProyecto', empresa, proyecto, area, usuario, ts: Date.now() })
+      JSON.stringify({ pantalla: 'AreaProyecto', empresa, proyecto, area, usuario, tab, ts: Date.now() })
     ).catch(() => {});
-  }, []);
-
-  const permisos = permisosDe(empresa);
-  const pestanasVisibles = pestanasAreaProyecto(empresa); // ['equipo', 'fotos', 'planos3d'] o subconjunto
-  const [tab, setTab] = useState(pestanasVisibles[0]); // 'equipo' | 'fotos' | 'planos3d' | 'contrato'
+  }, [tab]);
   const [equipo, setEquipo] = useState([]);
   const [contrato, setContrato] = useState(null);
   const [cargandoContrato, setCargandoContrato] = useState(false);
@@ -739,6 +748,7 @@ export default function AreaProyectoScreen({ route }) {
             <Text style={styles.vacioTexto}>Aún no hay fotos de avance. Toca "+ Foto" para agregar la primera.</Text>
           ) : (
             <FlatList
+              key="galeria-fotos-3-columnas"
               data={fotos}
               keyExtractor={(item) => item.id.toString()}
               numColumns={3}
