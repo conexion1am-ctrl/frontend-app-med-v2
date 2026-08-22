@@ -260,6 +260,7 @@ export default function Visor3D({ uri }) {
   const modeloRef = useRef(null);
   const luzCamaraRef = useRef(null);
   const marcadoresRef = useRef([]); // esferas rojas que marcan los puntos tocados
+  const lineaMedicionRef = useRef(null); // línea azul entre los dos puntos, mientras haya 2
   // Segmentos de arista del modelo (en coordenadas de mundo) y el radio del imán, usados por
   // el snap de medición para "imanar" el punto tocado a la arista real más cercana.
   const segmentosAristaRef = useRef([]);
@@ -312,8 +313,30 @@ export default function Visor3D({ uri }) {
     const escena = escenaRef.current;
     if (escena) {
       marcadoresRef.current.forEach((m) => escena.remove(m));
+      if (lineaMedicionRef.current) {
+        escena.remove(lineaMedicionRef.current);
+        lineaMedicionRef.current = null;
+      }
     }
     marcadoresRef.current = [];
+  };
+
+  // Dibuja (o actualiza) el rayo azul entre los dos puntos de medición, para que se vea
+  // exactamente qué tramo del modelo se está midiendo — igual que pidió el usuario, como
+  // referencia visual entre los dos puntos rojos.
+  const dibujarLineaMedicion = (puntoA, puntoB) => {
+    const escena = escenaRef.current;
+    if (!escena) return;
+    if (lineaMedicionRef.current) {
+      escena.remove(lineaMedicionRef.current);
+      lineaMedicionRef.current = null;
+    }
+    const geometria = new THREE.BufferGeometry().setFromPoints([puntoA, puntoB]);
+    const material = new THREE.LineBasicMaterial({ color: 0x1e90ff, transparent: true, opacity: 0.9, depthTest: false });
+    const linea = new THREE.Line(geometria, material);
+    linea.renderOrder = 2; // igual que los marcadores: siempre visible, encima del modelo
+    escena.add(linea);
+    lineaMedicionRef.current = linea;
   };
 
   const manejarToqueMedicion = (x, y) => {
@@ -337,6 +360,7 @@ export default function Visor3D({ uri }) {
       if (nuevos.length === 2) {
         const distancia = nuevos[0].distanceTo(nuevos[1]);
         setDistanciaMedida(distancia);
+        dibujarLineaMedicion(nuevos[0], nuevos[1]);
       } else {
         setDistanciaMedida(null);
       }
