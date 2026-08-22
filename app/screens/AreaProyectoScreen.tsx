@@ -146,8 +146,12 @@ export default function AreaProyectoScreen({ route }) {
       });
       setMensajes((anteriores) => anteriores.filter((m) => m.id !== mensaje.id));
     } catch (error) {
-      console.error('Error eliminando mensaje:', error);
-      Alert.alert('Error', 'No se pudo eliminar el mensaje.');
+      // Mostramos el motivo real que devuelve el servidor (ej. "Solo quien envió el mensaje
+      // puede eliminarlo") en vez de un texto genérico, para poder diagnosticar el bug reportado
+      // sin adivinar — antes solo se veía "No se pudo eliminar el mensaje" sin más contexto.
+      const detalle = error.response?.data?.error || error.message || 'Error desconocido';
+      console.error('Error eliminando mensaje:', error.response?.status, detalle);
+      Alert.alert('Error', `No se pudo eliminar el mensaje.\n\n${detalle}`);
     }
   };
 
@@ -755,11 +759,18 @@ export default function AreaProyectoScreen({ route }) {
               contentContainerStyle={styles.galeriaLista}
               renderItem={({ item }) => (
                 <TouchableOpacity
-                  style={styles.fotoMiniatura}
+                  style={styles.fotoMiniaturaContainer}
                   onPress={() => setFotoAmpliada(item)}
                   onLongPress={() => setMenuFoto(item)}
                 >
-                  <Image source={{ uri: item.foto_url }} style={styles.fotoMiniaturaImagen} />
+                  <View style={styles.fotoMiniatura}>
+                    <Image source={{ uri: item.foto_url }} style={styles.fotoMiniaturaImagen} />
+                  </View>
+                  {/* Fecha y hora visibles directamente en la cuadrícula, sin tener que entrar a
+                      la foto — a pedido del usuario, mismo dato que ya se ve en Planos 3D. */}
+                  <Text style={styles.fotoMiniaturaFecha} numberOfLines={1}>
+                    {formatearFechaHora(item.created_at)}
+                  </Text>
                 </TouchableOpacity>
               )}
             />
@@ -1169,8 +1180,10 @@ const styles = StyleSheet.create({
   tabBotonTexto: { fontSize: 14, color: '#888', fontWeight: '600' },
   tabBotonTextoActivo: { color: '#1E90FF' },
   galeriaLista: { padding: 8 },
-  fotoMiniatura: { flex: 1 / 3, aspectRatio: 1, margin: 4, borderRadius: 8, overflow: 'hidden', backgroundColor: '#eee' },
+  fotoMiniaturaContainer: { flex: 1 / 3, margin: 4 },
+  fotoMiniatura: { aspectRatio: 1, borderRadius: 8, overflow: 'hidden', backgroundColor: '#eee' },
   fotoMiniaturaImagen: { width: '100%', height: '100%' },
+  fotoMiniaturaFecha: { fontSize: 10, color: '#666', marginTop: 3, textAlign: 'center' },
   fotoAmpliadaOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'center', alignItems: 'center', padding: 16 },
   fotoAmpliadaImagenContainer: { width: '100%', height: '62%', overflow: 'hidden' },
   fotoAmpliadaAyuda: { color: 'rgba(255,255,255,0.6)', fontSize: 11, marginTop: 10, textAlign: 'center' },
