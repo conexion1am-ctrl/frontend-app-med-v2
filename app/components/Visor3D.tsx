@@ -174,13 +174,31 @@ function buscarPuntoDeAristaMasCercano(punto, segmentosDeArista, radioIman) {
   return mejorPunto || punto;
 }
 
-// Lee los hijos DIRECTOS de la escena cargada (los grupos/componentes tal como se llamaron al
-// exportar desde SketchUp, ej. "Cajon 1", "Cajon 2", "Estructura") y arma la lista que se
-// muestra en el panel de Mostrar/Ocultar. Si el .glb no trae nombres reales (todo suelto sin
-// agrupar), cae de vuelta a listar cada Mesh individual para que el panel no quede vacío.
+// Lee los grupos/componentes reales del modelo (los mismos nombres que tenían en SketchUp, ej.
+// "Cajon 1", "Cajon 2", "Estructura") y arma la lista que se muestra en el panel de
+// Mostrar/Ocultar. Si el .glb no trae nombres reales (todo suelto sin agrupar), cae de vuelta a
+// listar cada Mesh individual para que el panel no quede vacío.
+//
+// Algunos exportadores de SketchUp envuelven TODO el mueble dentro de un único grupo raíz (ej.
+// una sola "Escena" o "Modelo" que contiene todas las piezas adentro) — mirar solo scene.children
+// en ese caso solo encuentra "1 grupo" y el botón de Piezas nunca aparecía, aunque el mueble sí
+// tuviera varias piezas nombradas más abajo. Por eso esta función "baja" automáticamente por la
+// jerarquía mientras encuentre un único hijo contenedor (un envoltorio sin hermanos), hasta
+// llegar al nivel real donde el modelo se separa en dos o más piezas.
 function detectarComponentes(scene) {
-  const candidatos = scene.children.filter((hijo) => hijo.type !== 'Object3D' || hijo.children.length > 0);
-  const base = candidatos.length > 0 ? candidatos : scene.children;
+  let nivelActual = scene;
+  // Mientras el nivel actual tenga exactamente un hijo que a su vez tenga hijos propios (es
+  // decir, sea otro grupo contenedor y no una pieza sólida), seguimos bajando un nivel.
+  while (
+    nivelActual.children.length === 1 &&
+    nivelActual.children[0].children &&
+    nivelActual.children[0].children.length > 0
+  ) {
+    nivelActual = nivelActual.children[0];
+  }
+
+  const candidatos = nivelActual.children.filter((hijo) => hijo.type !== 'Object3D' || hijo.children.length > 0);
+  const base = candidatos.length > 0 ? candidatos : nivelActual.children;
 
   return base.map((nodo, indice) => ({
     id: nodo.uuid,
