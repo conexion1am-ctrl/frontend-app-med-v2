@@ -130,34 +130,11 @@ export default function App() {
         }
       }
 
-      if (empresas.length > 1) {
-        // Pertenece a varias empresas: que elija con cuál entrar, sin pedir contraseña de nuevo.
-        setRutaInicial('SeleccionarEmpresa');
-        setParamsIniciales({ empresas, usuario });
-      } else {
-        // Solo una empresa: entrar directo a Inicio.
-        const primeraEmpresa = empresas[0];
-        setRutaInicial('Inicio');
-        setParamsIniciales({
-          empresa: {
-            id: primeraEmpresa.empresa_id,
-            nombre: primeraEmpresa.empresa_nombre,
-            logo_url: primeraEmpresa.logo_url,
-            color_hex: primeraEmpresa.color_hex,
-            sitio_web: primeraEmpresa.sitio_web,
-            area_id: primeraEmpresa.area_id,
-            area_nombre: primeraEmpresa.area_nombre,
-            area_tipo: primeraEmpresa.area_tipo,
-            nit: primeraEmpresa.nit,
-            cedula_representante: primeraEmpresa.cedula_representante,
-            banco_nombre: primeraEmpresa.banco_nombre,
-            banco_tipo_cuenta: primeraEmpresa.banco_tipo_cuenta,
-            banco_numero: primeraEmpresa.banco_numero,
-            banco_titular: primeraEmpresa.banco_titular,
-          },
-          usuario,
-        });
-      }
+      // Siempre entra por Seleccionar Empresa (incluso con una sola), para que el menú de
+      // editar/eliminar (mantener presionado) esté siempre disponible sin importar cuántas
+      // empresas tenga.
+      setRutaInicial('SeleccionarEmpresa');
+      setParamsIniciales({ empresas, usuario });
     } catch (error) {
       console.error('Error revisando sesión:', error);
       setRutaInicial('SeleccionarModo');

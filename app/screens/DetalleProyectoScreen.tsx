@@ -101,25 +101,6 @@ export default function DetalleProyectoScreen({ route, navigation }) {
     }
   };
 
-  const eliminarProyecto = () => {
-    Alert.alert('Eliminar proyecto', '¿Estás seguro de eliminar este proyecto? Esta acción no se puede deshacer.', [
-      { text: 'Cancelar', style: 'cancel' },
-      {
-        text: 'Eliminar',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await axios.delete(`https://backend-app-mediterraneo.onrender.com/api/proyectos/${proyecto.id}`);
-            navigation.goBack();
-          } catch (error) {
-            console.error('Error eliminando proyecto:', error);
-            Alert.alert('Error', 'No se pudo eliminar el proyecto.');
-          }
-        },
-      },
-    ]);
-  };
-
   if (cargando) {
     return (
       <View style={styles.center}>
@@ -166,9 +147,6 @@ export default function DetalleProyectoScreen({ route, navigation }) {
             </TouchableOpacity>
             <TouchableOpacity style={styles.botonAccion} onPress={abrirModalActividades}>
               <Text style={styles.botonAccionTexto}>+ Actividad</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.botonEliminar} onPress={eliminarProyecto}>
-              <Text style={styles.botonEliminarTexto}>Eliminar</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -280,8 +258,6 @@ const styles = StyleSheet.create({
   botonAccion: { flex: 1, backgroundColor: '#1E90FF', borderRadius: 8, padding: 10, alignItems: 'center' },
   botonAccionTexto: { color: '#fff', fontSize: 13, fontWeight: 'bold' },
   botonAccionTextoBlanco: { color: '#fff', fontSize: 15, fontWeight: 'bold' },
-  botonEliminar: { flex: 1, backgroundColor: '#DC143C', borderRadius: 8, padding: 10, alignItems: 'center' },
-  botonEliminarTexto: { color: '#fff', fontSize: 13, fontWeight: 'bold' },
   seccionTitulo: { fontSize: 16, fontWeight: 'bold', color: '#333', marginTop: 24, marginBottom: 10 },
   actividadesLista: { gap: 10 },
   vacioTexto: { color: '#888', fontSize: 14 },

@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import EncabezadoLogo from '../components/EncabezadoLogo';
 import { setNavigationGlobal } from '../utils/navigationGlobal';
@@ -35,27 +35,17 @@ function construirBotones(empresa) {
 export default function InicioScreen({ route, navigation }) {
   const { empresa, usuario } = route.params;
   const colorEmpresa = empresa.color_hex || '#1E90FF';
-  const [tieneVariasEmpresas, setTieneVariasEmpresas] = useState(false);
   const BOTONES_INICIO = construirBotones(empresa);
 
   useEffect(() => {
-    revisarSiTieneVariasEmpresas();
     // Guardamos "navigation" para poder abrir pantallas desde fuera (ej. al tocar una
     // notificación push), ya que Inicio siempre está montada mientras hay sesión activa.
     setNavigationGlobal(navigation);
   }, [navigation]);
 
-  const revisarSiTieneVariasEmpresas = async () => {
-    try {
-      const sesionGuardada = await AsyncStorage.getItem('sesion');
-      if (!sesionGuardada) return;
-      const sesion = JSON.parse(sesionGuardada);
-      setTieneVariasEmpresas((sesion?.empresas?.length || 0) > 1);
-    } catch (error) {
-      console.error('Error revisando empresas de la sesión:', error);
-    }
-  };
-
+  // Vuelve a Seleccionar Empresa, tanto para cambiar de empresa activa (si tiene varias) como
+  // para editar/eliminar la única empresa (si solo tiene una) - esa pantalla ya trae el menú
+  // de mantener presionado para ambos casos.
   const cambiarEmpresa = async () => {
     try {
       const sesionGuardada = await AsyncStorage.getItem('sesion');
@@ -103,11 +93,9 @@ export default function InicioScreen({ route, navigation }) {
           </TouchableOpacity>
         ))}
 
-        {tieneVariasEmpresas && (
-          <TouchableOpacity style={styles.botonCambiarEmpresa} onPress={cambiarEmpresa}>
-            <Text style={styles.botonCambiarEmpresaTexto}>Cambiar de empresa</Text>
-          </TouchableOpacity>
-        )}
+        <TouchableOpacity style={styles.botonCambiarEmpresa} onPress={cambiarEmpresa}>
+          <Text style={styles.botonCambiarEmpresaTexto}>Cambiar o editar empresa</Text>
+        </TouchableOpacity>
 
         <TouchableOpacity style={styles.botonCerrarSesion} onPress={cerrarSesion}>
           <Text style={styles.botonCerrarSesionTexto}>Cerrar sesión</Text>

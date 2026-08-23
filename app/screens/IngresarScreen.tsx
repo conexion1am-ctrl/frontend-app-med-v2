@@ -95,35 +95,17 @@ export default function IngresarScreen({ navigation }) {
       await AsyncStorage.setItem('sesion', JSON.stringify(sesion));
       registrarNotificacionesPush(response.data.usuario.id);
 
-      if (response.data.empresas.length > 1) {
-        // Pertenece a varias empresas: que elija con cuál entrar
-        navigation.replace('SeleccionarEmpresa', {
-          empresas: response.data.empresas,
-          usuario: response.data.usuario,
-        });
-      } else {
-        // Solo tiene una empresa, entramos directo a Inicio
-        const primeraEmpresa = response.data.empresas[0];
-        navigation.replace('Inicio', {
-          empresa: {
-            id: primeraEmpresa.empresa_id,
-            nombre: primeraEmpresa.empresa_nombre,
-            logo_url: primeraEmpresa.logo_url,
-            color_hex: primeraEmpresa.color_hex,
-            sitio_web: primeraEmpresa.sitio_web,
-            area_id: primeraEmpresa.area_id,
-            area_nombre: primeraEmpresa.area_nombre,
-            area_tipo: primeraEmpresa.area_tipo,
-            nit: primeraEmpresa.nit,
-            cedula_representante: primeraEmpresa.cedula_representante,
-            banco_nombre: primeraEmpresa.banco_nombre,
-            banco_tipo_cuenta: primeraEmpresa.banco_tipo_cuenta,
-            banco_numero: primeraEmpresa.banco_numero,
-            banco_titular: primeraEmpresa.banco_titular,
-          },
-          usuario: response.data.usuario,
-        });
-      }
+      // Siempre pasa por Seleccionar Empresa (incluso con una sola), para que ahí tenga
+      // disponible el menú de editar/eliminar. Usamos reset (no replace) para vaciar el
+      // historial: si no, el botón físico "atrás" volvería a esta pantalla de login pidiendo
+      // celular y contraseña otra vez, aunque la sesión ya quedó guardada.
+      navigation.reset({
+        index: 0,
+        routes: [{
+          name: 'SeleccionarEmpresa',
+          params: { empresas: response.data.empresas, usuario: response.data.usuario },
+        }],
+      });
     } catch (error) {
       console.error('Error en login:', error);
       const mensaje = error.response?.data?.error || 'No se pudo iniciar sesión.';

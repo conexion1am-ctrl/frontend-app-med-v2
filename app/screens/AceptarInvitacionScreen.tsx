@@ -55,38 +55,18 @@ export default function AceptarInvitacionScreen({ route, navigation }) {
 
       // Guardamos la sesión de una vez y entramos directo a la app, sin pasar por la pantalla
       // de Ingresar: la persona ya escribió su contraseña acá mismo, no tiene sentido pedirle
-      // que la vuelva a escribir. Si quedó en varias áreas/empresas, que elija con cuál entrar;
-      // si es solo una, directo a Inicio con sus proyectos asignados.
+      // que la vuelva a escribir. Siempre pasa por Seleccionar Empresa (incluso con una sola),
+      // igual que los demás flujos de login, para que el menú de editar/eliminar esté disponible.
+      // Usamos reset (no replace) para vaciar el historial: si no, el botón físico "atrás"
+      // volvería a esta pantalla de invitación en vez de cerrar la app.
       const sesion = { usuario, empresas };
       await AsyncStorage.setItem('sesion', JSON.stringify(sesion));
       registrarNotificacionesPush(usuario.id);
 
-      if (empresas && empresas.length > 1) {
-        navigation.replace('SeleccionarEmpresa', { empresas, usuario });
-      } else {
-        const primeraEmpresa = empresas?.[0];
-        navigation.replace('Inicio', {
-          empresa: primeraEmpresa
-            ? {
-                id: primeraEmpresa.empresa_id,
-                nombre: primeraEmpresa.empresa_nombre,
-                logo_url: primeraEmpresa.logo_url,
-                color_hex: primeraEmpresa.color_hex,
-                sitio_web: primeraEmpresa.sitio_web,
-                area_id: primeraEmpresa.area_id,
-                area_nombre: primeraEmpresa.area_nombre,
-                area_tipo: primeraEmpresa.area_tipo,
-                nit: primeraEmpresa.nit,
-                cedula_representante: primeraEmpresa.cedula_representante,
-                banco_nombre: primeraEmpresa.banco_nombre,
-                banco_tipo_cuenta: primeraEmpresa.banco_tipo_cuenta,
-                banco_numero: primeraEmpresa.banco_numero,
-                banco_titular: primeraEmpresa.banco_titular,
-              }
-            : { id: invitacion.empresa_id, nombre: invitacion.empresa_nombre, color_hex: invitacion.color_hex },
-          usuario,
-        });
-      }
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'SeleccionarEmpresa', params: { empresas, usuario } }],
+      });
     } catch (error) {
       console.error('Error aceptando invitación:', error);
       const mensaje = error.response?.data?.error || 'No se pudo aceptar la invitación. Intenta de nuevo.';

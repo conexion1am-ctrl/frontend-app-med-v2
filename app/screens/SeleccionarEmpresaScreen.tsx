@@ -4,8 +4,12 @@ import React, { useState } from 'react';
 import { Alert, Image, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-// Pantalla que aparece solo cuando un usuario pertenece a más de una empresa.
-// Le permite elegir con cuál empresa quiere entrar en este momento.
+// Pantalla que aparece siempre después de iniciar sesión (dueño o invitado), incluso si el
+// usuario pertenece a una sola empresa, para que el menú de editar/eliminar (mantener
+// presionado) esté siempre disponible sin importar cuántas empresas tenga.
+// elegirEmpresa usa "replace" (no "reset"): aquí el usuario ya está navegando dentro de la
+// app, no acaba de loguearse, así que si va a Inicio y presiona "atrás", debe volver aquí
+// (a Seleccionar Empresa) para poder cambiar o editar, no salir de la app.
 export default function SeleccionarEmpresaScreen({ route, navigation }) {
   const { empresas, usuario } = route.params;
   const insets = useSafeAreaInsets();
@@ -85,9 +89,10 @@ export default function SeleccionarEmpresaScreen({ route, navigation }) {
                 await AsyncStorage.setItem('sesion', JSON.stringify(sesion));
               }
 
-              if (nuevasEmpresas.length === 1) {
-                elegirEmpresa(nuevasEmpresas[0]);
-              } else if (nuevasEmpresas.length === 0) {
+              // Si queda 1 o más empresas, simplemente se actualiza la lista visible en esta
+              // misma pantalla (ya no saltamos automáticamente a Inicio con la que quede: el
+              // usuario siempre pasa por aquí, incluso con una sola empresa).
+              if (nuevasEmpresas.length === 0) {
                 Alert.alert('Sin empresas', 'Ya no perteneces a ninguna empresa activa.');
                 navigation.replace('SeleccionarModo');
               }
@@ -104,8 +109,10 @@ export default function SeleccionarEmpresaScreen({ route, navigation }) {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.titulo}>¿Con cuál empresa quieres entrar?</Text>
-      <Text style={styles.subtitulo}>Perteneces a más de una empresa en C&D Manager</Text>
+      <Text style={styles.titulo}>{empresasVisibles.length > 1 ? '¿Con cuál empresa quieres entrar?' : 'Tu empresa'}</Text>
+      <Text style={styles.subtitulo}>
+        {empresasVisibles.length > 1 ? 'Perteneces a más de una empresa en C&D Manager' : 'Toca para entrar'}
+      </Text>
 
       {empresasVisibles.map((empresa, index) => (
         <TouchableOpacity
