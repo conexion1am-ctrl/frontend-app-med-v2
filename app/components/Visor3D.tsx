@@ -617,21 +617,12 @@ export default function Visor3D({ uri }) {
 
   // Toque simple: en modo medir, marca un punto (si no cayó sobre un marcador ya puesto — en ese
   // caso el gesto de arrastre, más abajo, se encarga).
-  //
-  // OJO: no se puede decidir esto mirando dónde el dedo TERMINÓ el toque (evt.x, evt.y del Tap),
-  // porque si el usuario arrastró un marcador lejos de su posición original, para cuando suelta
-  // el dedo ya no hay ningún marcador cerca de esa posición final — buscarMarcadorCercano ahí
-  // daría "no hay nada cerca" y el Tap terminaría creando un punto nuevo por accidente, aunque en
-  // realidad se estaba arrastrando uno existente. Por eso se usa marcadorArrastradoRef (puesto
-  // por gestoArrastrarMarcador en su onStart, con la posición INICIAL del toque) como la fuente
-  // real de verdad: si el arrastre agarró un marcador en este mismo gesto, el Tap no debe hacer
-  // nada, sin importar dónde terminó soltando el dedo.
   const gestoToque = Gesture.Tap()
     .runOnJS(true)
     .maxDuration(250)
     .onEnd((evt, exitoso) => {
       if (!exitoso || !modoMedirRef.current) return;
-      if (marcadorArrastradoRef.current != null) return; // este toque ya movió un marcador existente
+      if (buscarMarcadorCercano(evt.x, evt.y) != null) return; // ya se movió con el arrastre
       manejarToqueMedicion(evt.x, evt.y);
     });
 
@@ -643,19 +634,17 @@ export default function Visor3D({ uri }) {
     .minPointers(1)
     .maxPointers(1)
     .onStart((evt) => {
-      marcadorArrastradoRef.current = modoMedirRef.current ? buscarMarcadorCercano(evt.x, evt.y) : null;
+      if (!modoMedirRef.current) {
+        marcadorArrastradoRef.current = null;
+        return;
+      }
+      marcadorArrastradoRef.current = buscarMarcadorCercano(evt.x, evt.y);
     })
     .onUpdate((evt) => {
       if (marcadorArrastradoRef.current == null) return;
       arrastrarMarcador(marcadorArrastradoRef.current, evt.x, evt.y);
     })
-    .onFinalize(() => {
-      // onFinalize (no onEnd): se ejecuta SIEMPRE que el gesto termina, tanto si llegó a
-      // "activarse" con movimiento real como si el dedo apenas tocó y se levantó sin mover nada
-      // (que es exactamente el caso de un toque corto sobre un marcador, donde gestoToque es el
-      // que debe actuar). onEnd de Pan a veces no se dispara si el gesto nunca llegó a
-      // considerarse "activo" por falta de movimiento — onFinalize sí, así que es más confiable
-      // para resetear marcadorArrastradoRef a tiempo antes de que gestoToque lo consulte arriba.
+    .onEnd(() => {
       marcadorArrastradoRef.current = null;
     });
 
@@ -752,35 +741,31 @@ export default function Visor3D({ uri }) {
   // siempre ganaba la carrera antes de que el segundo dedo del pellizco llegara a la pantalla —
   // había que ser muy preciso y lento para que el zoom funcionara.
   //
-  // Intento 2: gestoOrbitar.requireExternalGestureToFail(gestoDosDedos), reutilizando la MISMA
-  // instancia de gestoDosDedos tanto como participante normal de Gesture.Simultaneous como
-  // referencia externa de requireExternalGestureToFail. Esto rompió TODO: rotar y pellizco
-  // dejaron de responder casi por completo, solo mover con 2 dedos funcionaba, y el arrastre de
-  // puntos quedó errático ("a tropezones"). Causa: en react-native-gesture-handler, pasar la
-  // MISMA instancia de un gesto compuesto a dos lugares del árbol (una vez montado normalmente,
-  // otra vez como referencia externa) confunde al manager nativo sobre a qué handler pertenece
-  // cada relación — es un antipatrón conocido, las referencias externas deben ser independientes.
+  // Intentos 2-7 (todos abandonados en esta misma sesión): distintas variaciones de
+  // Gesture.Race/Exclusive anidados, .enabled() cruzados entre gestoArrastrarMarcador/gestoOrbitar,
+  // fusionar Tap+Pan en un único gesto de medición, y requireExternalGestureToFail aplicado de
+  // formas cada vez más complejas — CADA UNO empeoró lo que ya funcionaba (reportado explícitamente
+  // por el usuario: "rotar y el pellizco dejaron de responder", "solo funciona desplazar con 2
+  // dedos", "medir es lento e impreciso"). Tras revisar el historial real de versiones (git log),
+  // se confirmó que la ÚNICA configuración que el usuario validó como funcional — giraba, movía y
+  // hacía zoom bien, con solo dos defectos menores (desplazamiento brusco de cerca, ya resuelto
+  // aparte escalando gestoMover por distancia real; y medición poco precisa) — era la de ESTE
+  // bloque: gestoOrbitar con un ÚNICO requireExternalGestureToFail sobre gestoDosDedos, sin
+  // .enabled() cruzados, sin fusionar Tap+Pan, sin minDistance. Se restauró tal cual esa versión
+  // (commit d8d40f9) en vez de seguir iterando sobre las variantes que ya fallaron.
   //
-  // Intento 3: gestoOrbitar con minDistance(12), para darle tiempo a gesture-handler de detectar
-  // un segundo dedo antes de que orbitar "gane" con el primero. En la práctica esto rompió MÁS
-  // cosas: el usuario reportó que el pellizco seguía siendo intermitente, rotar con 1 dedo quedó
-  // completamente deshabilitado, y medir siguió siendo impreciso — probablemente porque
-  // minDistance también retrasaba/bloqueaba a gestoArrastrarMarcador (que corre en el mismo
-  // Gesture.Race que gestoOrbitar) de una forma que no se había anticipado.
-  //
-  // Intento 4 (actual): volver a la arquitectura simple de Gesture.Race entre el bloque de 1 dedo
-  // y el bloque de 2 dedos, SIN minDistance y SIN relaciones cruzadas (requireExternalGestureToFail).
-  // Gesture.Race dice "el primer gesto de esta lista que reconoce el patrón de dedos correcto se
-  // queda con el toque, los demás se cancelan" — como gestoDosDedos exige minPointers(2), en
-  // cuanto el segundo dedo toca la pantalla gesture-handler lo reconoce y cancela automáticamente
-  // a gestoUnDedo, sin necesitar trucos de tiempo. Es la configuración que el usuario confirma que
-  // "obedecía a todos los gestos" antes de que se intentaran los ajustes 2 y 3 — el único defecto
-  // que tenía (desplazamiento brusco de cerca con 2 dedos) ya se resolvió aparte, escalando
-  // gestoMover por la distancia real cámara→centro en vez de por el radio orbital fijo.
-  const gestoUnDedo = Gesture.Race(gestoArrastrarMarcador, gestoOrbitar);
+  // Por qué esta versión SÍ funciona: gestoOrbitar (1 dedo) espera explícitamente a que
+  // gestoDosDedos falle (es decir, a que quede claro que no va a haber un segundo dedo) antes de
+  // activarse — así el pellizco/mover con 2 dedos no pierde la carrera contra rotar cuando el
+  // segundo dedo llega un instante después del primero. gestoArrastrarMarcador y gestoToque
+  // conviven en modo medir sin este problema porque gestoOrbitar se auto-descarta en su propio
+  // onUpdate cuando modoMedirRef.current es true, y gestoArrastrarMarcador hace lo mismo al revés
+  // en su onStart — ninguno de los dos necesita más que eso.
   const gestoDosDedos = Gesture.Simultaneous(gestoMover, gestoZoom);
+  const gestoOrbitarConEspera = gestoOrbitar.requireExternalGestureToFail(gestoDosDedos);
+  const gestoUnDedo = Gesture.Race(gestoArrastrarMarcador, gestoOrbitarConEspera);
 
-  const gestoCompuesto = Gesture.Simultaneous(gestoToque, Gesture.Race(gestoDosDedos, gestoUnDedo));
+  const gestoCompuesto = Gesture.Simultaneous(gestoToque, gestoDosDedos, gestoUnDedo);
 
   const reiniciarVista = () => {
     if (!modeloRef.current) return;
