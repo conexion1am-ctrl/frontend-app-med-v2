@@ -1,6 +1,6 @@
 import axios from 'axios';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Linking, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Linking, Modal, Platform, ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import EncabezadoLogo from '../components/EncabezadoLogo';
 import InputCelular, { detectarPaisPorDispositivo, PAISES } from '../components/InputCelular';
@@ -25,6 +25,7 @@ export default function ClientesScreen({ route }) {
   const [guardando, setGuardando] = useState(false);
 
   const [menuCliente, setMenuCliente] = useState(null);
+  const [invitando, setInvitando] = useState(false);
   const [modalEditarVisible, setModalEditarVisible] = useState(false);
   const [editandoCliente, setEditandoCliente] = useState(null);
   const [editNombreProyecto, setEditNombreProyecto] = useState('');
@@ -120,6 +121,40 @@ export default function ClientesScreen({ route }) {
 
   const abrirMenu = (cliente) => setMenuCliente(cliente);
   const cerrarMenu = () => setMenuCliente(null);
+
+  // Genera la invitación al proyecto de este cliente usando el nombre/celular que YA tiene
+  // guardados en su ficha, sin volver a escribirlos en Grupo de Trabajo (que antes duplicaba el
+  // registro del cliente). El backend valida que tenga celular y proyecto antes de crearla, y
+  // deja de una vez la asignación al área de Clientes de ese proyecto.
+  const invitarCliente = async (cliente) => {
+    cerrarMenu();
+    setInvitando(true);
+    try {
+      const res = await axios.post(`https://backend-app-mediterraneo.onrender.com/api/clientes/${cliente.id}/invitar`);
+      const link = res.data.link_whatsapp;
+      Alert.alert('¡Listo!', `Invitación generada para ${cliente.nombre}.`, [
+        { text: 'Cerrar' },
+        {
+          text: 'Compartir por WhatsApp',
+          onPress: async () => {
+            try {
+              await Share.share({
+                message: `¡Hola ${cliente.nombre}! Te invito a que sigas el avance de tu proyecto en C&D Manager.\n\n${link}\n\n(Si el enlace no abre al tocarlo, mantenlo presionado y elige "Abrir", o cópialo y pégalo en el navegador de tu celular. Necesitas tener la app C&D Manager ya instalada).`,
+              });
+            } catch (error) {
+              console.error('Error compartiendo invitación:', error);
+            }
+          },
+        },
+      ]);
+    } catch (error) {
+      console.error('Error invitando cliente:', error);
+      const mensaje = error.response?.data?.error || 'No se pudo invitar al cliente. Intenta de nuevo.';
+      Alert.alert('Error', mensaje);
+    } finally {
+      setInvitando(false);
+    }
+  };
 
   const abrirEditar = (cliente) => {
     cerrarMenu();
@@ -260,6 +295,9 @@ export default function ClientesScreen({ route }) {
             <Text style={styles.menuTitulo}>{menuCliente?.nombre}</Text>
             <TouchableOpacity style={styles.menuOpcion} onPress={() => abrirEditar(menuCliente)}>
               <Text style={styles.menuOpcionTexto}>✏️  Editar</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.menuOpcion} disabled={invitando} onPress={() => invitarCliente(menuCliente)}>
+              <Text style={styles.menuOpcionTexto}>📩  {invitando ? 'Generando...' : 'Invitar a su proyecto'}</Text>
             </TouchableOpacity>
             {permisos.eliminarClientes && (
               <TouchableOpacity style={styles.menuOpcion} onPress={() => confirmarEliminar(menuCliente)}>

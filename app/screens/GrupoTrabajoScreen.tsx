@@ -107,7 +107,11 @@ export default function GrupoTrabajoScreen({ route }) {
         axios.get('https://backend-app-mediterraneo.onrender.com/api/areas'),
       ]);
       setPersonal(resPersonal.data.personal);
-      setAreas(resAreas.data.areas);
+      // "AREA DE CLIENTES" se quita de las opciones acá: los clientes ya no se invitan desde
+      // Grupo de Trabajo (que duplicaba su ficha, con riesgo de que el celular quedara distinto
+      // entre los dos registros). Ahora se invitan directamente desde la ficha del cliente en
+      // Clientes, con los mismos datos que ya tiene guardados — ver ClientesScreen.tsx.
+      setAreas(resAreas.data.areas.filter((area) => area.nombre !== 'AREA DE CLIENTES'));
     } catch (error) {
       console.error('Error cargando datos:', error);
       Alert.alert('Error', 'No se pudo cargar el grupo de trabajo.');
@@ -325,6 +329,18 @@ export default function GrupoTrabajoScreen({ route }) {
 
   const abrirEditar = (persona) => {
     cerrarMenu();
+    // Clientes invitados ANTES de este cambio (cuando todavía se invitaban desde acá) no deben
+    // editarse desde este modal: como "AREA DE CLIENTES" ya no aparece en la lista de áreas
+    // seleccionables (ver el filtro en cargarDatos), el checkbox de su área no se vería, y
+    // guardar cualquier otro cambio aquí terminaría cambiándole el área sin que nadie lo haya
+    // pedido. Se redirige a editarlo desde la ficha del cliente en Clientes en su lugar.
+    if (persona.area_nombre === 'AREA DE CLIENTES') {
+      Alert.alert(
+        'Es un cliente',
+        'Esta persona está invitada como cliente de un proyecto. Para editar su nombre o celular, hazlo desde la ficha del cliente en la pantalla Clientes.'
+      );
+      return;
+    }
     setEditandoPersona(persona);
     setEditNombre(persona.nombre);
     const { pais, numero } = separarCelular(persona.celular);
