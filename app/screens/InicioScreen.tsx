@@ -83,7 +83,7 @@ export default function InicioScreen({ route, navigation }) {
         style: 'destructive',
         onPress: async () => {
           await AsyncStorage.removeItem('sesion');
-          navigation.reset({ index: 0, routes: [{ name: 'Ingresar' }] });
+          navigation.reset({ index: 0, routes: [{ name: 'SeleccionarModo' }] });
         },
       },
     ]);

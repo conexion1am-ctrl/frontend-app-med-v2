@@ -89,7 +89,7 @@ export default function SeleccionarEmpresaScreen({ route, navigation }) {
                 elegirEmpresa(nuevasEmpresas[0]);
               } else if (nuevasEmpresas.length === 0) {
                 Alert.alert('Sin empresas', 'Ya no perteneces a ninguna empresa activa.');
-                navigation.replace('Ingresar');
+                navigation.replace('SeleccionarModo');
               }
             } catch (error) {
               console.error('Error eliminando empresa:', error);

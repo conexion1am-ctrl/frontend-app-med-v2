@@ -116,7 +116,7 @@ export default function AceptarInvitacionScreen({ route, navigation }) {
     return (
       <View style={styles.center}>
         <Text style={styles.errorTexto}>Esta invitación ya fue utilizada anteriormente.</Text>
-        <TouchableOpacity style={styles.botonSecundario} onPress={() => navigation.replace('Ingresar')}>
+        <TouchableOpacity style={styles.botonSecundario} onPress={() => navigation.replace('SeleccionarModo')}>
           <Text style={styles.botonSecundarioTexto}>Ir a Ingresar</Text>
         </TouchableOpacity>
       </View>
