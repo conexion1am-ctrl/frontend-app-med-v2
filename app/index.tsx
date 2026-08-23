@@ -17,18 +17,20 @@ import DetalleProyectoScreen from './screens/DetalleProyectoScreen';
 import EditarPerfilScreen from './screens/EditarPerfilScreen';
 import EstadisticasScreen from './screens/EstadisticasScreen';
 import GrupoTrabajoScreen from './screens/GrupoTrabajoScreen';
+import IngresarInvitadoScreen from './screens/IngresarInvitadoScreen';
 import IngresarScreen from './screens/IngresarScreen';
 import InicioScreen from './screens/InicioScreen';
 import MiPerfilScreen from './screens/MiPerfilScreen';
 import PerfilEmpresaScreen from './screens/PerfilEmpresaScreen';
 import ProyectosScreen from './screens/ProyectosScreen';
 import SeleccionarEmpresaScreen from './screens/SeleccionarEmpresaScreen';
+import SeleccionarModoScreen from './screens/SeleccionarModoScreen';
 
 const Stack = createNativeStackNavigator();
 
 export default function App() {
   const [cargando, setCargando] = useState(true);
-  const [rutaInicial, setRutaInicial] = useState('Ingresar');
+  const [rutaInicial, setRutaInicial] = useState('SeleccionarModo');
   const [paramsIniciales, setParamsIniciales] = useState(undefined);
 
   useEffect(() => {
@@ -84,8 +86,8 @@ export default function App() {
     try {
       const sesionGuardada = await AsyncStorage.getItem('sesion');
       if (!sesionGuardada) {
-        // Sin sesión (primera vez, o reinstalación): mostrar login, con opción de crear empresa.
-        setRutaInicial('Ingresar');
+        // Sin sesión (primera vez, o reinstalación): mostrar la portada para elegir dueño/trabajador.
+        setRutaInicial('SeleccionarModo');
         return;
       }
 
@@ -94,7 +96,7 @@ export default function App() {
       const usuario = sesion?.usuario;
 
       if (!usuario || empresas.length === 0) {
-        setRutaInicial('Ingresar');
+        setRutaInicial('SeleccionarModo');
         return;
       }
 
@@ -158,7 +160,7 @@ export default function App() {
       }
     } catch (error) {
       console.error('Error revisando sesión:', error);
-      setRutaInicial('Ingresar');
+      setRutaInicial('SeleccionarModo');
     } finally {
       setCargando(false);
     }
@@ -176,8 +178,10 @@ export default function App() {
     <SafeAreaProvider>
     <GestureHandlerRootView style={{ flex: 1 }}>
     <Stack.Navigator initialRouteName={rutaInicial} screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="SeleccionarModo" component={SeleccionarModoScreen} />
       <Stack.Screen name="PerfilEmpresa" component={PerfilEmpresaScreen} />
       <Stack.Screen name="Ingresar" component={IngresarScreen} />
+      <Stack.Screen name="IngresarInvitado" component={IngresarInvitadoScreen} />
       <Stack.Screen name="Bienvenida" component={BienvenidaScreen} />
       <Stack.Screen name="Inicio" component={InicioScreen} initialParams={paramsIniciales} />
       <Stack.Screen name="MiPerfil" component={MiPerfilScreen} />
