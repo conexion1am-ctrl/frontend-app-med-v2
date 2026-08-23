@@ -130,16 +130,15 @@ export default function ClientesScreen({ route }) {
     cerrarMenu();
     setInvitando(true);
     try {
-      const res = await axios.post(`https://backend-app-mediterraneo.onrender.com/api/clientes/${cliente.id}/invitar`);
-      const link = res.data.link_whatsapp;
-      Alert.alert('¡Listo!', `Invitación generada para ${cliente.nombre}.`, [
+      await axios.post(`https://backend-app-mediterraneo.onrender.com/api/clientes/${cliente.id}/invitar`);
+      Alert.alert('¡Listo!', `${cliente.nombre} quedó vinculado a su proyecto. Avísale que descargue la app y entre con su celular.`, [
         { text: 'Cerrar' },
         {
-          text: 'Compartir por WhatsApp',
+          text: 'Avisar por WhatsApp',
           onPress: async () => {
             try {
               await Share.share({
-                message: `¡Hola ${cliente.nombre}! Te invito a que sigas el avance de tu proyecto en C&D Manager.\n\n${link}\n\n(Si el enlace no abre al tocarlo, mantenlo presionado y elige "Abrir", o cópialo y pégalo en el navegador de tu celular. Necesitas tener la app C&D Manager ya instalada).`,
+                message: `¡Hola ${cliente.nombre}! Ya puedes seguir el avance de tu proyecto en C&D Manager. Descarga la app desde la Play Store y entra con tu número de celular en "Ingresar como invitado".`,
               });
             } catch (error) {
               console.error('Error compartiendo invitación:', error);

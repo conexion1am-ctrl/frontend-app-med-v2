@@ -54,14 +54,11 @@ export default function GrupoTrabajoScreen({ route }) {
   const [paisCelular, setPaisCelular] = useState(detectarPaisPorDispositivo());
   const [areasSeleccionadas, setAreasSeleccionadas] = useState([]);
   const [guardando, setGuardando] = useState(false);
-  const [modalLinkVisible, setModalLinkVisible] = useState(false);
-  const [linkInvitacion, setLinkInvitacion] = useState('');
+  const [modalAgregadoVisible, setModalAgregadoVisible] = useState(false);
   const [nombreInvitado, setNombreInvitado] = useState('');
 
   const [modalPendienteVisible, setModalPendienteVisible] = useState(false);
   const [personaPendiente, setPersonaPendiente] = useState(null);
-  const [linkPendiente, setLinkPendiente] = useState('');
-  const [cargandoLinkPendiente, setCargandoLinkPendiente] = useState(false);
 
   const [modalContactosVisible, setModalContactosVisible] = useState(false);
   const [contactosDisponibles, setContactosDisponibles] = useState([]);
@@ -195,28 +192,23 @@ export default function GrupoTrabajoScreen({ route }) {
     setGuardando(true);
     try {
       const celularCompleto = `${paisCelular.prefijo} ${celular}`;
-      let ultimoLink = null;
       for (const areaId of areasSeleccionadas) {
-        const respuesta = await axios.post('https://backend-app-mediterraneo.onrender.com/api/invitaciones/generar', {
+        await axios.post('https://backend-app-mediterraneo.onrender.com/api/invitaciones/generar', {
           empresa_id: empresa.id,
           area_id: areaId,
           nombre_invitado: nombre,
           celular_invitado: celularCompleto,
         });
-        ultimoLink = respuesta.data.link_whatsapp;
       }
       setModalVisible(false);
       limpiarFormulario();
       cargarDatos();
 
-      // Mostramos el enlace generado para que lo copie o lo comparta directo por WhatsApp.
-      if (ultimoLink) {
-        setLinkInvitacion(ultimoLink);
-        setNombreInvitado(nombre);
-        setModalLinkVisible(true);
-      } else {
-        Alert.alert('¡Listo!', `Invitación generada para ${nombre}.`);
-      }
+      // Ya no se genera ningún link: solo avisamos que quedó agregado y que debe avisarle por
+      // fuera de la app (WhatsApp, llamada, etc.) que descargue la aplicación y entre con su
+      // celular en "Ingresar como invitado".
+      setNombreInvitado(nombre);
+      setModalAgregadoVisible(true);
     } catch (error) {
       console.error('Error agregando personal:', error);
       Alert.alert('Error', 'No se pudo agregar el personal. Intenta de nuevo.');
@@ -225,13 +217,13 @@ export default function GrupoTrabajoScreen({ route }) {
     }
   };
 
-  const compartirLinkInvitacion = async () => {
+  const compartirAvisoDescargarApp = async (nombreDestino) => {
     try {
       await Share.share({
-        message: `¡Hola ${nombreInvitado}! Te invito a unirte a nuestro equipo en C&D Manager.\n\n${linkInvitacion}\n\n(Si el enlace no abre al tocarlo, mantenlo presionado y elige "Abrir", o cópialo y pégalo en el navegador de tu celular. Necesitas tener la app C&D Manager ya instalada).`,
+        message: `¡Hola ${nombreDestino}! Te agregué a nuestro equipo en C&D Manager. Descarga la app desde la Play Store y entra con tu número de celular en "Ingresar como invitado".`,
       });
     } catch (error) {
-      console.error('Error compartiendo invitación:', error);
+      console.error('Error compartiendo aviso:', error);
     }
   };
 
@@ -283,30 +275,13 @@ export default function GrupoTrabajoScreen({ route }) {
     setMenuPersona(null);
   };
 
-  const verFichaPendiente = async (persona) => {
+  const verFichaPendiente = (persona) => {
     setPersonaPendiente(persona);
-    setLinkPendiente('');
     setModalPendienteVisible(true);
-    setCargandoLinkPendiente(true);
-    try {
-      const res = await axios.get(`https://backend-app-mediterraneo.onrender.com/api/invitaciones/id/${persona.rol_id}/link`);
-      setLinkPendiente(res.data.link_whatsapp);
-    } catch (error) {
-      console.error('Error obteniendo link de invitación:', error);
-      Alert.alert('Error', 'No se pudo obtener el enlace de invitación.');
-    } finally {
-      setCargandoLinkPendiente(false);
-    }
   };
 
-  const compartirLinkPendiente = async () => {
-    try {
-      await Share.share({
-        message: `¡Hola ${personaPendiente?.nombre}! Te invito a unirte a nuestro equipo en C&D Manager.\n\n${linkPendiente}\n\n(Si el enlace no abre al tocarlo, mantenlo presionado y elige "Abrir", o cópialo y pégalo en el navegador de tu celular. Necesitas tener la app C&D Manager ya instalada).`,
-      });
-    } catch (error) {
-      console.error('Error compartiendo invitación:', error);
-    }
+  const compartirAvisoPendiente = async () => {
+    await compartirAvisoDescargarApp(personaPendiente?.nombre);
   };
 
   const verProyectosAsignados = async (persona) => {
@@ -524,7 +499,7 @@ export default function GrupoTrabajoScreen({ route }) {
     cerrarMenu();
     const mensaje =
       persona.estado === 'pendiente'
-        ? `¿Eliminar la invitación de ${persona.nombre}? Ya no podrá ingresar con el link enviado.`
+        ? `¿Eliminar a ${persona.nombre}? Ya no podrá entrar con este número de celular.`
         : `¿Eliminar a ${persona.nombre} del equipo? Ya no podrá ingresar a la app con su número, pero se conservará su historial en proyectos anteriores.`;
 
     Alert.alert('Eliminar persona', mensaje, [
@@ -852,27 +827,25 @@ export default function GrupoTrabajoScreen({ route }) {
         </View>
       </Modal>
 
-      {/* MODAL: Enlace de invitación generado */}
-      <Modal visible={modalLinkVisible} animationType="fade" transparent>
+      {/* MODAL: Persona agregada exitosamente */}
+      <Modal visible={modalAgregadoVisible} animationType="fade" transparent>
         <View style={styles.linkOverlay}>
           <View style={styles.linkBox}>
-            <Text style={styles.linkTitulo}>¡Invitación creada!</Text>
-            <Text style={styles.linkSubtitulo}>Envíale este enlace a {nombreInvitado} para que se una al equipo:</Text>
-            <View style={styles.linkTextoContainer}>
-              <Text style={styles.linkTexto} selectable>{linkInvitacion}</Text>
-            </View>
-            <Text style={styles.notaLinkTexto}>Si al invitado no le aparece como enlace tocable en WhatsApp, dile que lo mantenga presionado y elija "Abrir", o que lo copie y pegue en el navegador de su celular. Necesita tener la app ya instalada.</Text>
-            <TouchableOpacity style={styles.botonGuardar} onPress={compartirLinkInvitacion}>
-              <Text style={styles.botonAgregarTexto}>📤 Enviar por WhatsApp</Text>
+            <Text style={styles.linkTitulo}>¡{nombreInvitado} fue agregado!</Text>
+            <Text style={styles.linkSubtitulo}>
+              Ahora avísale que descargue la app C&D Manager y entre con su número de celular en "Ingresar como invitado". La app reconocerá automáticamente que fue asignado.
+            </Text>
+            <TouchableOpacity style={styles.botonGuardar} onPress={() => compartirAvisoDescargarApp(nombreInvitado)}>
+              <Text style={styles.botonAgregarTexto}>📤 Avisar por WhatsApp</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.botonCancelar} onPress={() => setModalLinkVisible(false)}>
+            <TouchableOpacity style={styles.botonCancelar} onPress={() => setModalAgregadoVisible(false)}>
               <Text style={styles.botonCancelarTexto}>Cerrar</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
 
-      {/* MODAL: Ficha de persona pendiente (info + reenviar invitación) */}
+      {/* MODAL: Ficha de persona pendiente */}
       <Modal visible={modalPendienteVisible} animationType="fade" transparent>
         <View style={styles.linkOverlay}>
           <View style={styles.linkBox}>
@@ -880,22 +853,14 @@ export default function GrupoTrabajoScreen({ route }) {
             <Text style={styles.linkSubtitulo}>
               {personaPendiente?.celular}{'\n'}
               Área: {personaPendiente?.area_nombre}{'\n'}
-              Estado: pendiente de aceptar la invitación
+              Estado: pendiente — aún no ha ingresado a la app
             </Text>
-            {cargandoLinkPendiente ? (
-              <ActivityIndicator size="large" color={empresa.color_hex || '#1E90FF'} style={{ marginVertical: 20 }} />
-            ) : linkPendiente ? (
-              <>
-                <Text style={styles.linkSubtitulo}>Enlace de invitación para reenviar:</Text>
-                <View style={styles.linkTextoContainer}>
-                  <Text style={styles.linkTexto} selectable>{linkPendiente}</Text>
-                </View>
-                <Text style={styles.notaLinkTexto}>Si al invitado no le aparece como enlace tocable en WhatsApp, dile que lo mantenga presionado y elija "Abrir", o que lo copie y pegue en el navegador de su celular. Necesita tener la app ya instalada.</Text>
-                <TouchableOpacity style={styles.botonGuardar} onPress={compartirLinkPendiente}>
-                  <Text style={styles.botonAgregarTexto}>📤 Reenviar por WhatsApp</Text>
-                </TouchableOpacity>
-              </>
-            ) : null}
+            <Text style={styles.notaLinkTexto}>
+              Pídele que descargue la app C&D Manager y entre con este número de celular en "Ingresar como invitado".
+            </Text>
+            <TouchableOpacity style={styles.botonGuardar} onPress={compartirAvisoPendiente}>
+              <Text style={styles.botonAgregarTexto}>📤 Avisar por WhatsApp</Text>
+            </TouchableOpacity>
             <TouchableOpacity style={styles.botonCancelar} onPress={() => setModalPendienteVisible(false)}>
               <Text style={styles.botonCancelarTexto}>Cerrar</Text>
             </TouchableOpacity>

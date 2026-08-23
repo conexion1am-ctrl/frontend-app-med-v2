@@ -7,7 +7,6 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { getNavigationGlobal } from './utils/navigationGlobal';
 import { registrarNotificacionesPush } from './utils/notificacionesPush';
-import AceptarInvitacionScreen from './screens/AceptarInvitacionScreen';
 import AreaProyectoScreen from './screens/AreaProyectoScreen';
 import BienvenidaScreen from './screens/BienvenidaScreen';
 import ClientesScreen from './screens/ClientesScreen';
@@ -163,7 +162,6 @@ export default function App() {
       <Stack.Screen name="Inicio" component={InicioScreen} initialParams={paramsIniciales} />
       <Stack.Screen name="MiPerfil" component={MiPerfilScreen} />
       <Stack.Screen name="SeleccionarEmpresa" component={SeleccionarEmpresaScreen} initialParams={paramsIniciales} />
-      <Stack.Screen name="AceptarInvitacion" component={AceptarInvitacionScreen} />
       <Stack.Screen
         name="EditarPerfil"
         component={EditarPerfilScreen}

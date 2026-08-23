@@ -1,14 +1,15 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import React, { useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import InputCelular, { detectarPaisPorDispositivo } from '../components/InputCelular';
 import InputContraseña from '../components/InputContraseña';
 import { registrarNotificacionesPush } from '../utils/notificacionesPush';
 
-// Pantalla para quien fue asignado a un proyecto por otro negocio (trabajador, contratista, etc.),
-// sin necesidad de un link de invitación: el vínculo ya existe en el servidor desde el momento en
-// que el gerente lo asignó (tabla invitaciones, por celular). Aquí solo confirma su número.
+// Pantalla para quien fue asignado a un proyecto por otro negocio (trabajador, contratista,
+// cliente, etc.), sin necesidad de ningún link de invitación: el vínculo ya existe en el
+// servidor desde el momento en que gerencia lo asignó (tabla invitaciones, por celular). Aquí
+// solo confirma su número y la app descubre automáticamente a qué empresas/proyectos pertenece.
 export default function IngresarInvitadoScreen({ navigation }) {
   const [celular, setCelular] = useState('');
   const [paisCelular, setPaisCelular] = useState(detectarPaisPorDispositivo());
@@ -17,12 +18,24 @@ export default function IngresarInvitadoScreen({ navigation }) {
   const [cargando, setCargando] = useState(false);
   const [verificado, setVerificado] = useState(false);
 
+  // Flujo de "Olvidé mi contraseña": pide el nombre exacto registrado para validar identidad
+  // (sin SMS ni servicios externos) y deja crear una contraseña nueva.
+  const [modoRecuperar, setModoRecuperar] = useState(false);
+  const [nombreRecuperar, setNombreRecuperar] = useState('');
+  const [nuevaContraseñaRecuperar, setNuevaContraseñaRecuperar] = useState('');
+  const [confirmarNuevaContraseñaRecuperar, setConfirmarNuevaContraseñaRecuperar] = useState('');
+
   // Resultado de la verificación: 'pendiente' (tiene invitación, debe crear contraseña),
   // 'existente' (ya tiene cuenta y contraseña, inicia sesión normal), 'crear_contraseña_legacy'
   // (ya tiene cuenta pero nunca creó contraseña, sin invitación nueva pendiente - usuario antiguo)
   // o 'sin_asignar' (nadie lo agregó aún).
   const [estado, setEstado] = useState(null);
   const [empresaNombre, setEmpresaNombre] = useState('');
+  // Cuando estado === 'pendiente', distingue si la persona es nueva en la app (debe CREAR su
+  // contraseña de verdad) o si ya tiene cuenta de otra empresa y solo está aceptando una
+  // invitación nueva (debe escribir su contraseña ACTUAL, no inventar una — el backend la valida
+  // contra la que ya tiene y rechaza si no coincide).
+  const [invitadoYaTieneCuenta, setInvitadoYaTieneCuenta] = useState(false);
 
   const verificarCelular = async () => {
     if (!celular.trim()) {
@@ -40,6 +53,7 @@ export default function IngresarInvitadoScreen({ navigation }) {
       if (response.data.tiene_invitacion_pendiente) {
         setEstado('pendiente');
         setEmpresaNombre(response.data.empresa_nombre || '');
+        setInvitadoYaTieneCuenta(!!response.data.ya_tiene_cuenta);
       } else if (response.data.ya_tiene_cuenta && response.data.debe_crear_contraseña) {
         setEstado('crear_contraseña_legacy');
       } else if (response.data.ya_tiene_cuenta) {
@@ -92,13 +106,22 @@ export default function IngresarInvitadoScreen({ navigation }) {
   };
 
   const crearContraseñaYEntrar = async () => {
-    if (!contraseña || contraseña.length < 6) {
-      Alert.alert('Contraseña requerida', 'Crea una contraseña de al menos 6 caracteres.');
-      return;
-    }
-    if (contraseña !== confirmarContraseña) {
-      Alert.alert('Las contraseñas no coinciden', 'Verifica que ambas contraseñas sean iguales.');
-      return;
+    if (invitadoYaTieneCuenta) {
+      // Ya tiene cuenta de otra empresa: solo escribe su contraseña actual, no hay nada que
+      // "confirmar" (el backend valida que coincida con la que ya tiene).
+      if (!contraseña) {
+        Alert.alert('Contraseña requerida', 'Escribe tu contraseña.');
+        return;
+      }
+    } else {
+      if (!contraseña || contraseña.length < 6) {
+        Alert.alert('Contraseña requerida', 'Crea una contraseña de al menos 6 caracteres.');
+        return;
+      }
+      if (contraseña !== confirmarContraseña) {
+        Alert.alert('Las contraseñas no coinciden', 'Verifica que ambas contraseñas sean iguales.');
+        return;
+      }
     }
 
     setCargando(true);
@@ -112,6 +135,43 @@ export default function IngresarInvitadoScreen({ navigation }) {
     } catch (error) {
       console.error('Error aceptando invitación por celular:', error);
       const mensaje = error.response?.data?.error || 'No se pudo completar el ingreso.';
+      Alert.alert('Error', mensaje);
+    } finally {
+      setCargando(false);
+    }
+  };
+
+  const enviarRecuperarContraseña = async () => {
+    if (!nombreRecuperar.trim()) {
+      Alert.alert('Campo requerido', 'Escribe tu nombre completo tal como está registrado.');
+      return;
+    }
+    if (!nuevaContraseñaRecuperar || nuevaContraseñaRecuperar.length < 6) {
+      Alert.alert('Contraseña requerida', 'Crea una contraseña de al menos 6 caracteres.');
+      return;
+    }
+    if (nuevaContraseñaRecuperar !== confirmarNuevaContraseñaRecuperar) {
+      Alert.alert('Las contraseñas no coinciden', 'Verifica que ambas contraseñas sean iguales.');
+      return;
+    }
+
+    setCargando(true);
+    try {
+      const celularCompleto = `${paisCelular.prefijo} ${celular}`;
+      await axios.post('https://backend-app-mediterraneo.onrender.com/api/invitaciones/recuperar-contraseña', {
+        celular: celularCompleto,
+        nombre: nombreRecuperar,
+        contraseña_nueva: nuevaContraseñaRecuperar,
+      });
+      Alert.alert('¡Listo!', 'Tu contraseña fue actualizada. Ya puedes ingresar con tu contraseña nueva.');
+      setModoRecuperar(false);
+      setNombreRecuperar('');
+      setNuevaContraseñaRecuperar('');
+      setConfirmarNuevaContraseñaRecuperar('');
+      setContraseña('');
+    } catch (error) {
+      console.error('Error recuperando contraseña:', error);
+      const mensaje = error.response?.data?.error || 'No se pudo actualizar la contraseña.';
       Alert.alert('Error', mensaje);
     } finally {
       setCargando(false);
@@ -136,8 +196,12 @@ export default function IngresarInvitadoScreen({ navigation }) {
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <View style={styles.container}>
-        <Text style={styles.titulo}>Ingresar como trabajador</Text>
-        <Text style={styles.subtitulo}>Escribe tu número de celular para continuar</Text>
+        <Text style={styles.titulo}>Ingresar como invitado</Text>
+        <Text style={styles.subtitulo}>
+          {modoRecuperar
+            ? 'Recupera tu contraseña'
+            : 'Escribe tu número de celular para continuar. Sirve tanto si trabajas ahí como si eres cliente de un proyecto.'}
+        </Text>
 
         <Text style={styles.label}>Número de celular</Text>
         <InputCelular
@@ -146,16 +210,20 @@ export default function IngresarInvitadoScreen({ navigation }) {
             setCelular(texto);
             setVerificado(false);
             setEstado(null);
+            setInvitadoYaTieneCuenta(false);
             setContraseña('');
             setConfirmarContraseña('');
+            setModoRecuperar(false);
           }}
           pais={paisCelular}
           onChangePais={(p) => {
             setPaisCelular(p);
             setVerificado(false);
             setEstado(null);
+            setInvitadoYaTieneCuenta(false);
             setContraseña('');
             setConfirmarContraseña('');
+            setModoRecuperar(false);
           }}
           disabled={cargando}
         />
@@ -164,25 +232,40 @@ export default function IngresarInvitadoScreen({ navigation }) {
           <>
             <View style={styles.avisoOk}>
               <Text style={styles.avisoOkTexto}>
-                {empresaNombre ? `${empresaNombre} te asignó. Crea tu contraseña.` : 'Tienes una asignación pendiente. Crea tu contraseña.'}
+                {invitadoYaTieneCuenta
+                  ? `${empresaNombre ? `${empresaNombre} te asignó a un proyecto` : 'Tienes una asignación pendiente'}. Como ya tienes cuenta en otra empresa, escribe tu contraseña actual para aceptar.`
+                  : `${empresaNombre ? `${empresaNombre} te asignó` : 'Tienes una asignación pendiente'}. Crea tu contraseña.`}
               </Text>
             </View>
 
-            <Text style={styles.label}>Crea tu contraseña</Text>
-            <InputContraseña
-              value={contraseña}
-              onChangeText={setContraseña}
-              placeholder="Crea tu contraseña (mínimo 6 caracteres)"
-            />
-            <InputContraseña
-              value={confirmarContraseña}
-              onChangeText={setConfirmarContraseña}
-              placeholder="Confirma tu contraseña"
-            />
+            {invitadoYaTieneCuenta ? (
+              <>
+                <Text style={styles.label}>Tu contraseña</Text>
+                <InputContraseña
+                  value={contraseña}
+                  onChangeText={setContraseña}
+                  placeholder="Tu contraseña actual"
+                />
+              </>
+            ) : (
+              <>
+                <Text style={styles.label}>Crea tu contraseña</Text>
+                <InputContraseña
+                  value={contraseña}
+                  onChangeText={setContraseña}
+                  placeholder="Crea tu contraseña (mínimo 6 caracteres)"
+                />
+                <InputContraseña
+                  value={confirmarContraseña}
+                  onChangeText={setConfirmarContraseña}
+                  placeholder="Confirma tu contraseña"
+                />
+              </>
+            )}
           </>
         )}
 
-        {verificado && estado === 'existente' && (
+        {verificado && estado === 'existente' && !modoRecuperar && (
           <>
             <Text style={styles.label}>Contraseña</Text>
             <InputContraseña
@@ -190,6 +273,45 @@ export default function IngresarInvitadoScreen({ navigation }) {
               onChangeText={setContraseña}
               placeholder="Tu contraseña"
             />
+            <TouchableOpacity onPress={() => setModoRecuperar(true)}>
+              <Text style={styles.enlaceOlvide}>¿Olvidaste tu contraseña?</Text>
+            </TouchableOpacity>
+          </>
+        )}
+
+        {verificado && estado === 'existente' && modoRecuperar && (
+          <>
+            <View style={styles.avisoOk}>
+              <Text style={styles.avisoOkTexto}>
+                Para verificar que eres tú, escribe tu nombre completo tal como está registrado (el mismo que aparece en Grupo de Trabajo de tu empresa).
+              </Text>
+            </View>
+
+            <Text style={styles.label}>Tu nombre completo</Text>
+            <TextInput
+              style={styles.input}
+              value={nombreRecuperar}
+              onChangeText={setNombreRecuperar}
+              placeholder="Nombre completo registrado"
+              placeholderTextColor="#999"
+              editable={!cargando}
+            />
+
+            <Text style={styles.label}>Nueva contraseña</Text>
+            <InputContraseña
+              value={nuevaContraseñaRecuperar}
+              onChangeText={setNuevaContraseñaRecuperar}
+              placeholder="Crea una contraseña (mínimo 6 caracteres)"
+            />
+            <InputContraseña
+              value={confirmarNuevaContraseñaRecuperar}
+              onChangeText={setConfirmarNuevaContraseñaRecuperar}
+              placeholder="Confirma tu nueva contraseña"
+            />
+
+            <TouchableOpacity onPress={() => setModoRecuperar(false)}>
+              <Text style={styles.enlaceOlvide}>Volver a escribir mi contraseña actual</Text>
+            </TouchableOpacity>
           </>
         )}
 
@@ -233,7 +355,19 @@ export default function IngresarInvitadoScreen({ navigation }) {
           </TouchableOpacity>
         )}
 
-        {verificado && (estado === 'existente' || estado === 'crear_contraseña_legacy') && (
+        {verificado && estado === 'existente' && !modoRecuperar && (
+          <TouchableOpacity style={styles.boton} onPress={iniciarSesionExistente} disabled={cargando}>
+            {cargando ? <ActivityIndicator color="#fff" /> : <Text style={styles.botonTexto}>INGRESAR</Text>}
+          </TouchableOpacity>
+        )}
+
+        {verificado && estado === 'existente' && modoRecuperar && (
+          <TouchableOpacity style={styles.boton} onPress={enviarRecuperarContraseña} disabled={cargando}>
+            {cargando ? <ActivityIndicator color="#fff" /> : <Text style={styles.botonTexto}>ACTUALIZAR CONTRASEÑA</Text>}
+          </TouchableOpacity>
+        )}
+
+        {verificado && estado === 'crear_contraseña_legacy' && (
           <TouchableOpacity style={styles.boton} onPress={iniciarSesionExistente} disabled={cargando}>
             {cargando ? <ActivityIndicator color="#fff" /> : <Text style={styles.botonTexto}>INGRESAR</Text>}
           </TouchableOpacity>
@@ -256,6 +390,16 @@ const styles = StyleSheet.create({
   avisoOkTexto: { fontSize: 12, color: '#1E7E45' },
   avisoAlerta: { backgroundColor: '#FFF6E5', borderRadius: 8, padding: 12, marginTop: 16 },
   avisoAlertaTexto: { fontSize: 12, color: '#9A6700', lineHeight: 18 },
+  input: {
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 15,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    color: '#222',
+  },
+  enlaceOlvide: { color: '#1E90FF', fontSize: 13, fontWeight: '600', marginTop: 10, textAlign: 'right' },
   boton: {
     backgroundColor: '#1E90FF',
     borderRadius: 8,
