@@ -104,6 +104,16 @@ export function esGerencia(empresa) {
   return empresa?.area_nombre === 'GERENCIA';
 }
 
+// true solo para GERENCIA y AREA ADMINISTRATIVA — usado para mostrar el nombre del cliente
+// debajo del nombre del proyecto en la lista de Proyectos. Es una restricción más estricta que
+// el permiso general verClientes (que también incluye a AREA COMERCIAL, porque esa área sí
+// necesita ver/llamar/agregar clientes desde su propia pantalla de Clientes) — a pedido
+// explícito del usuario, el dato del cliente asociado a cada proyecto solo debe verse desde
+// Proyectos si el área es Gerencia o Administrativa, nadie más.
+export function puedeVerClienteEnProyectos(empresa) {
+  return empresa?.area_nombre === 'GERENCIA' || empresa?.area_nombre === 'AREA ADMINISTRATIVA';
+}
+
 // Filtro de con quién puede chatear/ver en la pestaña Equipo de un proyecto, según el área
 // del usuario logueado. Devuelve null si no hay restricción (ve/habla con todo el equipo,
 // como hoy). AREA DE PROVEEDORES y AREA DE CLIENTES tienen visibilidad reducida.

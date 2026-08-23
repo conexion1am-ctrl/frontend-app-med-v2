@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import EncabezadoLogo from '../components/EncabezadoLogo';
-import { esAccesoReducido, esGerencia, permisosDe } from '../utils/roles';
+import { esAccesoReducido, esGerencia, permisosDe, puedeVerClienteEnProyectos } from '../utils/roles';
 
 export default function ProyectosScreen({ route, navigation }) {
   const { empresa, usuario } = route.params;
@@ -11,6 +11,10 @@ export default function ProyectosScreen({ route, navigation }) {
   const accesoReducido = esAccesoReducido(empresa);
   const puedeGestionar = permisosDe(empresa).gestionarProyectos;
   const puedeEliminar = esGerencia(empresa);
+  // Solo Gerencia y Área Administrativa ven a qué cliente pertenece cada proyecto en esta
+  // lista (a pedido explícito del usuario) — el resto de áreas, aunque tengan acceso a
+  // Proyectos, no deben ver ese dato acá.
+  const puedeVerCliente = puedeVerClienteEnProyectos(empresa);
   const [proyectos, setProyectos] = useState([]);
   const [areas, setAreas] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -208,6 +212,9 @@ export default function ProyectosScreen({ route, navigation }) {
               onLongPress={() => puedeEliminar && !accesoReducido && setMenuProyecto(proyecto)}
             >
               <Text style={styles.proyectoNombre}>{proyecto.nombre}</Text>
+              {puedeVerCliente && proyecto.cliente_nombre_snapshot ? (
+                <Text style={styles.proyectoCliente}>Cliente: {proyecto.cliente_nombre_snapshot}</Text>
+              ) : null}
               {proyecto.direccion ? <Text style={styles.proyectoDireccion}>{proyecto.direccion}</Text> : null}
               {proyecto.area_m2 ? <Text style={styles.proyectoArea}>{proyecto.area_m2} m²</Text> : null}
               {accesoReducido && proyecto.misAreas && (
@@ -330,6 +337,7 @@ const styles = StyleSheet.create({
     borderColor: '#eee',
   },
   proyectoNombre: { fontSize: 16, fontWeight: '600', color: '#222' },
+  proyectoCliente: { fontSize: 12, color: '#1E90FF', marginTop: 2 },
   proyectoDireccion: { fontSize: 13, color: '#777', marginTop: 2 },
   proyectoArea: { fontSize: 12, color: '#999', marginTop: 2 },
   menuOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
