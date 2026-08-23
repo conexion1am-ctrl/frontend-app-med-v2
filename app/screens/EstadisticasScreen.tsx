@@ -1,7 +1,7 @@
 import { useFocusEffect } from '@react-navigation/native';
 import axios from 'axios';
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, BackHandler, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, BackHandler, KeyboardAvoidingView, Linking, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import EncabezadoLogo from '../components/EncabezadoLogo';
 import InputMoneda from '../components/InputMoneda';
@@ -79,6 +79,24 @@ export default function EstadisticasScreen({ route }) {
 
   // Menú (Editar / Eliminar) al mantener presionado un abono.
   const [menuAbono, setMenuAbono] = useState(null);
+
+  // Menú (Descargar estado financiero) al mantener presionado un proyecto en la lista inicial.
+  const [menuProyecto, setMenuProyecto] = useState(null); // el proyecto (item de `proyectos`) sobre el que se hizo long-press
+  const [generandoExcel, setGenerandoExcel] = useState(false);
+
+  const descargarEstadoFinanciero = async (proyecto) => {
+    setGenerandoExcel(true);
+    try {
+      const res = await axios.get(`https://backend-app-mediterraneo.onrender.com/api/estadisticas/${proyecto.id}/excel`);
+      Linking.openURL(res.data.url);
+    } catch (error) {
+      const mensaje = error.response?.data?.error || 'No se pudo generar el estado financiero.';
+      console.error('Error generando estado financiero:', error);
+      Alert.alert('Error', mensaje);
+    } finally {
+      setGenerandoExcel(false);
+    }
+  };
 
   // Categoría actualmente abierta (ej. "Carpintería"): cuando no es null, en vez del resumen
   // general se muestra solo el historial de costos de esa categoría, para no mezclar todo en
@@ -402,13 +420,43 @@ export default function EstadisticasScreen({ route }) {
             <Text style={styles.vacioTexto}>Aún no hay proyectos creados.</Text>
           ) : (
             proyectos.map((proyecto) => (
-              <TouchableOpacity key={proyecto.id} style={styles.proyectoCard} onPress={() => seleccionarProyecto(proyecto)}>
+              <TouchableOpacity
+                key={proyecto.id}
+                style={styles.proyectoCard}
+                onPress={() => seleccionarProyecto(proyecto)}
+                onLongPress={() => setMenuProyecto(proyecto)}
+                delayLongPress={350}
+              >
                 <Text style={styles.proyectoNombre}>{proyecto.nombre}</Text>
                 <Text style={styles.proyectoFlecha}>›</Text>
               </TouchableOpacity>
             ))
           )}
         </ScrollView>
+
+        {/* MENÚ: Descargar estado financiero, al mantener presionado un proyecto */}
+        <Modal visible={!!menuProyecto} transparent animationType="fade" onRequestClose={() => setMenuProyecto(null)}>
+          <TouchableOpacity style={styles.menuFondo} activeOpacity={1} onPress={() => setMenuProyecto(null)}>
+            <View style={[styles.menuCaja, { paddingBottom: Math.max(insets.bottom, 20) }]}>
+              <TouchableOpacity
+                style={styles.menuOpcion}
+                disabled={generandoExcel}
+                onPress={() => {
+                  const proyecto = menuProyecto;
+                  setMenuProyecto(null);
+                  descargarEstadoFinanciero(proyecto);
+                }}
+              >
+                <Text style={styles.menuOpcionTexto}>
+                  {generandoExcel ? 'Generando...' : '📊 Descargar estado financiero (Excel)'}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.menuOpcion} onPress={() => setMenuProyecto(null)}>
+                <Text style={styles.menuOpcionTexto}>Cancelar</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </Modal>
       </View>
     );
   }
