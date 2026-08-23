@@ -500,7 +500,7 @@ export default function GrupoTrabajoScreen({ route }) {
     const mensaje =
       persona.estado === 'pendiente'
         ? `¿Eliminar a ${persona.nombre}? Ya no podrá entrar con este número de celular.`
-        : `¿Eliminar a ${persona.nombre} del equipo? Ya no podrá ingresar a la app con su número, pero se conservará su historial en proyectos anteriores.`;
+        : `¿Eliminar a ${persona.nombre} de la plataforma? Esto la borra por completo: su cuenta, todas sus empresas, y todas sus asignaciones a proyectos, en cualquier empresa donde esté. Sus mensajes de chat con otras personas se conservan (mostrando su nombre igual), y las fotos/planos que subió también se conservan. Esta acción no se puede deshacer.`;
 
     Alert.alert('Eliminar persona', mensaje, [
       { text: 'Cancelar', style: 'cancel' },
@@ -513,14 +513,17 @@ export default function GrupoTrabajoScreen({ route }) {
       if (persona.estado === 'pendiente') {
         await axios.delete(`https://backend-app-mediterraneo.onrender.com/api/invitaciones/${persona.rol_id}`);
       } else {
-        await axios.delete(`https://backend-app-mediterraneo.onrender.com/api/areas/personal/vinculado/${persona.rol_id}?todas=true`, {
-          data: { solicitante_id: usuario.id },
+        // Eliminación total de la plataforma (no solo de esta empresa): borra la cuenta, todos
+        // sus vínculos con cualquier empresa, y todas sus asignaciones a proyectos.
+        await axios.delete(`https://backend-app-mediterraneo.onrender.com/api/areas/personal/${persona.usuario_id}/total`, {
+          data: { empresa_id: empresa.id, solicitante_id: usuario.id },
         });
       }
       cargarDatos();
     } catch (error) {
       console.error('Error eliminando persona:', error);
-      Alert.alert('Error', 'No se pudo eliminar a esta persona.');
+      const mensaje = error.response?.data?.error || 'No se pudo eliminar a esta persona.';
+      Alert.alert('Error', mensaje);
     }
   };
 

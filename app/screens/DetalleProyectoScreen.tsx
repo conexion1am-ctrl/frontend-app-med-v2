@@ -20,6 +20,8 @@ export default function DetalleProyectoScreen({ route, navigation }) {
   const [areaM2, setAreaM2] = useState('');
   const [actividadesSeleccionadas, setActividadesSeleccionadas] = useState([]);
   const [guardando, setGuardando] = useState(false);
+  const [menuActividad, setMenuActividad] = useState(null);
+  const [eliminandoActividad, setEliminandoActividad] = useState(false);
 
   useEffect(() => {
     cargarDetalle();
@@ -101,6 +103,32 @@ export default function DetalleProyectoScreen({ route, navigation }) {
     }
   };
 
+  const confirmarEliminarActividad = (area) => {
+    setMenuActividad(null);
+    Alert.alert(
+      `¿Eliminar "${area.nombre}"?`,
+      'Se borrará TODO lo que tenga adentro en este proyecto: chats y sus archivos adjuntos, fotos de avance, y diseños 3D. También se quitará a cualquier persona asignada aquí (su cuenta no se toca, solo esta asignación). Esta acción no se puede deshacer.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Eliminar todo', style: 'destructive', onPress: () => eliminarActividad(area) },
+      ]
+    );
+  };
+
+  const eliminarActividad = async (area) => {
+    setEliminandoActividad(true);
+    try {
+      await axios.delete(`https://backend-app-mediterraneo.onrender.com/api/proyectos/${proyecto.id}/actividades/${area.id}`);
+      cargarDetalle();
+    } catch (error) {
+      console.error('Error eliminando actividad:', error);
+      const mensaje = error.response?.data?.error || 'No se pudo eliminar la actividad. Intenta de nuevo.';
+      Alert.alert('Error', mensaje);
+    } finally {
+      setEliminandoActividad(false);
+    }
+  };
+
   if (cargando) {
     return (
       <View style={styles.center}>
@@ -152,6 +180,9 @@ export default function DetalleProyectoScreen({ route, navigation }) {
         )}
 
         <Text style={styles.seccionTitulo}>Actividades</Text>
+        {puedeGestionar && detalle.actividades.length > 0 && (
+          <Text style={styles.notaTexto}>Mantén presionada una actividad para eliminarla.</Text>
+        )}
         <View style={styles.actividadesLista}>
           {detalle.actividades.length === 0 ? (
             <Text style={styles.vacioTexto}>No hay actividades asignadas a este proyecto.</Text>
@@ -161,6 +192,7 @@ export default function DetalleProyectoScreen({ route, navigation }) {
                 key={area.id}
                 style={styles.actividadCard}
                 onPress={() => navigation.navigate('AreaProyecto', { empresa, proyecto: detalle, area, usuario })}
+                onLongPress={() => puedeGestionar && setMenuActividad(area)}
               >
                 <Text style={styles.actividadTexto}>
                   {area.categoria_padre ? `${area.categoria_padre} · ${area.nombre}` : area.nombre}
@@ -241,6 +273,28 @@ export default function DetalleProyectoScreen({ route, navigation }) {
           </View>
         </View>
       </Modal>
+
+      <Modal visible={!!menuActividad} animationType="fade" transparent>
+        <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={() => setMenuActividad(null)}>
+          <View style={[styles.menuBox, { paddingBottom: Math.max(insets.bottom, 20) + 16 }]}>
+            <Text style={styles.menuTitulo}>
+              {menuActividad?.categoria_padre ? `${menuActividad.categoria_padre} · ${menuActividad.nombre}` : menuActividad?.nombre}
+            </Text>
+            <TouchableOpacity
+              style={styles.menuOpcion}
+              disabled={eliminandoActividad}
+              onPress={() => confirmarEliminarActividad(menuActividad)}
+            >
+              <Text style={[styles.menuOpcionTexto, { color: '#DC143C' }]}>
+                🗑️  {eliminandoActividad ? 'Eliminando...' : 'Eliminar actividad'}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.menuOpcion} onPress={() => setMenuActividad(null)}>
+              <Text style={[styles.menuOpcionTexto, { color: '#888' }]}>Cancelar</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -295,4 +349,10 @@ const styles = StyleSheet.create({
   areaOpcionTexto: { fontSize: 13, color: '#555' },
   areaOpcionTextoSeleccionado: { color: '#fff', fontWeight: '600' },
   modalBotonesFooter: { paddingHorizontal: 20, paddingBottom: 20 },
+  notaTexto: { fontSize: 12, color: '#eee', marginBottom: 8, fontStyle: 'italic' },
+  menuOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
+  menuBox: { backgroundColor: '#fff', borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 20, paddingBottom: 36 },
+  menuTitulo: { fontSize: 15, fontWeight: 'bold', color: '#888', marginBottom: 12, textAlign: 'center' },
+  menuOpcion: { paddingVertical: 14, borderTopWidth: 1, borderTopColor: '#f0f0f0' },
+  menuOpcionTexto: { fontSize: 16, color: '#222', textAlign: 'center' },
 });
