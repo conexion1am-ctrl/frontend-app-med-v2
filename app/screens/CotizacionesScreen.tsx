@@ -485,7 +485,7 @@ export default function CotizacionesScreen({ route }) {
       {/* MENÚ 3 PUNTOS */}
       <Modal visible={!!menuCotizacion} animationType="fade" transparent>
         <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={cerrarMenu}>
-          <View style={styles.menuBox}>
+          <View style={[styles.menuBox, { paddingBottom: Math.max(insets.bottom, 20) + 14 }]}>
             <Text style={styles.menuTitulo}>{menuCotizacion?.cliente_nombre}</Text>
             {menuCotizacion?.aceptada ? (
               <>

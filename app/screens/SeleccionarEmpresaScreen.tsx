@@ -2,11 +2,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import React, { useState } from 'react';
 import { Alert, Image, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Pantalla que aparece solo cuando un usuario pertenece a más de una empresa.
 // Le permite elegir con cuál empresa quiere entrar en este momento.
 export default function SeleccionarEmpresaScreen({ route, navigation }) {
   const { empresas, usuario } = route.params;
+  const insets = useSafeAreaInsets();
   const [empresasVisibles, setEmpresasVisibles] = useState(empresas);
   const [menuEmpresa, setMenuEmpresa] = useState(null);
 
@@ -132,7 +134,7 @@ export default function SeleccionarEmpresaScreen({ route, navigation }) {
 
       <Modal visible={!!menuEmpresa} animationType="fade" transparent>
         <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={cerrarMenu}>
-          <View style={styles.menuBox}>
+          <View style={[styles.menuBox, { paddingBottom: Math.max(insets.bottom, 20) + 14 }]}>
             <Text style={styles.menuTitulo}>{menuEmpresa?.empresa_nombre}</Text>
 
             <TouchableOpacity style={styles.menuOpcion} onPress={editarEmpresa}>

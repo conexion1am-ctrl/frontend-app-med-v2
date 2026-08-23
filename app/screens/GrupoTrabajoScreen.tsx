@@ -634,7 +634,7 @@ export default function GrupoTrabajoScreen({ route }) {
 
       <Modal visible={!!menuPersona} animationType="fade" transparent>
         <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={cerrarMenu}>
-          <View style={styles.menuBox}>
+          <View style={[styles.menuBox, { paddingBottom: Math.max(insets.bottom, 20) + 16 }]}>
             <Text style={styles.menuTitulo}>{menuPersona?.nombre}</Text>
             {menuPersona?.area_nombre === 'GERENCIA' && !puedeGestionarGerencia ? (
               <Text style={styles.notaLinkTexto}>Solo Gerencia puede editar o eliminar a alguien de Gerencia.</Text>

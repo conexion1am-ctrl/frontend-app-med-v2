@@ -289,7 +289,7 @@ export default function ProyectosScreen({ route, navigation }) {
 
       <Modal visible={!!menuProyecto} animationType="fade" transparent>
         <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={cerrarMenuProyecto}>
-          <View style={styles.menuBox}>
+          <View style={[styles.menuBox, { paddingBottom: Math.max(insets.bottom, 20) + 14 }]}>
             <Text style={styles.menuTitulo}>{menuProyecto?.nombre}</Text>
             <TouchableOpacity style={styles.menuOpcion} onPress={confirmarEliminarProyecto} disabled={eliminando}>
               <Text style={[styles.menuOpcionTexto, { color: '#DC143C' }]}>

@@ -1,11 +1,13 @@
 import axios from 'axios';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Linking, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import EncabezadoLogo from '../components/EncabezadoLogo';
 import { permisosDe } from '../utils/roles';
 
 export default function DetalleProyectoScreen({ route, navigation }) {
   const { empresa, proyecto, usuario } = route.params;
+  const insets = useSafeAreaInsets();
   const puedeGestionar = permisosDe(empresa).gestionarProyectos;
   const [detalle, setDetalle] = useState(null);
   const [areas, setAreas] = useState([]);
@@ -251,7 +253,7 @@ export default function DetalleProyectoScreen({ route, navigation }) {
               })}
             </View>
           </ScrollView>
-          <View style={styles.modalBotonesFooter}>
+          <View style={[styles.modalBotonesFooter, { paddingBottom: Math.max(insets.bottom, 20) }]}>
             <TouchableOpacity style={styles.botonGuardar} onPress={guardarActividades} disabled={guardando}>
               {guardando ? <ActivityIndicator color="#fff" /> : <Text style={styles.botonAccionTextoBlanco}>GUARDAR</Text>}
             </TouchableOpacity>

@@ -256,7 +256,7 @@ export default function ClientesScreen({ route }) {
       {/* MENÚ 3 PUNTOS */}
       <Modal visible={!!menuCliente} animationType="fade" transparent>
         <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={cerrarMenu}>
-          <View style={styles.menuBox}>
+          <View style={[styles.menuBox, { paddingBottom: Math.max(insets.bottom, 20) + 16 }]}>
             <Text style={styles.menuTitulo}>{menuCliente?.nombre}</Text>
             <TouchableOpacity style={styles.menuOpcion} onPress={() => abrirEditar(menuCliente)}>
               <Text style={styles.menuOpcionTexto}>✏️  Editar</Text>

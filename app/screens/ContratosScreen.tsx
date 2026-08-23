@@ -1,6 +1,7 @@
 import axios from 'axios';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Linking, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import EncabezadoLogo from '../components/EncabezadoLogo';
 import { esGerencia } from '../utils/roles';
 
@@ -20,6 +21,7 @@ const formatearFecha = (fecha) => {
 
 export default function ContratosScreen({ route, navigation }) {
   const { empresa, usuario } = route.params;
+  const insets = useSafeAreaInsets();
   const puedeEliminarContratos = esGerencia(empresa);
   const [contratos, setContratos] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -235,7 +237,7 @@ export default function ContratosScreen({ route, navigation }) {
 
       <Modal visible={!!menuContrato} animationType="fade" transparent>
         <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={cerrarMenu}>
-          <View style={styles.menuBox}>
+          <View style={[styles.menuBox, { paddingBottom: Math.max(insets.bottom, 20) + 14 }]}>
             <Text style={styles.menuTitulo}>{menuContrato?.proyecto_nombre || 'Contrato'}</Text>
             {menuContrato?.proyecto_id ? (
               menuContrato?.proyecto_estado === 'finalizado' ? (

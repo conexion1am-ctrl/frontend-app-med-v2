@@ -988,7 +988,7 @@ export default function AreaProyectoScreen({ route }) {
 
       <Modal visible={!!menuPlano3d} animationType="fade" transparent>
         <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={cerrarMenuPlano3d}>
-          <View style={styles.menuBox}>
+          <View style={[styles.menuBox, { paddingBottom: Math.max(insets.bottom, 20) + 14 }]}>
             <Text style={styles.menuTitulo}>{menuPlano3d?.nombre}</Text>
             <TouchableOpacity
               style={styles.menuOpcion}
@@ -1008,7 +1008,7 @@ export default function AreaProyectoScreen({ route }) {
 
       <Modal visible={!!menuFoto} animationType="fade" transparent>
         <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={cerrarMenuFoto}>
-          <View style={styles.menuBox}>
+          <View style={[styles.menuBox, { paddingBottom: Math.max(insets.bottom, 20) + 14 }]}>
             <Text style={styles.menuTitulo}>Foto de avance</Text>
             <TouchableOpacity
               style={styles.menuOpcion}
@@ -1049,7 +1049,7 @@ export default function AreaProyectoScreen({ route }) {
 
       <Modal visible={!!menuMensaje} animationType="fade" transparent>
         <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={cerrarMenuMensaje}>
-          <View style={styles.menuBox}>
+          <View style={[styles.menuBox, { paddingBottom: Math.max(insets.bottom, 20) + 14 }]}>
             <Text style={styles.menuTitulo}>Mensaje</Text>
             <TouchableOpacity
               style={styles.menuOpcion}
@@ -1070,7 +1070,7 @@ export default function AreaProyectoScreen({ route }) {
 
       <Modal visible={!!menuPersona} animationType="fade" transparent>
         <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={cerrarMenuPersona}>
-          <View style={styles.menuBox}>
+          <View style={[styles.menuBox, { paddingBottom: Math.max(insets.bottom, 20) + 14 }]}>
             <Text style={styles.menuTitulo}>{menuPersona?.nombre}</Text>
             <TouchableOpacity
               style={styles.menuOpcion}

@@ -1,6 +1,8 @@
+import { useFocusEffect } from '@react-navigation/native';
 import axios from 'axios';
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, BackHandler, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import EncabezadoLogo from '../components/EncabezadoLogo';
 import InputMoneda from '../components/InputMoneda';
 
@@ -46,6 +48,7 @@ const ETIQUETAS_TIPO_COSTO = { materiales: 'Materiales', mano_obra: 'Mano de obr
 
 export default function EstadisticasScreen({ route }) {
   const { empresa } = route.params;
+  const insets = useSafeAreaInsets();
   const [proyectos, setProyectos] = useState([]);
   const [proyectoSeleccionado, setProyectoSeleccionado] = useState(null);
   const [estadisticas, setEstadisticas] = useState(null);
@@ -96,6 +99,34 @@ export default function EstadisticasScreen({ route }) {
     cargarProyectos();
     cargarCategorias();
   }, []);
+
+  // El botón físico "atrás" de Android normalmente lo maneja react-navigation por su cuenta,
+  // saliendo directo de esta pantalla (porque para el stack de navegación, "Estadísticas" es una
+  // sola pantalla, sin importar en qué nivel interno esté el usuario). Pero acá adentro hay 3
+  // niveles manejados con useState (lista de proyectos → resumen del proyecto → categoría
+  // abierta), con su propio botón "‹ Volver" hecho a mano — el botón físico no sabía nada de
+  // esto y se saltaba esos niveles, sacando al usuario de golpe hasta la pantalla de Inicio.
+  // Esta función retrocede UN nivel a la vez, replicando exactamente la misma lógica que ya
+  // tiene el botón "‹ Volver" (ver más abajo, en el JSX): cierra la categoría abierta si hay una,
+  // si no, deselecciona el proyecto, y si ya está en la lista de proyectos (el nivel más externo)
+  // deja que react-navigation haga lo suyo (salir de la pantalla), devolviendo false.
+  useFocusEffect(
+    useCallback(() => {
+      const alPresionarAtras = () => {
+        if (categoriaAbierta) {
+          setCategoriaAbierta(null);
+          return true; // ya se manejó acá adentro, no dejar que react-navigation también actúe
+        }
+        if (proyectoSeleccionado) {
+          setProyectoSeleccionado(null);
+          return true;
+        }
+        return false; // en el nivel más externo: dejar que el botón físico salga de la pantalla, como siempre
+      };
+      const subscripcion = BackHandler.addEventListener('hardwareBackPress', alPresionarAtras);
+      return () => subscripcion.remove();
+    }, [categoriaAbierta, proyectoSeleccionado])
+  );
 
   const cargarCategorias = async () => {
     try {
@@ -693,7 +724,7 @@ export default function EstadisticasScreen({ route }) {
       {/* MENÚ: Editar / Eliminar, al mantener presionado un abono */}
       <Modal visible={!!menuAbono} transparent animationType="fade" onRequestClose={cerrarMenuAbono}>
         <TouchableOpacity style={styles.menuFondo} activeOpacity={1} onPress={cerrarMenuAbono}>
-          <View style={styles.menuCaja}>
+          <View style={[styles.menuCaja, { paddingBottom: Math.max(insets.bottom, 20) }]}>
             <TouchableOpacity
               style={styles.menuOpcion}
               onPress={() => {
@@ -724,7 +755,7 @@ export default function EstadisticasScreen({ route }) {
       {/* MENÚ: Editar / Eliminar, al mantener presionado un movimiento de costo */}
       <Modal visible={!!menuMovimiento} transparent animationType="fade" onRequestClose={cerrarMenuMovimiento}>
         <TouchableOpacity style={styles.menuFondo} activeOpacity={1} onPress={cerrarMenuMovimiento}>
-          <View style={styles.menuCaja}>
+          <View style={[styles.menuCaja, { paddingBottom: Math.max(insets.bottom, 20) }]}>
             <TouchableOpacity
               style={styles.menuOpcion}
               onPress={() => {
