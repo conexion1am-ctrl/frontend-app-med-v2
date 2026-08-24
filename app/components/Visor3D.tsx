@@ -433,6 +433,11 @@ export default function Visor3D({ uri }) {
   const camState = useRef({ radio: 8, azimut: 0, elevacion: 0.5, centro: new THREE.Vector3(0, 0, 0) });
   // Snapshot del estado de cámara al INICIO de cada gesto, para calcular deltas limpios.
   const inicioGestoRef = useRef({ radio: 8, azimut: 0, elevacion: 0.5, centro: new THREE.Vector3(0, 0, 0) });
+  // Usados por gestoMover para distinguir "mover con 2 dedos" de "pellizcar" (ver comentario
+  // junto a gestoMover): distancia entre los 2 dedos al arrancar el gesto, y si el frame actual
+  // se está interpretando como pellizco (para que gestoMover no desplace ese frame).
+  const distanciaDedosInicioRef = useRef(null);
+  const esPellizcoRef = useRef(false);
   // Se pone en true una vez que el modelo carga y calculamos el radio inicial según su tamaño;
   // ControladorCamara usa esto para saber cuándo aplicar la posición inicial de la cámara.
   const listoParaposicionarRef = useRef(false);
@@ -694,14 +699,44 @@ export default function Visor3D({ uri }) {
       camState.current.elevacion = inicio.elevacion + evt.translationY * 0.008;
     });
 
+  // gestoMover (pan de 2 dedos) y gestoZoom (pellizco, más abajo) conviven en un mismo
+  // Gesture.Simultaneous a propósito (ver HISTORIAL más abajo) — la intención siempre fue que
+  // ambos gestos de 2 dedos pudieran usarse. El problema reportado ("el pellizco compite con
+  // mover") no era una carrera de reconocedores sino una MEZCLA: evt.translationX/Y de Pan mide
+  // el movimiento del PRIMER dedo, no del centro entre los dos — y al pellizcar con la mano
+  // (nunca perfectamente simétrico), ese primer dedo casi siempre se desplaza varios píxeles,
+  // así que gestoMover interpretaba ese movimiento como "quiero desplazar la cámara" al mismo
+  // tiempo que gestoZoom hacía zoom, ensuciando el resultado con un desplazamiento no deseado.
+  // Fix: en cada onTouchesMove medimos la distancia ACTUAL entre los dos dedos y la comparamos
+  // con la del arranque del gesto — si cambió proporcionalmente más que una tolerancia pequeña
+  // (es decir, los dedos se están abriendo/cerrando = pellizco), asumimos que ESE frame es
+  // predominantemente zoom y no aplicamos desplazamiento, dejando que gestoZoom actúe solo. Si
+  // los dedos mantienen su distancia relativa (se mueven juntos, en paralelo) sí desplazamos
+  // normalmente. No toca gestoOrbitar (1 dedo) en absoluto.
   const gestoMover = Gesture.Pan()
     .runOnJS(true)
     .minPointers(2)
     .maxPointers(2)
     .onStart(() => {
       inicioGestoRef.current = { ...camState.current, centro: camState.current.centro.clone() };
+      distanciaDedosInicioRef.current = null;
+    })
+    .onTouchesMove((evt) => {
+      if (evt.allTouches.length < 2) return;
+      const [t1, t2] = evt.allTouches;
+      const distanciaActual = Math.hypot(t2.x - t1.x, t2.y - t1.y);
+      if (distanciaDedosInicioRef.current == null) {
+        distanciaDedosInicioRef.current = distanciaActual;
+        return;
+      }
+      // > ~12% de cambio en la distancia entre dedos = lo estamos leyendo como pellizco, no
+      // como desplazamiento en paralelo. Umbral generoso a propósito: mejor perder algo de
+      // sensibilidad de "mover" durante un pellizco fuerte que ensuciar el zoom con traslación.
+      const proporcion = distanciaActual / distanciaDedosInicioRef.current;
+      esPellizcoRef.current = proporcion < 0.88 || proporcion > 1.12;
     })
     .onUpdate((evt) => {
+      if (esPellizcoRef.current) return; // este frame es predominantemente pellizco: no mover
       const cam = camaraRef.current;
       if (!cam) return;
       const inicio = inicioGestoRef.current;
@@ -725,6 +760,15 @@ export default function Visor3D({ uri }) {
         .addScaledVector(arribaCamara, evt.translationY * escala);
 
       camState.current.centro = inicio.centro.clone().add(desplazamiento);
+    })
+    .onFinalize(() => {
+      // onFinalize (no onEnd): onEnd solo se garantiza si el gesto llegó a estar ACTIVE y
+      // terminó normalmente. Si RNGH lo cancela antes de eso (interrupción del sistema, pérdida
+      // de foco, etc.), onEnd nunca se dispara y esPellizcoRef podía quedar "atascado" en true,
+      // ignorando el primer frame de mover del siguiente gesto de 2 dedos. onFinalize sí se
+      // dispara siempre (éxito, fallo o cancelación), así que el reset queda garantizado.
+      esPellizcoRef.current = false;
+      distanciaDedosInicioRef.current = null;
     });
 
   // Zoom "libre" tipo SketchUp: en vez de acortar la distancia a un centro fijo (lo que antes
