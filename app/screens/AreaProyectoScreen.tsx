@@ -601,7 +601,7 @@ export default function AreaProyectoScreen({ route }) {
     setCargandoChat(true);
     try {
       const resMensajes = await axios.get(
-        `https://backend-app-mediterraneo.onrender.com/api/mensajes/${proyecto.id}/${area.id}/${persona.usuario_id}`
+        `https://backend-app-mediterraneo.onrender.com/api/mensajes/${proyecto.id}/${area.id}/${persona.usuario_id}?mi_usuario_id=${usuario.id}`
       );
       setMensajes(resMensajes.data.mensajes);
     } catch (error) {
@@ -633,7 +633,7 @@ export default function AreaProyectoScreen({ route }) {
       });
       setNuevoMensaje('');
       const resMensajes = await axios.get(
-        `https://backend-app-mediterraneo.onrender.com/api/mensajes/${proyecto.id}/${area.id}/${chatAbierto.usuario_id}`
+        `https://backend-app-mediterraneo.onrender.com/api/mensajes/${proyecto.id}/${area.id}/${chatAbierto.usuario_id}?mi_usuario_id=${usuario.id}`
       );
       setMensajes(resMensajes.data.mensajes);
     } catch (error) {
