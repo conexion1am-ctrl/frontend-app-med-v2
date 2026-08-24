@@ -121,7 +121,18 @@ export function puedeVerClienteEnProyectos(empresa) {
 const CONTACTOS_VISIBLES_POR_AREA = {
   'AREA DE PROVEEDORES': ['GERENCIA', 'AREA ADMINISTRATIVA', 'AREA DE LOGISTICA'],
   'AREA DE CLIENTES': ['GERENCIA', 'AREA ADMINISTRATIVA'],
+  // Administrativa y Logística tienen contacto directo y libre con Gerencia en ambos sentidos
+  // (son consideradas "equipo directivo"), sin la restricción de "gerencia debe escribir
+  // primero" que sí aplica al resto (oficio, Proveedores, Clientes) — ver CONTACTOS_VISIBLES_OFICIO.
+  'AREA ADMINISTRATIVA': ['GERENCIA'],
+  'AREA DE LOGISTICA': ['GERENCIA'],
 };
+
+// GERENCIA ve libremente a Administrativa y Logística (contraparte del punto anterior), pero NO
+// ve automáticamente a todo el resto del equipo (oficio, Proveedores, Clientes) — con esos,
+// es GERENCIA quien debe escribir primero para que la conversación aparezca del otro lado (ver
+// filtro de "le_ha_escrito" más abajo, aplicado en el frontend con el dato que manda el backend).
+const CONTACTOS_VISIBLES_GERENCIA = ['AREA ADMINISTRATIVA', 'AREA DE LOGISTICA'];
 
 // Las áreas de "oficio" (Carpintería, Electricidad, Estuco, etc. — las ~15 que no están en
 // PERMISOS_POR_AREA ni tienen entrada propia arriba) antes solo veían en su pestaña Equipo a
@@ -129,8 +140,11 @@ const CONTACTOS_VISIBLES_POR_AREA = {
 // área, un trabajador de oficio nunca tenía a nadie de la empresa como contacto — su única fila
 // visible terminaba siendo él mismo, lo que producía un "chat consigo mismo" con el nombre
 // equivocado en el título (bug reportado: Juliana veía su propio nombre en vez del de Alejandro).
-// Ahora, igual que Proveedores/Clientes, todo oficio ve también a Gerencia/Administrativa/
-// Logística como filas de contacto separadas (un chat 1-a-1 independiente con cada persona).
+// Ahora, igual que Proveedores/Clientes, todo oficio ve también a Administrativa/Logística
+// libremente, y a GERENCIA solo de forma condicionada: la fila de cada gerente solo aparece
+// después de que ESE gerente le haya escrito primero (ver AreaProyectoScreen.tsx, filtro sobre
+// "le_ha_escrito" que devuelve el backend). No es normal que un trabajador le escriba
+// directamente a gerencia por iniciativa propia, pero si gerencia le habla, debe poder responder.
 const CONTACTOS_VISIBLES_OFICIO = ['GERENCIA', 'AREA ADMINISTRATIVA', 'AREA DE LOGISTICA'];
 
 export function areasVisiblesEnEquipo(empresa) {
@@ -138,15 +152,25 @@ export function areasVisiblesEnEquipo(empresa) {
   // Sin nombre de área válido (dato faltante/malformado), por seguridad no ampliamos
   // visibilidad: mejor pecar de restrictivo (solo su propia área) que exponer de más.
   if (!nombre) return null;
+  if (nombre === 'GERENCIA') return CONTACTOS_VISIBLES_GERENCIA;
   if (CONTACTOS_VISIBLES_POR_AREA[nombre]) return CONTACTOS_VISIBLES_POR_AREA[nombre];
-  // Áreas con permisos propios definidos (Gerencia, Administrativa, Logística, Comercial) no
-  // reciben visibilidad ampliada aquí — solo aplica a "oficio" (todo lo que no tiene permisos
-  // propios ni entrada en el mapa de arriba, es decir esAccesoReducido === true, EXCLUYENDO
-  // Proveedores/Clientes que ya se resolvieron en el if anterior).
+  // Áreas con permisos propios definidos (Administrativa ya resuelta arriba, Logística también,
+  // Comercial) no reciben visibilidad ampliada aquí — solo aplica a "oficio" (todo lo que no
+  // tiene permisos propios ni entrada en el mapa de arriba, EXCLUYENDO Proveedores/Clientes que
+  // ya se resolvieron en el if anterior).
   if (!PERMISOS_POR_AREA[nombre] && nombre !== 'AREA DE PROVEEDORES' && nombre !== 'AREA DE CLIENTES') {
     return CONTACTOS_VISIBLES_OFICIO;
   }
   return null;
+}
+
+// true si, para el área del usuario logueado, las filas de GERENCIA en su roster de Equipo
+// deben filtrarse por "¿ese gerente ya me escribió?" (oficio, Proveedores, Clientes) en vez de
+// mostrarse siempre. Administrativa y Logística NO tienen esta restricción (ven a Gerencia
+// libremente) — y Gerencia mirándose a sí misma no aplica (nunca se ve a sí misma en su roster).
+export function gerenciaRequiereContactoPrevio(empresa) {
+  const nombre = empresa?.area_nombre;
+  return nombre !== 'GERENCIA' && nombre !== 'AREA ADMINISTRATIVA' && nombre !== 'AREA DE LOGISTICA';
 }
 
 // Pestañas visibles dentro de AreaProyectoScreen, según el área del usuario logueado.

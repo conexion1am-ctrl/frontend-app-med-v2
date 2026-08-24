@@ -16,7 +16,7 @@ import { storage } from '../../firebaseConfig';
 import EncabezadoLogo from '../components/EncabezadoLogo';
 import ImagenZoom from '../components/ImagenZoom';
 import Visor3D from '../components/Visor3D';
-import { areasVisiblesEnEquipo, pestanasAreaProyecto, permisosDe } from '../utils/roles';
+import { areasVisiblesEnEquipo, gerenciaRequiereContactoPrevio, pestanasAreaProyecto, permisosDe } from '../utils/roles';
 
 // Fecha + hora en la hora local del celular (no UTC), para que "8:32 PM" coincida con el reloj
 // real del usuario. Se usa como pie de página en fotos de avance, planos 3D y mensajes de chat.
@@ -444,7 +444,14 @@ export default function AreaProyectoScreen({ route }) {
     if (primeraCarga) setCargando(true);
     else setCargandoEquipo(true);
     try {
-      const resEquipo = await axios.get(`https://backend-app-mediterraneo.onrender.com/api/proyectos/${proyecto.id}/equipo`);
+      // "solicitante_id" le permite al backend calcular, solo para filas de GERENCIA,
+      // si ESE gerente ya le escribió antes al usuario logueado (campo "le_ha_escrito" —
+      // ver GET /:id/equipo en proyectos_v2.js). Se usa más abajo para exigir que gerencia
+      // hable primero antes de aparecer como contacto disponible para oficio/Proveedores/Clientes.
+      const resEquipo = await axios.get(
+        `https://backend-app-mediterraneo.onrender.com/api/proyectos/${proyecto.id}/equipo`,
+        { params: { solicitante_id: usuario.id } }
+      );
       // Algunas áreas (Proveedores, Clientes, y ahora todo oficio) tienen visibilidad reducida:
       // además de su propia área, solo pueden ver/hablar con ciertas áreas fijas (Gerencia,
       // Administrativa, etc.), no con el resto del equipo del proyecto.
@@ -456,6 +463,17 @@ export default function AreaProyectoScreen({ route }) {
         );
       } else {
         personasVisibles = resEquipo.data.equipo.filter((p) => p.area_id === area.id);
+      }
+      // Gerencia debe escribir primero: para todos menos Administrativa/Logística (que tienen
+      // contacto libre con Gerencia, ver gerenciaRequiereContactoPrevio), una fila de GERENCIA
+      // solo se muestra si ese gerente en particular ya le envió al menos un mensaje al usuario
+      // logueado (le_ha_escrito === true, calculado por el backend). No es normal que un
+      // trabajador le escriba a gerencia por su cuenta, pero si gerencia le habla, debe poder
+      // responderle — cada gerente que escriba aparece como fila separada.
+      if (gerenciaRequiereContactoPrevio(empresa)) {
+        personasVisibles = personasVisibles.filter(
+          (p) => p.area_nombre !== 'GERENCIA' || p.le_ha_escrito === true
+        );
       }
       // Nunca mostrar al propio usuario logueado como fila de su propio roster: antes esto
       // permitía tocar "tu propia foto" y abrir un chat contigo mismo (que traía por casualidad
