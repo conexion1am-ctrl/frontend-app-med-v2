@@ -500,7 +500,7 @@ export default function GrupoTrabajoScreen({ route }) {
     const mensaje =
       persona.estado === 'pendiente'
         ? `¿Eliminar a ${persona.nombre}? Ya no podrá entrar con este número de celular.`
-        : `¿Eliminar a ${persona.nombre} de la plataforma? Esto la borra por completo: su cuenta, todas sus empresas, y todas sus asignaciones a proyectos, en cualquier empresa donde esté. Sus mensajes de chat con otras personas se conservan (mostrando su nombre igual), y las fotos/planos que subió también se conservan. Esta acción no se puede deshacer.`;
+        : `¿Eliminar a ${persona.nombre} de esta empresa? Perderá el acceso y se borrarán sus asignaciones a los proyectos de esta empresa. Su cuenta y sus demás empresas (si trabaja en otras) NO se ven afectadas — solo sale de "${empresa.nombre}". Sus mensajes de chat se conservan (mostrando su nombre igual), y las fotos/planos que subió también se conservan.`;
 
     Alert.alert('Eliminar persona', mensaje, [
       { text: 'Cancelar', style: 'cancel' },
@@ -513,11 +513,12 @@ export default function GrupoTrabajoScreen({ route }) {
       if (persona.estado === 'pendiente') {
         await axios.delete(`https://backend-app-mediterraneo.onrender.com/api/invitaciones/${persona.rol_id}`);
       } else {
-        // Eliminación total de la plataforma (no solo de esta empresa): borra la cuenta, todos
-        // sus vínculos con cualquier empresa, y todas sus asignaciones a proyectos.
-        await axios.delete(`https://backend-app-mediterraneo.onrender.com/api/areas/personal/${persona.usuario_id}/total`, {
-          data: { empresa_id: empresa.id, solicitante_id: usuario.id },
-        });
+        // Eliminación acotada a ESTA empresa: no toca la cuenta de la persona ni sus otras
+        // empresas (si pertenece a más de una), solo su vínculo y proyectos aquí.
+        await axios.delete(
+          `https://backend-app-mediterraneo.onrender.com/api/areas/personal/${persona.usuario_id}/empresa/${empresa.id}`,
+          { data: { solicitante_id: usuario.id } }
+        );
       }
       cargarDatos();
     } catch (error) {
