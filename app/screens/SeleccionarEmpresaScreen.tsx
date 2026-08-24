@@ -1,8 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Alert, Image, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { setNavigationGlobal } from '../utils/navigationGlobal';
 
 // Pantalla que aparece siempre después de iniciar sesión (dueño o invitado), incluso si el
 // usuario pertenece a una sola empresa, para que el menú de editar/eliminar (mantener
@@ -15,6 +16,14 @@ export default function SeleccionarEmpresaScreen({ route, navigation }) {
   const insets = useSafeAreaInsets();
   const [empresasVisibles, setEmpresasVisibles] = useState(empresas);
   const [menuEmpresa, setMenuEmpresa] = useState(null);
+
+  useEffect(() => {
+    // Guardamos "navigation" para poder navegar desde fuera de una pantalla (mismo patrón que
+    // InicioScreen.tsx) — en este caso, para que index.tsx pueda reconstruir el historial
+    // completo (SeleccionarEmpresa → Inicio → Proyectos → AreaProyecto) cuando restaura la
+    // sesión justo donde el usuario la dejó, sin dejar el stack con una sola pantalla.
+    setNavigationGlobal(navigation);
+  }, [navigation]);
 
   const elegirEmpresa = (empresaSeleccionada) => {
     navigation.replace('Inicio', {

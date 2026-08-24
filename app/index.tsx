@@ -31,10 +31,50 @@ export default function App() {
   const [cargando, setCargando] = useState(true);
   const [rutaInicial, setRutaInicial] = useState('SeleccionarModo');
   const [paramsIniciales, setParamsIniciales] = useState(undefined);
+  // Cuando hay que restaurar "ultimaPantalla" en AreaProyecto, NO usamos rutaInicial/
+  // initialRouteName para eso (ver comentario más abajo, en revisarSesion) — en su lugar
+  // guardamos aquí los datos, y una vez la pantalla SeleccionarEmpresa ya está montada (y por
+  // tanto registró su "navigation" en navigationGlobal, igual que hace InicioScreen para las
+  // notificaciones push — ver utils/navigationGlobal.js), disparamos un navigation.reset con las
+  // 4 rutas de una sola vez, para que el botón atrás SÍ tenga historial hacia dónde volver.
+  const [restaurarAreaProyecto, setRestaurarAreaProyecto] = useState(null);
 
   useEffect(() => {
     revisarSesion();
   }, []);
+
+  useEffect(() => {
+    if (!restaurarAreaProyecto) return;
+    // La pantalla SeleccionarEmpresa (rutaInicial en este caso) registra su "navigation" en
+    // navigationGlobal al montarse (ver el useEffect agregado en SeleccionarEmpresaScreen.tsx).
+    // Reintentamos brevemente por si este efecto corre una fracción de segundo antes de que ese
+    // registro ocurra.
+    let intentos = 0;
+    const intervalo = setInterval(() => {
+      const navigation = getNavigationGlobal();
+      intentos += 1;
+      if (navigation) {
+        clearInterval(intervalo);
+        const { empresas, empresa, proyecto, area, usuario, tabInicial } = restaurarAreaProyecto;
+        navigation.reset({
+          index: 3,
+          routes: [
+            { name: 'SeleccionarEmpresa', params: { empresas, usuario } },
+            { name: 'Inicio', params: { empresa, usuario } },
+            { name: 'Proyectos', params: { empresa, usuario } },
+            { name: 'AreaProyecto', params: { empresa, proyecto, area, usuario, tabInicial } },
+          ],
+        });
+        setRestaurarAreaProyecto(null);
+      } else if (intentos > 20) {
+        // ~2 segundos sin éxito: nos rendimos y dejamos al usuario en SeleccionarEmpresa en vez
+        // de dejarlo atascado esperando indefinidamente.
+        clearInterval(intervalo);
+        setRestaurarAreaProyecto(null);
+      }
+    }, 100);
+    return () => clearInterval(intervalo);
+  }, [restaurarAreaProyecto]);
 
   // Cuando el usuario toca una notificación de mensaje nuevo, lo llevamos directo al área del
   // proyecto donde está ese chat. Reconstruimos los datos de empresa/usuario desde la sesión
@@ -112,14 +152,23 @@ export default function App() {
           const ultimaPantalla = JSON.parse(ultimaPantallaGuardada);
           const reciente = ultimaPantalla?.ts && Date.now() - ultimaPantalla.ts < 2 * 60 * 1000;
           if (reciente && ultimaPantalla.pantalla === 'AreaProyecto' && ultimaPantalla.empresa && ultimaPantalla.proyecto && ultimaPantalla.area) {
-            setRutaInicial('AreaProyecto');
-            setParamsIniciales({
+            // IMPORTANTE: NO usamos rutaInicial/initialRouteName para saltar directo a
+            // AreaProyecto — eso deja el Stack.Navigator nativo con UNA sola ruta en su
+            // historial (índice 0), y Android interpreta "atrás" en esa pantalla como "salir de
+            // la app" en vez de retroceder, dejando al usuario atrapado sin poder volver ni
+            // cerrar sesión (bug reportado). En su lugar, dejamos que el Stack monte su ruta
+            // normal (SeleccionarEmpresa) y, una vez listo, reconstruimos el historial completo
+            // con reset() más abajo — así el botón atrás sí tiene a dónde volver.
+            setRestaurarAreaProyecto({
+              empresas,
               empresa: ultimaPantalla.empresa,
               proyecto: ultimaPantalla.proyecto,
               area: ultimaPantalla.area,
               usuario: ultimaPantalla.usuario || usuario,
               tabInicial: ultimaPantalla.tab,
             });
+            setRutaInicial('SeleccionarEmpresa');
+            setParamsIniciales({ empresas, usuario });
             return;
           }
         } catch (error) {

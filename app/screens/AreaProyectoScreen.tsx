@@ -7,7 +7,8 @@ import * as ImagePicker from 'expo-image-picker';
 import * as MediaLibrary from 'expo-media-library';
 import * as Sharing from 'expo-sharing';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
-import React, { useEffect, useRef, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Image, KeyboardAvoidingView, Linking, Modal, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -109,7 +110,13 @@ export default function AreaProyectoScreen({ route }) {
   const [equipo, setEquipo] = useState([]);
   const [contrato, setContrato] = useState(null);
   const [cargandoContrato, setCargandoContrato] = useState(false);
+  // "cargando" solo controla el spinner de pantalla completa la PRIMERA vez que se entra a esta
+  // pantalla. "cargandoEquipo" es el loading local de la pestaña Equipo, usado en los refrescos
+  // posteriores (useFocusEffect) — antes ambos eran el mismo flag, así que cada vez que la
+  // pantalla recibía foco (por ejemplo al volver de la cámara al subir una foto) toda la UI
+  // desaparecía de golpe detrás de un spinner, incluido el chat si estaba abierto.
   const [cargando, setCargando] = useState(true);
+  const [cargandoEquipo, setCargandoEquipo] = useState(false);
   const [modalAsignarVisible, setModalAsignarVisible] = useState(false);
   const [personalDisponible, setPersonalDisponible] = useState([]);
 
@@ -169,9 +176,25 @@ export default function AreaProyectoScreen({ route }) {
   const [menuPlano3d, setMenuPlano3d] = useState(null);
   const cerrarMenuPlano3d = () => setMenuPlano3d(null);
 
+  // Primera carga: usa el spinner de pantalla completa (cargando=true), igual que antes.
+  const primeraCargaHecha = useRef(false);
   useEffect(() => {
-    cargarEquipo();
+    cargarEquipo(true);
+    primeraCargaHecha.current = true;
   }, []);
+
+  // useFocusEffect (no un simple useEffect) para que el equipo se vuelva a pedir cada vez que
+  // esta pantalla recibe foco, no solo la primera vez que se monta. Sin esto, si un gerente entra
+  // aquí, sale a otra pantalla sin que el componente se desmonte, y luego vuelve (por ejemplo tras
+  // aceptar una invitación pendiente desde otra sesión), seguía viendo el estado "pendiente" viejo
+  // en memoria aunque el backend ya lo hubiera actualizado a "vinculado". Usa el loading LOCAL
+  // (no el spinner de pantalla completa) para no botar de golpe toda la UI —incluido el chat si
+  // estaba abierto— cada vez que la pantalla recibe foco (por ejemplo al volver de la cámara).
+  useFocusEffect(
+    useCallback(() => {
+      if (primeraCargaHecha.current) cargarEquipo(false);
+    }, [])
+  );
 
   useEffect(() => {
     if (tab === 'fotos') {
@@ -414,8 +437,12 @@ export default function AreaProyectoScreen({ route }) {
     ]);
   };
 
-  const cargarEquipo = async () => {
-    setCargando(true);
+  // primeraCarga=true solo en el montaje inicial (usa el spinner de pantalla completa);
+  // en cualquier otro refresco (useFocusEffect) usa el loading local "cargandoEquipo", que no
+  // bloquea el resto de la pantalla (chat abierto, scroll de otras pestañas, etc.).
+  const cargarEquipo = async (primeraCarga = false) => {
+    if (primeraCarga) setCargando(true);
+    else setCargandoEquipo(true);
     try {
       const resEquipo = await axios.get(`https://backend-app-mediterraneo.onrender.com/api/proyectos/${proyecto.id}/equipo`);
       // Algunas áreas (Proveedores, Clientes) tienen visibilidad reducida: además de su
@@ -434,7 +461,8 @@ export default function AreaProyectoScreen({ route }) {
     } catch (error) {
       console.error('Error cargando equipo:', error);
     } finally {
-      setCargando(false);
+      if (primeraCarga) setCargando(false);
+      else setCargandoEquipo(false);
     }
   };
 
