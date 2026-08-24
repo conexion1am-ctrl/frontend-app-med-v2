@@ -115,15 +115,38 @@ export function puedeVerClienteEnProyectos(empresa) {
 }
 
 // Filtro de con quién puede chatear/ver en la pestaña Equipo de un proyecto, según el área
-// del usuario logueado. Devuelve null si no hay restricción (ve/habla con todo el equipo,
-// como hoy). AREA DE PROVEEDORES y AREA DE CLIENTES tienen visibilidad reducida.
+// del usuario logueado. Devuelve null si no hay restricción (ve/habla con todo el equipo de
+// su propia área exacta, como antes). AREA DE PROVEEDORES y AREA DE CLIENTES tienen
+// visibilidad ampliada fija hacia áreas administrativas específicas.
 const CONTACTOS_VISIBLES_POR_AREA = {
   'AREA DE PROVEEDORES': ['GERENCIA', 'AREA ADMINISTRATIVA', 'AREA DE LOGISTICA'],
   'AREA DE CLIENTES': ['GERENCIA', 'AREA ADMINISTRATIVA'],
 };
 
+// Las áreas de "oficio" (Carpintería, Electricidad, Estuco, etc. — las ~15 que no están en
+// PERMISOS_POR_AREA ni tienen entrada propia arriba) antes solo veían en su pestaña Equipo a
+// compañeros de su misma área exacta. Como Gerencia/Administrativa/Logística no comparten esa
+// área, un trabajador de oficio nunca tenía a nadie de la empresa como contacto — su única fila
+// visible terminaba siendo él mismo, lo que producía un "chat consigo mismo" con el nombre
+// equivocado en el título (bug reportado: Juliana veía su propio nombre en vez del de Alejandro).
+// Ahora, igual que Proveedores/Clientes, todo oficio ve también a Gerencia/Administrativa/
+// Logística como filas de contacto separadas (un chat 1-a-1 independiente con cada persona).
+const CONTACTOS_VISIBLES_OFICIO = ['GERENCIA', 'AREA ADMINISTRATIVA', 'AREA DE LOGISTICA'];
+
 export function areasVisiblesEnEquipo(empresa) {
-  return CONTACTOS_VISIBLES_POR_AREA[empresa?.area_nombre] || null;
+  const nombre = empresa?.area_nombre;
+  // Sin nombre de área válido (dato faltante/malformado), por seguridad no ampliamos
+  // visibilidad: mejor pecar de restrictivo (solo su propia área) que exponer de más.
+  if (!nombre) return null;
+  if (CONTACTOS_VISIBLES_POR_AREA[nombre]) return CONTACTOS_VISIBLES_POR_AREA[nombre];
+  // Áreas con permisos propios definidos (Gerencia, Administrativa, Logística, Comercial) no
+  // reciben visibilidad ampliada aquí — solo aplica a "oficio" (todo lo que no tiene permisos
+  // propios ni entrada en el mapa de arriba, es decir esAccesoReducido === true, EXCLUYENDO
+  // Proveedores/Clientes que ya se resolvieron en el if anterior).
+  if (!PERMISOS_POR_AREA[nombre] && nombre !== 'AREA DE PROVEEDORES' && nombre !== 'AREA DE CLIENTES') {
+    return CONTACTOS_VISIBLES_OFICIO;
+  }
+  return null;
 }
 
 // Pestañas visibles dentro de AreaProyectoScreen, según el área del usuario logueado.

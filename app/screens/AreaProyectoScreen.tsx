@@ -445,9 +445,9 @@ export default function AreaProyectoScreen({ route }) {
     else setCargandoEquipo(true);
     try {
       const resEquipo = await axios.get(`https://backend-app-mediterraneo.onrender.com/api/proyectos/${proyecto.id}/equipo`);
-      // Algunas áreas (Proveedores, Clientes) tienen visibilidad reducida: además de su
-      // propia área, solo pueden ver/hablar con ciertas áreas fijas (Gerencia, Administrativa,
-      // etc.), no con el resto del equipo del proyecto.
+      // Algunas áreas (Proveedores, Clientes, y ahora todo oficio) tienen visibilidad reducida:
+      // además de su propia área, solo pueden ver/hablar con ciertas áreas fijas (Gerencia,
+      // Administrativa, etc.), no con el resto del equipo del proyecto.
       const areasPermitidas = areasVisiblesEnEquipo(empresa);
       let personasVisibles;
       if (areasPermitidas) {
@@ -457,6 +457,11 @@ export default function AreaProyectoScreen({ route }) {
       } else {
         personasVisibles = resEquipo.data.equipo.filter((p) => p.area_id === area.id);
       }
+      // Nunca mostrar al propio usuario logueado como fila de su propio roster: antes esto
+      // permitía tocar "tu propia foto" y abrir un chat contigo mismo (que traía por casualidad
+      // los mensajes correctos del otro participante, pero con tu propio nombre mal puesto en
+      // el título — bug reportado). Cada fila del roster debe ser SIEMPRE otra persona real.
+      personasVisibles = personasVisibles.filter((p) => p.usuario_id !== usuario.id);
       setEquipo(personasVisibles);
     } catch (error) {
       console.error('Error cargando equipo:', error);
