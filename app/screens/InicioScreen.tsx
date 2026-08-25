@@ -121,7 +121,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 10,
   },
-  botonCerrarSesionTexto: { fontSize: 15, fontWeight: '600', color: '#fff' },
+  // Estos dos botones tienen fondo translúcido (blanco o negro) sobre el color de la empresa —
+  // si la empresa eligió blanco, "Cambiar o editar empresa" quedaría prácticamente blanco sobre
+  // blanco con texto blanco. Mismo sombreado que en EncabezadoLogo/BienvenidaScreen.
+  botonCerrarSesionTexto: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#fff',
+    textShadowColor: 'rgba(0,0,0,0.55)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
   botonCambiarEmpresa: {
     backgroundColor: 'rgba(255,255,255,0.2)',
     borderRadius: 12,
@@ -129,5 +139,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 20,
   },
-  botonCambiarEmpresaTexto: { fontSize: 15, fontWeight: '600', color: '#fff' },
+  botonCambiarEmpresaTexto: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#fff',
+    textShadowColor: 'rgba(0,0,0,0.55)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
 });

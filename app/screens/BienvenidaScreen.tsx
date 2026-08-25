@@ -22,12 +22,21 @@ export default function BienvenidaScreen({ route, navigation }) {
   );
 }
 
+// Ver el mismo comentario en components/EncabezadoLogo.tsx: el fondo de esta pantalla es el
+// color que la empresa eligió (puede ser blanco), así que todo texto blanco fijo necesita este
+// contorno oscuro difuminado para seguir siendo legible sin importar qué color se haya elegido.
+const sombreadoTexto = {
+  textShadowColor: 'rgba(0,0,0,0.55)',
+  textShadowOffset: { width: 0, height: 1 },
+  textShadowRadius: 4,
+};
+
 const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
-  bienvenidaTitulo: { fontSize: 26, fontWeight: 'bold', color: '#fff', marginBottom: 12, textAlign: 'center' },
-  bienvenidaEmpresa: { fontSize: 20, color: '#fff', marginBottom: 8, textAlign: 'center' },
-  bienvenidaUsuario: { fontSize: 16, color: '#fff', textAlign: 'center' },
-  botonTexto: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+  bienvenidaTitulo: { fontSize: 26, fontWeight: 'bold', color: '#fff', marginBottom: 12, textAlign: 'center', ...sombreadoTexto },
+  bienvenidaEmpresa: { fontSize: 20, color: '#fff', marginBottom: 8, textAlign: 'center', ...sombreadoTexto },
+  bienvenidaUsuario: { fontSize: 16, color: '#fff', textAlign: 'center', ...sombreadoTexto },
+  botonTexto: { color: '#fff', fontSize: 16, fontWeight: 'bold', ...sombreadoTexto },
   botonContinuar: {
     backgroundColor: 'rgba(255,255,255,0.25)',
     borderRadius: 8,

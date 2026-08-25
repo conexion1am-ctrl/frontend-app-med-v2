@@ -191,7 +191,16 @@ const styles = StyleSheet.create({
   },
   logo: { width: 50, height: 50, borderRadius: 25 },
   logoPlaceholder: { width: 50, height: 50, borderRadius: 25, alignItems: 'center', justifyContent: 'center' },
-  logoPlaceholderTexto: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
+  // Este círculo usa el color propio de CADA empresa como fondo (empresa.color_hex) — si esa
+  // empresa eligió blanco, la letra se pierde. Mismo sombreado que en EncabezadoLogo.tsx.
+  logoPlaceholderTexto: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: 'bold',
+    textShadowColor: 'rgba(0,0,0,0.55)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
   empresaNombre: { fontSize: 16, fontWeight: '600', color: '#222' },
   empresaArea: { fontSize: 13, color: '#777', marginTop: 2 },
   ayudaTexto: { fontSize: 12, color: '#999', textAlign: 'center', marginTop: 10 },
