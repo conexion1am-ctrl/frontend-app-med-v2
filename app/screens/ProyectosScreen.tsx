@@ -61,7 +61,13 @@ export default function ProyectosScreen({ route, navigation }) {
           axios.get('https://backend-app-mediterraneo.onrender.com/api/areas'),
         ]);
         setProyectos(resProyectos.data.proyectos);
-        setAreas(resAreas.data.areas);
+        // GERENCIA, AREA ADMINISTRATIVA y AREA DE LOGISTICA ya no se ofrecen como actividad
+        // opcional en este modal: desde el rediseño de Actividades (2026-08-24), el backend las
+        // crea SIEMPRE automáticamente en todo proyecto nuevo (ver configurarProyectoNuevo en
+        // cascadaProyecto.js), así que dejarlas seleccionables aquí solo podía producir una
+        // ficha duplicada si alguien las marcaba a mano.
+        const AREAS_BASE_AUTOMATICAS = ['GERENCIA', 'AREA ADMINISTRATIVA', 'AREA DE LOGISTICA'];
+        setAreas(resAreas.data.areas.filter((a) => !AREAS_BASE_AUTOMATICAS.includes(a.nombre)));
       }
     } catch (error) {
       console.error('Error cargando datos:', error);
@@ -122,6 +128,7 @@ export default function ProyectosScreen({ route, navigation }) {
         direccion: direccion || null,
         area_m2: areaM2 ? parseFloat(areaM2) : null,
         areas_ids: actividadesSeleccionadas,
+        creado_por_usuario_id: usuario.id,
       });
       Alert.alert('¡Listo!', 'Proyecto creado exitosamente.');
       setModalVisible(false);

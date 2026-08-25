@@ -16,7 +16,7 @@ import { storage } from '../../firebaseConfig';
 import EncabezadoLogo from '../components/EncabezadoLogo';
 import ImagenZoom from '../components/ImagenZoom';
 import Visor3D from '../components/Visor3D';
-import { areasVisiblesEnEquipo, gerenciaRequiereContactoPrevio, pestanasAreaProyecto, permisosDe } from '../utils/roles';
+import { gerenciaRequiereContactoPrevio, pestanasAreaProyecto, permisosDe } from '../utils/roles';
 
 // Fecha + hora en la hora local del celular (no UTC), para que "8:32 PM" coincida con el reloj
 // real del usuario. Se usa como pie de página en fotos de avance, planos 3D y mensajes de chat.
@@ -452,28 +452,20 @@ export default function AreaProyectoScreen({ route }) {
         `https://backend-app-mediterraneo.onrender.com/api/proyectos/${proyecto.id}/equipo`,
         { params: { solicitante_id: usuario.id } }
       );
-      // Algunas áreas (Proveedores, Clientes, y ahora todo oficio) tienen visibilidad reducida:
-      // además de su propia área, solo pueden ver/hablar con ciertas áreas fijas (Gerencia,
-      // Administrativa, etc.), no con el resto del equipo del proyecto.
-      const areasPermitidas = areasVisiblesEnEquipo(empresa);
-      let personasVisibles;
-      if (areasPermitidas) {
-        personasVisibles = resEquipo.data.equipo.filter(
-          (p) => p.area_id === area.id || areasPermitidas.includes(p.area_nombre)
-        );
-      } else {
-        personasVisibles = resEquipo.data.equipo.filter((p) => p.area_id === area.id);
-      }
-      // Gerencia debe escribir primero: para todos menos Administrativa/Logística (que tienen
-      // contacto libre con Gerencia, ver gerenciaRequiereContactoPrevio), una fila de GERENCIA
-      // solo se muestra si ese gerente en particular ya le envió al menos un mensaje al usuario
-      // logueado (le_ha_escrito === true, calculado por el backend). No es normal que un
-      // trabajador le escriba a gerencia por su cuenta, pero si gerencia le habla, debe poder
-      // responderle — cada gerente que escriba aparece como fila separada.
-      if (gerenciaRequiereContactoPrevio(empresa)) {
-        personasVisibles = personasVisibles.filter(
-          (p) => p.area_nombre !== 'GERENCIA' || p.le_ha_escrito === true
-        );
+      // Rediseño 2026-08-24: cada ficha de área muestra EXCLUSIVAMENTE a quien está asignado a
+      // esa área exacta — ya no se "arrastra" gente de otras áreas dentro de una ficha distinta
+      // (antes, por ejemplo, un Administrativo podía ver a otro Administrativo colado dentro de
+      // la ficha de Logística/Carpintería sin haberlo asignado ahí; ver utils/roles.js para el
+      // control de a qué fichas se puede ENTRAR, que es un control aparte de este filtro).
+      let personasVisibles = resEquipo.data.equipo.filter((p) => p.area_id === area.id);
+      // Caso especial: dentro de la ficha GERENCIA, para quien no sea Gerencia/Administrativa/
+      // Logística, solo se muestra al gerente en particular que YA le escribió primero
+      // (le_ha_escrito === true, calculado por el backend) — nunca a todos los gerentes por
+      // defecto. Esta ficha ni siquiera debería ser accesible hasta que esto sea cierto (ver
+      // tieneAccesoAFicha en roles.js, aplicado en DetalleProyectoScreen), este filtro es una
+      // segunda defensa por si se llega a este punto de otra forma.
+      if (area.nombre === 'GERENCIA' && gerenciaRequiereContactoPrevio(empresa)) {
+        personasVisibles = personasVisibles.filter((p) => p.le_ha_escrito === true);
       }
       // Nunca mostrar al propio usuario logueado como fila de su propio roster: antes esto
       // permitía tocar "tu propia foto" y abrir un chat contigo mismo (que traía por casualidad

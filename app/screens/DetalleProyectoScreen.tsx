@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Linking, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import EncabezadoLogo from '../components/EncabezadoLogo';
-import { permisosDe } from '../utils/roles';
+import { permisosDe, tieneAccesoAFicha } from '../utils/roles';
 
 export default function DetalleProyectoScreen({ route, navigation }) {
   const { empresa, proyecto, usuario } = route.params;
@@ -12,6 +12,10 @@ export default function DetalleProyectoScreen({ route, navigation }) {
   const [detalle, setDetalle] = useState(null);
   const [areas, setAreas] = useState([]);
   const [cargando, setCargando] = useState(true);
+  // true si ALGÚN gerente ya le escribió a este usuario en este proyecto (sin importar en qué
+  // área/pantalla). Se usa solo para decidir si la ficha "GERENCIA" tiene borde de acceso — la
+  // regla real es "gerencia debe escribir primero" para todo lo que no sea Gerencia/Admin/Log.
+  const [leHaEscritoAlgunGerente, setLeHaEscritoAlgunGerente] = useState(false);
 
   const [modalEditar, setModalEditar] = useState(false);
   const [modalActividades, setModalActividades] = useState(false);
@@ -30,15 +34,24 @@ export default function DetalleProyectoScreen({ route, navigation }) {
   const cargarDetalle = async () => {
     setCargando(true);
     try {
-      const [resDetalle, resAreas] = await Promise.all([
+      const [resDetalle, resAreas, resEquipo] = await Promise.all([
         axios.get(`https://backend-app-mediterraneo.onrender.com/api/proyectos/${proyecto.id}`),
         axios.get('https://backend-app-mediterraneo.onrender.com/api/areas'),
+        // Mismo endpoint que ya usa AreaProyectoScreen para calcular "le_ha_escrito" por cada
+        // gerente — aquí solo necesitamos saber si AL MENOS UNO de ellos ya le escribió a este
+        // usuario en este proyecto, para decidir si la ficha GERENCIA tiene borde de acceso.
+        axios.get(`https://backend-app-mediterraneo.onrender.com/api/proyectos/${proyecto.id}/equipo`, {
+          params: { solicitante_id: usuario.id },
+        }),
       ]);
       setDetalle(resDetalle.data);
       setNombre(resDetalle.data.nombre);
       setDireccion(resDetalle.data.direccion || '');
       setAreaM2(resDetalle.data.area_m2 ? String(resDetalle.data.area_m2) : '');
       setAreas(resAreas.data.areas);
+      setLeHaEscritoAlgunGerente(
+        resEquipo.data.equipo.some((p) => p.area_nombre === 'GERENCIA' && p.le_ha_escrito === true)
+      );
     } catch (error) {
       console.error('Error cargando detalle:', error);
     } finally {
@@ -187,19 +200,28 @@ export default function DetalleProyectoScreen({ route, navigation }) {
           {detalle.actividades.length === 0 ? (
             <Text style={styles.vacioTexto}>No hay actividades asignadas a este proyecto.</Text>
           ) : (
-            detalle.actividades.map((area) => (
-              <TouchableOpacity
-                key={area.id}
-                style={styles.actividadCard}
-                onPress={() => navigation.navigate('AreaProyecto', { empresa, proyecto: detalle, area, usuario })}
-                onLongPress={() => puedeGestionar && setMenuActividad(area)}
-              >
-                <Text style={styles.actividadTexto}>
-                  {area.categoria_padre ? `${area.categoria_padre} · ${area.nombre}` : area.nombre}
-                </Text>
-                <Text style={styles.actividadFlecha}>›</Text>
-              </TouchableOpacity>
-            ))
+            detalle.actividades.map((area) => {
+              // Todas las fichas se ven siempre; solo las que tienen acceso llevan borde oscuro
+              // y son tocables — el resto se ve pero no se puede abrir (ver utils/roles.js).
+              const conAcceso = tieneAccesoAFicha(empresa, area, leHaEscritoAlgunGerente);
+              return (
+                <TouchableOpacity
+                  key={area.id}
+                  style={[styles.actividadCard, conAcceso && styles.actividadCardConAcceso]}
+                  activeOpacity={conAcceso ? 0.7 : 1}
+                  onPress={() => {
+                    if (!conAcceso) return;
+                    navigation.navigate('AreaProyecto', { empresa, proyecto: detalle, area, usuario });
+                  }}
+                  onLongPress={() => puedeGestionar && setMenuActividad(area)}
+                >
+                  <Text style={[styles.actividadTexto, !conAcceso && styles.actividadTextoSinAcceso]}>
+                    {area.categoria_padre ? `${area.categoria_padre} · ${area.nombre}` : area.nombre}
+                  </Text>
+                  {conAcceso && <Text style={styles.actividadFlecha}>›</Text>}
+                </TouchableOpacity>
+              );
+            })
           )}
         </View>
       </ScrollView>
@@ -325,7 +347,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  // Distintivo visual de acceso (punto 5 del rediseño de Actividades): borde oscuro solo en
+  // las fichas que el usuario puede abrir. Las demás se ven igual pero sin ese borde y con el
+  // texto atenuado, para que quede claro que están ahí pero no son tocables.
+  actividadCardConAcceso: { borderColor: '#333', borderWidth: 2 },
   actividadTexto: { fontSize: 15, color: '#222', fontWeight: '500' },
+  actividadTextoSinAcceso: { color: '#aaa' },
   actividadFlecha: { fontSize: 20, color: '#ccc' },
   modalContainer: { flex: 1, backgroundColor: '#fff', paddingTop: 40 },
   modalTitulo: { fontSize: 20, fontWeight: 'bold', marginBottom: 6, paddingHorizontal: 20 },

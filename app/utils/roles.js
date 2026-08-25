@@ -114,54 +114,59 @@ export function puedeVerClienteEnProyectos(empresa) {
   return empresa?.area_nombre === 'GERENCIA' || empresa?.area_nombre === 'AREA ADMINISTRATIVA';
 }
 
-// Filtro de con quién puede chatear/ver en la pestaña Equipo de un proyecto, según el área
-// del usuario logueado. Devuelve null si no hay restricción (ve/habla con todo el equipo de
-// su propia área exacta, como antes). AREA DE PROVEEDORES y AREA DE CLIENTES tienen
-// visibilidad ampliada fija hacia áreas administrativas específicas.
-const CONTACTOS_VISIBLES_POR_AREA = {
-  'AREA DE PROVEEDORES': ['GERENCIA', 'AREA ADMINISTRATIVA', 'AREA DE LOGISTICA'],
-  'AREA DE CLIENTES': ['GERENCIA', 'AREA ADMINISTRATIVA'],
-  // Administrativa y Logística tienen contacto directo y libre con Gerencia en ambos sentidos
-  // (son consideradas "equipo directivo"), sin la restricción de "gerencia debe escribir
-  // primero" que sí aplica al resto (oficio, Proveedores, Clientes) — ver CONTACTOS_VISIBLES_OFICIO.
-  'AREA ADMINISTRATIVA': ['GERENCIA'],
-  'AREA DE LOGISTICA': ['GERENCIA'],
-};
+// Rediseño 2026-08-24: "Actividades" (las fichas de área dentro de un proyecto: GERENCIA,
+// AREA ADMINISTRATIVA, AREA DE LOGISTICA, Carpintería, etc.) ahora se muestran TODAS siempre,
+// para cualquier persona — pero cada ficha solo es tocable ("con acceso") según el área del
+// usuario logueado. Antes, algunas áreas (Proveedores, Clientes, oficio) "arrastraban" contenido
+// de otras áreas DENTRO de su propia ficha (ej. un carpintero veía a un gerente colado dentro de
+// la ficha de Carpintería) — esto causaba que, sin querer, gente de un área totalmente distinta
+// apareciera donde no debía (bug reportado: un Administrativo veía a otro Administrativo colado
+// dentro de la ficha de Logística/Carpintería, sin haberlo asignado ahí). Ahora cada ficha
+// muestra EXCLUSIVAMENTE a quien está asignado a esa área exacta (ver AreaProyectoScreen.tsx,
+// cargarEquipo) — lo único que varía por área del usuario logueado es cuáles fichas puede ABRIR.
 
-// GERENCIA ve libremente a Administrativa y Logística (contraparte del punto anterior), pero NO
-// ve automáticamente a todo el resto del equipo (oficio, Proveedores, Clientes) — con esos,
-// es GERENCIA quien debe escribir primero para que la conversación aparezca del otro lado (ver
-// filtro de "le_ha_escrito" más abajo, aplicado en el frontend con el dato que manda el backend).
-const CONTACTOS_VISIBLES_GERENCIA = ['AREA ADMINISTRATIVA', 'AREA DE LOGISTICA'];
+// Qué fichas de área puede ABRIR (tocar) cada área del usuario logueado, dentro de un proyecto.
+// GERENCIA, AREA ADMINISTRATIVA y AREA DE LOGISTICA tienen acceso a TODAS las fichas del
+// proyecto sin excepción (ver función de abajo). El resto de áreas (oficio, Proveedores,
+// Clientes) solo tienen acceso fijo a Administrativa y Logística, más su propia ficha — la
+// ficha de GERENCIA es un caso aparte: no está fija aquí, se activa dinámicamente solo cuando
+// ESE gerente en particular ya le escribió primero a esta persona (ver "le_ha_escrito" que
+// calcula el backend, aplicado en AreaProyectoScreen.tsx).
+const ACCESO_FIJO_RESTRINGIDO = ['AREA ADMINISTRATIVA', 'AREA DE LOGISTICA'];
 
-// Las áreas de "oficio" (Carpintería, Electricidad, Estuco, etc. — las ~15 que no están en
-// PERMISOS_POR_AREA ni tienen entrada propia arriba) antes solo veían en su pestaña Equipo a
-// compañeros de su misma área exacta. Como Gerencia/Administrativa/Logística no comparten esa
-// área, un trabajador de oficio nunca tenía a nadie de la empresa como contacto — su única fila
-// visible terminaba siendo él mismo, lo que producía un "chat consigo mismo" con el nombre
-// equivocado en el título (bug reportado: Juliana veía su propio nombre en vez del de Alejandro).
-// Ahora, igual que Proveedores/Clientes, todo oficio ve también a Administrativa/Logística
-// libremente, y a GERENCIA solo de forma condicionada: la fila de cada gerente solo aparece
-// después de que ESE gerente le haya escrito primero (ver AreaProyectoScreen.tsx, filtro sobre
-// "le_ha_escrito" que devuelve el backend). No es normal que un trabajador le escriba
-// directamente a gerencia por iniciativa propia, pero si gerencia le habla, debe poder responder.
-const CONTACTOS_VISIBLES_OFICIO = ['GERENCIA', 'AREA ADMINISTRATIVA', 'AREA DE LOGISTICA'];
+// Áreas que, además del acceso fijo de arriba, SIEMPRE tienen acceso a su propia ficha (aunque
+// nadie más esté asignado ahí todavía) — esto es válido para toda área que no sea una de las 3
+// con acceso total. Se calcula dinámicamente por nombre de área, no hace falta listarlas.
 
-export function areasVisiblesEnEquipo(empresa) {
+export function esAreaConAccesoTotal(empresa) {
   const nombre = empresa?.area_nombre;
-  // Sin nombre de área válido (dato faltante/malformado), por seguridad no ampliamos
-  // visibilidad: mejor pecar de restrictivo (solo su propia área) que exponer de más.
-  if (!nombre) return null;
-  if (nombre === 'GERENCIA') return CONTACTOS_VISIBLES_GERENCIA;
-  if (CONTACTOS_VISIBLES_POR_AREA[nombre]) return CONTACTOS_VISIBLES_POR_AREA[nombre];
-  // Áreas con permisos propios definidos (Administrativa ya resuelta arriba, Logística también,
-  // Comercial) no reciben visibilidad ampliada aquí — solo aplica a "oficio" (todo lo que no
-  // tiene permisos propios ni entrada en el mapa de arriba, EXCLUYENDO Proveedores/Clientes que
-  // ya se resolvieron en el if anterior).
-  if (!PERMISOS_POR_AREA[nombre] && nombre !== 'AREA DE PROVEEDORES' && nombre !== 'AREA DE CLIENTES') {
-    return CONTACTOS_VISIBLES_OFICIO;
-  }
-  return null;
+  return nombre === 'GERENCIA' || nombre === 'AREA ADMINISTRATIVA' || nombre === 'AREA DE LOGISTICA';
+}
+
+// true si el usuario logueado puede ABRIR la ficha de "area" (la actividad que se está evaluando
+// dentro de la lista de Actividades del proyecto). "area" es la fila de proyecto_actividades/
+// areas_catalogo (tiene .nombre); "leHaEscritoEseGerente" es un booleano ya resuelto por el
+// llamador para el caso puntual de la ficha GERENCIA (requiere saber si ALGÚN gerente le ha
+// escrito a este usuario en este proyecto — ver AreaProyectoScreen.tsx).
+export function tieneAccesoAFicha(empresa, areaFicha, leHaEscritoAlgunGerente) {
+  const nombre = empresa?.area_nombre;
+  if (!nombre || !areaFicha?.nombre) return false;
+
+  // Gerencia, Administrativa y Logística: acceso total, a cualquier ficha del proyecto.
+  if (esAreaConAccesoTotal(empresa)) return true;
+
+  // Cualquier otra área (oficio, Proveedores, Clientes) siempre tiene acceso a Administrativa
+  // y Logística, y a su propia ficha exacta.
+  if (ACCESO_FIJO_RESTRINGIDO.includes(areaFicha.nombre)) return true;
+  if (areaFicha.nombre === nombre) return true;
+
+  // La ficha de GERENCIA es un caso aparte: solo se activa si algún gerente ya le escribió
+  // primero a este usuario en este proyecto (nunca por iniciativa propia del trabajador).
+  if (areaFicha.nombre === 'GERENCIA') return !!leHaEscritoAlgunGerente;
+
+  // Cualquier otra ficha (la actividad de OTRO oficio, ej. un carpintero mirando la ficha de
+  // Electricidad) no es accesible.
+  return false;
 }
 
 // true si, para el área del usuario logueado, las filas de GERENCIA en su roster de Equipo
