@@ -42,7 +42,10 @@ export default function SeleccionarModoScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f5f5', padding: 24, justifyContent: 'center' },
   centro: { alignItems: 'center', marginBottom: 40 },
-  icono: { width: 180, height: 180, marginBottom: 10 },
+  // Agrandado a pedido del usuario (2026-08-25): a 180x180 el logo se veía pequeño y "perdido"
+  // en el espacio blanco de esta pantalla. 260x260 lo hace notorio sin arriesgar que el resto
+  // del contenido (subtítulo + los 2 botones de abajo) se salga de la vista en celulares chicos.
+  icono: { width: 260, height: 260, marginBottom: 10 },
   subtitulo: { fontSize: 14, color: '#666', textAlign: 'center' },
   opciones: { gap: 14 },
   opcion: {
