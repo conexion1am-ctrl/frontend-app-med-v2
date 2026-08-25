@@ -42,7 +42,7 @@ function agruparPorSeccion(items) {
 // condiciones de pago, tiempo de entrega y firma.
 function construirHtml({
   tipoDocumento, empresa, cliente, numero, fecha, items, total, fechaEntrega,
-  ciudad, propietario, parrafo, descuento, condicionesPago, tiempoEntrega, firmante,
+  ciudad, propietario, saludo, parrafo, descuento, condicionesPago, tiempoEntrega, firmante,
 }) {
   const colorEmpresa = empresa?.color_hex || '#1E90FF';
   const grupos = agruparPorSeccion(items);
@@ -124,7 +124,7 @@ function construirHtml({
 
       <p>Señor(a)<br/>${propietario || cliente?.nombre || ''}${cliente?.nombre_proyecto ? `<br/>${cliente.nombre_proyecto}` : ''}</p>
 
-      <p>Cordial saludo:</p>
+      <p>${saludo || 'Cordial Saludo:'}</p>
 
       ${parrafo ? `<p>${parrafo}</p>` : ''}
 

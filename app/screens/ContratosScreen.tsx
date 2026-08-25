@@ -27,7 +27,6 @@ export default function ContratosScreen({ route, navigation }) {
   const [cargando, setCargando] = useState(true);
   const [menuContrato, setMenuContrato] = useState(null);
   const [busqueda, setBusqueda] = useState('');
-  const [generandoPdf, setGenerandoPdf] = useState(false);
   const [creandoProyecto, setCreandoProyecto] = useState(false);
 
   useEffect(() => {
@@ -95,37 +94,14 @@ export default function ContratosScreen({ route, navigation }) {
     }
   };
 
-  // El PDF del contrato se genera automáticamente en el servidor al aceptar la cotización
-  // (tomando todos sus datos). Aquí solo lo abrimos; si por algún motivo todavía no existe
-  // (falló la primera vez, o es un contrato antiguo), lo regeneramos en el servidor sin pedir
-  // nada al usuario, usando los datos ya guardados.
-  const verPdf = async () => {
+  // Antes: se abría el PDF directamente si ya existía, o se regeneraba en silencio con los datos
+  // ya guardados. Ahora (2026-08-25) siempre se pasa primero por "Revisar y editar documento",
+  // donde el usuario puede tocar cualquier parte del texto (incluidas las cláusulas legales)
+  // antes de generar el PDF final — ver RevisarContratoScreen.tsx.
+  const revisarContrato = () => {
     const contrato = menuContrato;
     cerrarMenu();
-    if (!contrato?.cotizacion_id) {
-      Alert.alert('No disponible', 'Este contrato no tiene una cotización asociada para generar el PDF.');
-      return;
-    }
-    if (contrato.pdf_url) {
-      Linking.openURL(contrato.pdf_url);
-      return;
-    }
-    setGenerandoPdf(true);
-    try {
-      const res = await axios.post(`https://backend-app-mediterraneo.onrender.com/api/cotizaciones/contratos/${contrato.id}/regenerar-pdf`);
-      const url = res.data?.contrato?.pdf_url;
-      if (url) {
-        Linking.openURL(url);
-        cargarContratos();
-      } else {
-        Alert.alert('Error', 'No se pudo generar el PDF. Intenta de nuevo en unos minutos.');
-      }
-    } catch (error) {
-      console.error('Error generando PDF del contrato:', error);
-      Alert.alert('Error', 'No se pudo generar el PDF. Intenta de nuevo en unos minutos.');
-    } finally {
-      setGenerandoPdf(false);
-    }
+    navigation.navigate('RevisarContrato', { empresa, contratoId: contrato.id });
   };
 
   // Eliminar contrato: solo Gerencia. Borra el contrato y la cotización que lo originó, pero
@@ -256,9 +232,14 @@ export default function ContratosScreen({ route, navigation }) {
                 </Text>
               </TouchableOpacity>
             )}
-            <TouchableOpacity style={styles.menuOpcion} onPress={verPdf} disabled={generandoPdf}>
-              <Text style={styles.menuOpcionTexto}>{generandoPdf ? 'Generando PDF...' : '📄  Ver contrato (PDF)'}</Text>
+            <TouchableOpacity style={styles.menuOpcion} onPress={revisarContrato}>
+              <Text style={styles.menuOpcionTexto}>📄  Revisar y generar PDF</Text>
             </TouchableOpacity>
+            {menuContrato?.pdf_url && (
+              <TouchableOpacity style={styles.menuOpcion} onPress={() => { Linking.openURL(menuContrato.pdf_url); cerrarMenu(); }}>
+                <Text style={styles.menuOpcionTexto}>👁️  Ver último PDF generado</Text>
+              </TouchableOpacity>
+            )}
             {puedeEliminarContratos && (
               <TouchableOpacity style={styles.menuOpcion} onPress={confirmarEliminarContrato}>
                 <Text style={[styles.menuOpcionTexto, { color: '#DC143C' }]}>🗑️  Eliminar</Text>

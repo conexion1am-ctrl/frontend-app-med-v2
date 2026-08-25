@@ -22,6 +22,7 @@ import InicioScreen from './screens/InicioScreen';
 import MiPerfilScreen from './screens/MiPerfilScreen';
 import PerfilEmpresaScreen from './screens/PerfilEmpresaScreen';
 import ProyectosScreen from './screens/ProyectosScreen';
+import RevisarContratoScreen from './screens/RevisarContratoScreen';
 import SeleccionarEmpresaScreen from './screens/SeleccionarEmpresaScreen';
 import SeleccionarModoScreen from './screens/SeleccionarModoScreen';
 
@@ -251,6 +252,11 @@ export default function App() {
         name="Contratos"
         component={ContratosScreen}
         options={{ headerShown: true, title: 'Contratos' }}
+      />
+      <Stack.Screen
+        name="RevisarContrato"
+        component={RevisarContratoScreen}
+        options={{ headerShown: true, title: 'Revisar Contrato' }}
       />
       <Stack.Screen
         name="Estadisticas"

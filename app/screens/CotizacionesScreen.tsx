@@ -15,7 +15,10 @@ const formatearMoneda = (valor) => {
 // Valores por defecto de los campos "estándar" de la carta: se precargan al crear una
 // cotización nueva, pero se pueden editar libremente antes de guardar.
 const PARRAFO_CONTEXTO_DEFECTO = 'Por solicitud efectuada paso a cotizar los precios del Kit de acabados completos para su casa';
-const TIEMPO_ENTREGA_DEFECTO = '12 - 14 Semanas';
+const SALUDO_DEFECTO = 'Cordial Saludo:';
+// 2026-08-25: a pedido del usuario, ya no trae un rango sugerido — nace en "00 - 00 Semanas"
+// para que sea evidente que hay que llenarlo antes de generar el documento.
+const TIEMPO_ENTREGA_DEFECTO = '00 - 00 Semanas';
 const condicionesPagoDefecto = () => [
   { porcentaje: '25', descripcion: 'A la firma del contrato para el inicio de actividades' },
   { porcentaje: '25', descripcion: 'A las 3-4 semanas con avance' },
@@ -43,6 +46,7 @@ export default function CotizacionesScreen({ route }) {
   // pago y tiempo de entrega vienen con un valor por defecto editable).
   const [propietario, setPropietario] = useState('');
   const [ciudad, setCiudad] = useState('');
+  const [saludo, setSaludo] = useState(SALUDO_DEFECTO);
   const [parrafoContexto, setParrafoContexto] = useState(PARRAFO_CONTEXTO_DEFECTO);
   const [condicionesPago, setCondicionesPago] = useState(condicionesPagoDefecto());
   const [tiempoEntrega, setTiempoEntrega] = useState(TIEMPO_ENTREGA_DEFECTO);
@@ -56,6 +60,7 @@ export default function CotizacionesScreen({ route }) {
   const [editDescuento, setEditDescuento] = useState('');
   const [editPropietario, setEditPropietario] = useState('');
   const [editCiudad, setEditCiudad] = useState('');
+  const [editSaludo, setEditSaludo] = useState(SALUDO_DEFECTO);
   const [editParrafoContexto, setEditParrafoContexto] = useState(PARRAFO_CONTEXTO_DEFECTO);
   const [editCondicionesPago, setEditCondicionesPago] = useState(condicionesPagoDefecto());
   const [editTiempoEntrega, setEditTiempoEntrega] = useState(TIEMPO_ENTREGA_DEFECTO);
@@ -67,6 +72,7 @@ export default function CotizacionesScreen({ route }) {
   const [cotizacionParaPdf, setCotizacionParaPdf] = useState(null);
   const [pdfPropietario, setPdfPropietario] = useState('');
   const [pdfCiudad, setPdfCiudad] = useState('');
+  const [pdfSaludo, setPdfSaludo] = useState(SALUDO_DEFECTO);
   const [pdfParrafo, setPdfParrafo] = useState('');
   const [pdfCondicionesPago, setPdfCondicionesPago] = useState('');
   const [pdfTiempoEntrega, setPdfTiempoEntrega] = useState('');
@@ -100,6 +106,7 @@ export default function CotizacionesScreen({ route }) {
     setDescuento('');
     setPropietario('');
     setCiudad('');
+    setSaludo(SALUDO_DEFECTO);
     setParrafoContexto(PARRAFO_CONTEXTO_DEFECTO);
     setCondicionesPago(condicionesPagoDefecto());
     setTiempoEntrega(TIEMPO_ENTREGA_DEFECTO);
@@ -169,6 +176,7 @@ export default function CotizacionesScreen({ route }) {
         descuento: descuento || 0,
         propietario: propietario || null,
         ciudad: ciudad || null,
+        saludo: saludo || null,
         parrafo_contexto: parrafoContexto || null,
         condiciones_pago: condicionesPago.filter((c) => c.porcentaje || c.descripcion),
         tiempo_entrega: tiempoEntrega || null,
@@ -199,6 +207,7 @@ export default function CotizacionesScreen({ route }) {
       setEditDescuento(cot.descuento ? String(cot.descuento) : '');
       setEditPropietario(res.data.propietario || '');
       setEditCiudad(res.data.ciudad || '');
+      setEditSaludo(res.data.saludo || SALUDO_DEFECTO);
       setEditParrafoContexto(res.data.parrafo_contexto || PARRAFO_CONTEXTO_DEFECTO);
       setEditCondicionesPago(
         res.data.condiciones_pago && res.data.condiciones_pago.length
@@ -242,6 +251,7 @@ export default function CotizacionesScreen({ route }) {
           descuento: editDescuento || 0,
           propietario: editPropietario || null,
           ciudad: editCiudad || null,
+          saludo: editSaludo || null,
           parrafo_contexto: editParrafoContexto || null,
           condiciones_pago: editCondicionesPago.filter((c) => c.porcentaje || c.descripcion),
           tiempo_entrega: editTiempoEntrega || null,
@@ -255,6 +265,7 @@ export default function CotizacionesScreen({ route }) {
           descuento: editDescuento || 0,
           propietario: editPropietario || null,
           ciudad: editCiudad || null,
+          saludo: editSaludo || null,
           parrafo_contexto: editParrafoContexto || null,
           condiciones_pago: editCondicionesPago.filter((c) => c.porcentaje || c.descripcion),
           tiempo_entrega: editTiempoEntrega || null,
@@ -280,6 +291,7 @@ export default function CotizacionesScreen({ route }) {
       const res = await axios.get(`https://backend-app-mediterraneo.onrender.com/api/cotizaciones/${cot.id}`);
       setPdfPropietario(res.data.propietario || cliente.nombre || '');
       setPdfCiudad(res.data.ciudad || '');
+      setPdfSaludo(res.data.saludo || SALUDO_DEFECTO);
       setPdfParrafo(res.data.parrafo_contexto || PARRAFO_CONTEXTO_DEFECTO);
       setPdfCondicionesPago(
         (res.data.condiciones_pago && res.data.condiciones_pago.length ? res.data.condiciones_pago : condicionesPagoDefecto())
@@ -292,6 +304,7 @@ export default function CotizacionesScreen({ route }) {
       console.error('Error precargando datos del PDF:', error);
       setPdfPropietario(cliente.nombre || '');
       setPdfCiudad('');
+      setPdfSaludo(SALUDO_DEFECTO);
       setPdfParrafo(PARRAFO_CONTEXTO_DEFECTO);
       setPdfCondicionesPago('');
       setPdfTiempoEntrega(TIEMPO_ENTREGA_DEFECTO);
@@ -318,6 +331,7 @@ export default function CotizacionesScreen({ route }) {
         descuento: cot.descuento,
         ciudad: pdfCiudad,
         propietario: pdfPropietario,
+        saludo: pdfSaludo,
         parrafo: pdfParrafo,
         condicionesPago: pdfCondicionesPago,
         tiempoEntrega: pdfTiempoEntrega,
@@ -624,6 +638,9 @@ export default function CotizacionesScreen({ route }) {
             <Text style={styles.label}>Ciudad</Text>
             <TextInput style={styles.input} value={ciudad} onChangeText={setCiudad} placeholder="Ej: Medellín" placeholderTextColor="#999" />
 
+            <Text style={styles.label}>Saludo</Text>
+            <TextInput style={styles.input} value={saludo} onChangeText={setSaludo} placeholder="Ej: Cordial Saludo:" placeholderTextColor="#999" />
+
             <Text style={styles.label}>Párrafo de contexto</Text>
             <TextInput style={[styles.input, styles.inputMultilinea]} value={parrafoContexto} onChangeText={setParrafoContexto} multiline placeholderTextColor="#999" />
 
@@ -761,6 +778,9 @@ export default function CotizacionesScreen({ route }) {
             <Text style={styles.label}>Ciudad</Text>
             <TextInput style={styles.input} value={editCiudad} onChangeText={setEditCiudad} placeholder="Ej: Medellín" placeholderTextColor="#999" />
 
+            <Text style={styles.label}>Saludo</Text>
+            <TextInput style={styles.input} value={editSaludo} onChangeText={setEditSaludo} placeholder="Ej: Cordial Saludo:" placeholderTextColor="#999" />
+
             <Text style={styles.label}>Párrafo de contexto</Text>
             <TextInput style={[styles.input, styles.inputMultilinea]} value={editParrafoContexto} onChangeText={setEditParrafoContexto} multiline placeholderTextColor="#999" />
 
@@ -820,6 +840,9 @@ export default function CotizacionesScreen({ route }) {
 
             <Text style={styles.label}>Dirigido a (propietario)</Text>
             <TextInput style={styles.input} value={pdfPropietario} onChangeText={setPdfPropietario} placeholder="Ej: Nombre del propietario" placeholderTextColor="#999" />
+
+            <Text style={styles.label}>Saludo</Text>
+            <TextInput style={styles.input} value={pdfSaludo} onChangeText={setPdfSaludo} placeholder="Ej: Cordial Saludo:" placeholderTextColor="#999" />
 
             <Text style={styles.label}>Párrafo de contexto (opcional)</Text>
             <TextInput
