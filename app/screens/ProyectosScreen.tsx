@@ -243,7 +243,8 @@ export default function ProyectosScreen({ route, navigation }) {
 
       <Modal visible={modalVisible} animationType="slide">
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-          <ScrollView style={styles.modalContainer} contentContainerStyle={{ padding: 20, paddingBottom: 60 }}>
+          {/* insets.top/bottom evitan que el contenido quede pegado a la barra de estado y a la barra de gestos en Android (edgeToEdgeEnabled) */}
+          <ScrollView style={styles.modalContainer} contentContainerStyle={{ paddingTop: Math.max(insets.top, 20), paddingHorizontal: 20, paddingBottom: Math.max(insets.bottom, 60) }}>
             <Text style={styles.modalTitulo}>Nuevo Proyecto</Text>
 
             <Text style={styles.label}>Nombre del Proyecto *</Text>

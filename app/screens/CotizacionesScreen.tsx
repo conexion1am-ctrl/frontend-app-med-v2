@@ -537,7 +537,8 @@ export default function CotizacionesScreen({ route }) {
 
       <Modal visible={modalVisible} animationType="slide">
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-          <ScrollView style={styles.modalContainer} contentContainerStyle={{ padding: 20, paddingBottom: 60 }}>
+          {/* insets.top/bottom evitan que el contenido quede pegado a la barra de estado y a la barra de gestos en Android (edgeToEdgeEnabled) */}
+          <ScrollView style={styles.modalContainer} contentContainerStyle={{ paddingTop: Math.max(insets.top, 20), paddingHorizontal: 20, paddingBottom: Math.max(insets.bottom, 60) }}>
             <Text style={styles.modalTitulo}>Nueva Cotización</Text>
 
             <Text style={styles.label}>Cliente *</Text>
@@ -697,7 +698,8 @@ export default function CotizacionesScreen({ route }) {
       {/* MODAL: Editar cotización */}
       <Modal visible={modalEditarVisible} animationType="slide">
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-          <ScrollView style={styles.modalContainer} contentContainerStyle={{ padding: 20, paddingBottom: 60 }}>
+          {/* insets.top/bottom evitan que el contenido quede pegado a la barra de estado y a la barra de gestos en Android (edgeToEdgeEnabled) */}
+          <ScrollView style={styles.modalContainer} contentContainerStyle={{ paddingTop: Math.max(insets.top, 20), paddingHorizontal: 20, paddingBottom: Math.max(insets.bottom, 60) }}>
             <Text style={styles.modalTitulo}>Editar Cotización</Text>
             <Text style={styles.notaTexto}>Cliente: {editandoCotizacion?.cliente_nombre}</Text>
             {editandoCotizacion?.aceptada && (
@@ -831,7 +833,8 @@ export default function CotizacionesScreen({ route }) {
       {/* MODAL: Datos para el PDF (carta, condiciones de pago, firma) */}
       <Modal visible={modalPdfVisible} animationType="slide">
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-          <ScrollView style={styles.modalContainer} contentContainerStyle={{ padding: 20, paddingBottom: 60 }}>
+          {/* insets.top/bottom evitan que el contenido quede pegado a la barra de estado y a la barra de gestos en Android (edgeToEdgeEnabled) */}
+          <ScrollView style={styles.modalContainer} contentContainerStyle={{ paddingTop: Math.max(insets.top, 20), paddingHorizontal: 20, paddingBottom: Math.max(insets.bottom, 60) }}>
             <Text style={styles.modalTitulo}>Datos para el PDF</Text>
             <Text style={styles.notaTexto}>Estos datos se usan solo para armar el documento; puedes dejarlos en blanco si no aplican.</Text>
 

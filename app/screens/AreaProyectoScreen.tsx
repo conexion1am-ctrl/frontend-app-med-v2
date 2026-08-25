@@ -1178,7 +1178,9 @@ export default function AreaProyectoScreen({ route }) {
       </Modal>
 
       <Modal visible={modalAsignarVisible} animationType="slide">
-        <View style={styles.modalContainer}>
+        {/* insets.top/bottom evitan que el contenido quede pegado a la barra de estado y a la barra de gestos en Android (edgeToEdgeEnabled);
+            se mantiene 60 como mínimo de paddingTop porque es el valor original de styles.modalContainer */}
+        <View style={[styles.modalContainer, { paddingTop: Math.max(insets.top, 60), paddingBottom: Math.max(insets.bottom, 20) }]}>
           <Text style={styles.modalTitulo}>Asignar a {area.nombre}</Text>
           <FlatList
             data={personalDisponible}
@@ -1221,7 +1223,8 @@ export default function AreaProyectoScreen({ route }) {
       >
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={80}>
           <View style={styles.chatModalContainer}>
-            <View style={styles.chatHeader}>
+            {/* paddingTop dinámico: en Android con edgeToEdgeEnabled el paddingTop fijo del estilo no alcanza para esquivar la barra de estado */}
+            <View style={[styles.chatHeader, { paddingTop: Math.max(insets.top, Platform.OS === 'ios' ? 50 : 16) }]}>
               <TouchableOpacity onPress={cerrarChat}>
                 <Text style={styles.chatVolver}>‹ Volver</Text>
               </TouchableOpacity>

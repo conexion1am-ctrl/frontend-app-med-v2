@@ -1,5 +1,6 @@
 import React from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Componente reutilizable para mostrar el logo de la empresa en las pantallas.
 //
@@ -8,12 +9,19 @@ import { Image, StyleSheet, Text, View } from 'react-native';
 //
 // Uso en el resto de pantallas (logo + nombre de la empresa centrados arriba):
 //   <EncabezadoLogo empresa={empresa} />
-
+//
+// SafeArea (2026-08-25): este componente es casi siempre el PRIMER elemento de cada pantalla, así
+// que aplica acá mismo el padding-top de insets.top en vez de dejar que cada pantalla se acuerde
+// de hacerlo por su cuenta — antes cada pantalla debía envolverlo manualmente con su propio
+// useSafeAreaInsets, y varias pantallas nuevas (RevisarContratoScreen, MiPerfilScreen, etc.) se
+// agregaron sin ese paso, quedando el logo tapado por la barra de estado tras activar
+// edgeToEdgeEnabled en app.json (Android deja de reservar ese espacio automáticamente).
 export default function EncabezadoLogo({ empresa, usuario, completo = false }) {
+  const insets = useSafeAreaInsets();
   if (!empresa) return null;
 
   return (
-    <View style={styles.contenedor}>
+    <View style={[styles.contenedor, { paddingTop: Math.max(insets.top, 16) }]}>
       {empresa.logo_url ? (
         <Image source={{ uri: empresa.logo_url }} style={styles.logo} />
       ) : (
@@ -49,7 +57,6 @@ const sombreadoTexto = {
 const styles = StyleSheet.create({
   contenedor: {
     alignItems: 'center',
-    paddingTop: 16,
     paddingBottom: 12,
   },
   logo: {
