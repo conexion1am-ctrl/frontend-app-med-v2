@@ -4,6 +4,7 @@ import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, Scroll
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import EncabezadoLogo from '../components/EncabezadoLogo';
 import { esAccesoReducido, esGerencia, permisosDe, puedeVerClienteEnProyectos } from '../utils/roles';
+import { obtenerMensajesSinLeer, proyectoTieneSinLeer, actualizarBadge } from '../utils/mensajesSinLeer';
 
 export default function ProyectosScreen({ route, navigation }) {
   const { empresa, usuario } = route.params;
@@ -18,6 +19,9 @@ export default function ProyectosScreen({ route, navigation }) {
   const [proyectos, setProyectos] = useState([]);
   const [areas, setAreas] = useState([]);
   const [cargando, setCargando] = useState(true);
+  // Mensajes sin leer del usuario en TODA la app — aquí solo se usa para marcar qué proyectos
+  // de esta lista tienen algo pendiente (ver proyectoTieneSinLeer).
+  const [sinLeer, setSinLeer] = useState([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [busqueda, setBusqueda] = useState('');
   const [menuProyecto, setMenuProyecto] = useState(null);
@@ -32,6 +36,12 @@ export default function ProyectosScreen({ route, navigation }) {
   useEffect(() => {
     cargarDatos();
   }, []);
+
+  useEffect(() => {
+    if (!usuario?.id) return;
+    obtenerMensajesSinLeer(usuario.id).then(setSinLeer);
+    actualizarBadge(usuario.id);
+  }, [usuario?.id]);
 
   const cargarDatos = async () => {
     setCargando(true);
@@ -218,7 +228,10 @@ export default function ProyectosScreen({ route, navigation }) {
               onPress={() => abrirProyecto(proyecto)}
               onLongPress={() => puedeEliminar && !accesoReducido && setMenuProyecto(proyecto)}
             >
-              <Text style={styles.proyectoNombre}>{proyecto.nombre}</Text>
+              <View style={styles.proyectoNombreFila}>
+                <Text style={styles.proyectoNombre}>{proyecto.nombre}</Text>
+                {proyectoTieneSinLeer(sinLeer, proyecto.id) && <Text style={styles.iconoMensaje}>💬</Text>}
+              </View>
               {puedeVerCliente && proyecto.cliente_nombre_snapshot ? (
                 <Text style={styles.proyectoCliente}>Cliente: {proyecto.cliente_nombre_snapshot}</Text>
               ) : null}
@@ -343,7 +356,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#eee',
   },
+  proyectoNombreFila: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   proyectoNombre: { fontSize: 16, fontWeight: '600', color: '#222' },
+  iconoMensaje: { fontSize: 14 },
   proyectoCliente: { fontSize: 12, color: '#1E90FF', marginTop: 2 },
   proyectoDireccion: { fontSize: 13, color: '#777', marginTop: 2 },
   proyectoArea: { fontSize: 12, color: '#999', marginTop: 2 },

@@ -4,6 +4,7 @@ import { ActivityIndicator, Alert, KeyboardAvoidingView, Linking, Modal, Platfor
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import EncabezadoLogo from '../components/EncabezadoLogo';
 import { permisosDe, tieneAccesoAFicha } from '../utils/roles';
+import { obtenerMensajesSinLeer, areaTieneSinLeer, actualizarBadge } from '../utils/mensajesSinLeer';
 
 export default function DetalleProyectoScreen({ route, navigation }) {
   const { empresa, proyecto, usuario } = route.params;
@@ -16,6 +17,9 @@ export default function DetalleProyectoScreen({ route, navigation }) {
   // área/pantalla). Se usa solo para decidir si la ficha "GERENCIA" tiene borde de acceso — la
   // regla real es "gerencia debe escribir primero" para todo lo que no sea Gerencia/Admin/Log.
   const [leHaEscritoAlgunGerente, setLeHaEscritoAlgunGerente] = useState(false);
+  // Mensajes sin leer del usuario en toda la app — aquí se usa para marcar con 💬 cada ficha de
+  // actividad que tenga algo pendiente en ESTE proyecto puntual (ver areaTieneSinLeer).
+  const [sinLeer, setSinLeer] = useState([]);
 
   const [modalEditar, setModalEditar] = useState(false);
   const [modalActividades, setModalActividades] = useState(false);
@@ -30,6 +34,12 @@ export default function DetalleProyectoScreen({ route, navigation }) {
   useEffect(() => {
     cargarDetalle();
   }, []);
+
+  useEffect(() => {
+    if (!usuario?.id) return;
+    obtenerMensajesSinLeer(usuario.id).then(setSinLeer);
+    actualizarBadge(usuario.id);
+  }, [usuario?.id]);
 
   const cargarDetalle = async () => {
     setCargando(true);
@@ -215,9 +225,14 @@ export default function DetalleProyectoScreen({ route, navigation }) {
                   }}
                   onLongPress={() => puedeGestionar && setMenuActividad(area)}
                 >
-                  <Text style={[styles.actividadTexto, !conAcceso && styles.actividadTextoSinAcceso]}>
-                    {area.categoria_padre ? `${area.categoria_padre} · ${area.nombre}` : area.nombre}
-                  </Text>
+                  <View style={styles.actividadTextoFila}>
+                    <Text style={[styles.actividadTexto, !conAcceso && styles.actividadTextoSinAcceso]}>
+                      {area.categoria_padre ? `${area.categoria_padre} · ${area.nombre}` : area.nombre}
+                    </Text>
+                    {conAcceso && areaTieneSinLeer(sinLeer, proyecto.id, area.id) && (
+                      <Text style={styles.iconoMensaje}>💬</Text>
+                    )}
+                  </View>
                   {conAcceso && <Text style={styles.actividadFlecha}>›</Text>}
                 </TouchableOpacity>
               );
@@ -351,8 +366,10 @@ const styles = StyleSheet.create({
   // las fichas que el usuario puede abrir. Las demás se ven igual pero sin ese borde y con el
   // texto atenuado, para que quede claro que están ahí pero no son tocables.
   actividadCardConAcceso: { borderColor: '#333', borderWidth: 2 },
+  actividadTextoFila: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 },
   actividadTexto: { fontSize: 15, color: '#222', fontWeight: '500' },
   actividadTextoSinAcceso: { color: '#aaa' },
+  iconoMensaje: { fontSize: 14 },
   actividadFlecha: { fontSize: 20, color: '#ccc' },
   modalContainer: { flex: 1, backgroundColor: '#fff', paddingTop: 40 },
   modalTitulo: { fontSize: 20, fontWeight: 'bold', marginBottom: 6, paddingHorizontal: 20 },

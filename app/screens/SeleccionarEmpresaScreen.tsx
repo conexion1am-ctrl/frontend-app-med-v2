@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { Alert, Image, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { setNavigationGlobal } from '../utils/navigationGlobal';
+import { obtenerMensajesSinLeer, empresaTieneSinLeer, actualizarBadge } from '../utils/mensajesSinLeer';
 
 // Pantalla que aparece siempre después de iniciar sesión (dueño o invitado), incluso si el
 // usuario pertenece a una sola empresa, para que el menú de editar/eliminar (mantener
@@ -16,6 +17,9 @@ export default function SeleccionarEmpresaScreen({ route, navigation }) {
   const insets = useSafeAreaInsets();
   const [empresasVisibles, setEmpresasVisibles] = useState(empresas);
   const [menuEmpresa, setMenuEmpresa] = useState(null);
+  // Mensajes sin leer del usuario en TODA la app — se usa aquí solo para saber, por cada
+  // empresa, si hay algo pendiente en cualquiera de sus proyectos (ver empresaTieneSinLeer).
+  const [sinLeer, setSinLeer] = useState([]);
 
   useEffect(() => {
     // Guardamos "navigation" para poder navegar desde fuera de una pantalla (mismo patrón que
@@ -24,6 +28,12 @@ export default function SeleccionarEmpresaScreen({ route, navigation }) {
     // sesión justo donde el usuario la dejó, sin dejar el stack con una sola pantalla.
     setNavigationGlobal(navigation);
   }, [navigation]);
+
+  useEffect(() => {
+    if (!usuario?.id) return;
+    obtenerMensajesSinLeer(usuario.id).then(setSinLeer);
+    actualizarBadge(usuario.id);
+  }, [usuario?.id]);
 
   const elegirEmpresa = (empresaSeleccionada) => {
     navigation.replace('Inicio', {
@@ -140,7 +150,10 @@ export default function SeleccionarEmpresaScreen({ route, navigation }) {
             </View>
           )}
           <View style={{ flex: 1 }}>
-            <Text style={styles.empresaNombre}>{empresa.empresa_nombre}</Text>
+            <View style={styles.empresaNombreFila}>
+              <Text style={styles.empresaNombre}>{empresa.empresa_nombre}</Text>
+              {empresaTieneSinLeer(sinLeer, empresa.empresa_id) && <Text style={styles.iconoMensaje}>💬</Text>}
+            </View>
             <Text style={styles.empresaArea}>{empresa.area_nombre}</Text>
           </View>
         </TouchableOpacity>
@@ -201,7 +214,9 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 4,
   },
+  empresaNombreFila: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   empresaNombre: { fontSize: 16, fontWeight: '600', color: '#222' },
+  iconoMensaje: { fontSize: 15 },
   empresaArea: { fontSize: 13, color: '#777', marginTop: 2 },
   ayudaTexto: { fontSize: 12, color: '#999', textAlign: 'center', marginTop: 10 },
   menuOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },

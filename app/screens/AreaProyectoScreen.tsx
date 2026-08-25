@@ -17,6 +17,7 @@ import EncabezadoLogo from '../components/EncabezadoLogo';
 import ImagenZoom from '../components/ImagenZoom';
 import Visor3D from '../components/Visor3D';
 import { gerenciaRequiereContactoPrevio, pestanasAreaProyecto, permisosDe } from '../utils/roles';
+import { obtenerMensajesSinLeer, personaTieneSinLeer, actualizarBadge } from '../utils/mensajesSinLeer';
 
 // Fecha + hora en la hora local del celular (no UTC), para que "8:32 PM" coincida con el reloj
 // real del usuario. Se usa como pie de página en fotos de avance, planos 3D y mensajes de chat.
@@ -129,6 +130,21 @@ export default function AreaProyectoScreen({ route }) {
   const [nuevoMensaje, setNuevoMensaje] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [cargandoChat, setCargandoChat] = useState(false);
+  // Mensajes sin leer del usuario en toda la app — aquí se usa para marcar con 💬 cada persona
+  // del roster que tenga mensajes pendientes en ESTA área/proyecto (ver personaTieneSinLeer).
+  // Se recarga al entrar y también al abrir un chat (para que el ícono desaparezca de inmediato,
+  // ya que abrir el chat marca esos mensajes como leídos en el backend).
+  const [sinLeer, setSinLeer] = useState([]);
+
+  const cargarSinLeer = () => {
+    if (!usuario?.id) return;
+    obtenerMensajesSinLeer(usuario.id).then(setSinLeer);
+    actualizarBadge(usuario.id);
+  };
+
+  useEffect(() => {
+    cargarSinLeer();
+  }, [usuario?.id]);
 
   // Nota de voz: se graba manteniendo presionado el botón del micrófono, estilo WhatsApp.
   const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
@@ -596,6 +612,9 @@ export default function AreaProyectoScreen({ route }) {
         `https://backend-app-mediterraneo.onrender.com/api/mensajes/${proyecto.id}/${area.id}/${persona.usuario_id}?mi_usuario_id=${usuario.id}`
       );
       setMensajes(resMensajes.data.mensajes);
+      // Abrir el chat marca esos mensajes como leídos en el backend (ver GET en mensajes.js) —
+      // recargamos sinLeer/badge para que el ícono 💬 de esta persona desaparezca de inmediato.
+      cargarSinLeer();
     } catch (error) {
       console.error('Error cargando chat:', error);
       Alert.alert('Error', 'No se pudo cargar la conversación.');
@@ -843,6 +862,9 @@ export default function AreaProyectoScreen({ route }) {
                     <View>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                         <Text style={styles.personaNombre}>{item.nombre}</Text>
+                        {!esPendiente && !item.pausado && personaTieneSinLeer(sinLeer, proyecto.id, area.id, item.usuario_id) && (
+                          <Text style={styles.iconoMensaje}>💬</Text>
+                        )}
                         {esPendiente && (
                           <View style={styles.etiquetaPendiente}>
                             <Text style={styles.etiquetaPendienteTexto}>Pendiente</Text>
@@ -1315,6 +1337,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   personaNombre: { fontSize: 16, fontWeight: '600', color: '#222' },
+  iconoMensaje: { fontSize: 14 },
   personaSubtexto: { fontSize: 12, color: '#999', marginTop: 2 },
   personaFlecha: { fontSize: 22, color: '#ccc' },
   modalContainer: { flex: 1, backgroundColor: '#fff', padding: 20, paddingTop: 60 },
