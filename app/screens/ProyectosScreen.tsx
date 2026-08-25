@@ -88,27 +88,15 @@ export default function ProyectosScreen({ route, navigation }) {
   };
 
   const abrirProyecto = (proyecto) => {
-    if (accesoReducido) {
-      if (proyecto.misAreas.length === 1) {
-        // Asignado a una sola área: entra directo a esa área (sin pasar por el detalle
-        // del proyecto, que tiene botones de editar/eliminar que no debe ver).
-        navigation.navigate('AreaProyecto', { empresa, proyecto, area: proyecto.misAreas[0], usuario });
-      } else {
-        // Asignado a varias áreas del mismo proyecto: deja elegir cuál abrir.
-        Alert.alert(
-          proyecto.nombre,
-          'Estás asignado a varias áreas de este proyecto. ¿Cuál quieres abrir?',
-          proyecto.misAreas
-            .map((area) => ({
-              text: area.nombre,
-              onPress: () => navigation.navigate('AreaProyecto', { empresa, proyecto, area, usuario }),
-            }))
-            .concat([{ text: 'Cancelar', style: 'cancel' }])
-        );
-      }
-    } else {
-      navigation.navigate('DetalleProyecto', { empresa, proyecto, usuario });
-    }
+    // Antes: acceso reducido saltaba directo a su propia área (o a un selector entre sus áreas
+    // asignadas), sin pasar nunca por DetalleProyectoScreen. Eso lo dejaba encerrado ahí, sin
+    // forma de llegar a Administrativa/Logística aunque utils/roles.js sí le da acceso fijo a
+    // esas dos fichas (bug reportado 2026-08-24: un carpintero no veía Administrativa ni
+    // Logística en "Equipo", porque nunca llegaba a la pantalla que las muestra). Ahora TODOS
+    // pasan por DetalleProyectoScreen — esa pantalla ya oculta Editar/+Actividad/eliminar para
+    // quien no tiene permisosDe(empresa).gestionarProyectos, y ya filtra qué fichas son
+    // tocables con tieneAccesoAFicha, así que es segura para acceso reducido tal cual está.
+    navigation.navigate('DetalleProyecto', { empresa, proyecto, usuario });
   };
 
   const toggleActividad = (areaId) => {

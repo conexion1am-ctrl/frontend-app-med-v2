@@ -530,7 +530,7 @@ export default function AreaProyectoScreen({ route }) {
           onPress: async () => {
             try {
               await axios.delete(
-                `https://backend-app-mediterraneo.onrender.com/api/mensajes/vaciar/${proyecto.id}/${area.id}/${persona.usuario_id}/${usuario.id}`
+                `https://backend-app-mediterraneo.onrender.com/api/mensajes/vaciar/${proyecto.id}/${persona.usuario_id}/${usuario.id}`
               );
               Alert.alert('Listo', 'El chat fue eliminado.');
             } catch (error) {
@@ -609,7 +609,7 @@ export default function AreaProyectoScreen({ route }) {
     setCargandoChat(true);
     try {
       const resMensajes = await axios.get(
-        `https://backend-app-mediterraneo.onrender.com/api/mensajes/${proyecto.id}/${area.id}/${persona.usuario_id}?mi_usuario_id=${usuario.id}`
+        `https://backend-app-mediterraneo.onrender.com/api/mensajes/${proyecto.id}/${persona.usuario_id}?mi_usuario_id=${usuario.id}`
       );
       setMensajes(resMensajes.data.mensajes);
       // Abrir el chat marca esos mensajes como leídos en el backend (ver GET en mensajes.js) —
@@ -636,7 +636,6 @@ export default function AreaProyectoScreen({ route }) {
     try {
       await axios.post('https://backend-app-mediterraneo.onrender.com/api/mensajes/enviar', {
         proyecto_id: proyecto.id,
-        area_id: area.id,
         usuario_id: usuario.id,
         destinatario_usuario_id: chatAbierto.usuario_id,
         contenido: nuevoMensaje,
@@ -644,7 +643,7 @@ export default function AreaProyectoScreen({ route }) {
       });
       setNuevoMensaje('');
       const resMensajes = await axios.get(
-        `https://backend-app-mediterraneo.onrender.com/api/mensajes/${proyecto.id}/${area.id}/${chatAbierto.usuario_id}?mi_usuario_id=${usuario.id}`
+        `https://backend-app-mediterraneo.onrender.com/api/mensajes/${proyecto.id}/${chatAbierto.usuario_id}?mi_usuario_id=${usuario.id}`
       );
       setMensajes(resMensajes.data.mensajes);
     } catch (error) {
