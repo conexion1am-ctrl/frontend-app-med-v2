@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 // Primera pantalla que ve cualquiera al abrir la app sin sesión activa. Separa los dos caminos
 // posibles: el dueño/administrador de un negocio ("Ingresar a mi empresa", flujo ya existente en
@@ -14,7 +14,7 @@ export default function SeleccionarModoScreen({ navigation }) {
   return (
     <View style={styles.container}>
       <View style={styles.centro}>
-        <Text style={styles.titulo}>C&D Manager</Text>
+        <Image source={require('../../assets/images/icono-bienvenida.png')} style={styles.icono} resizeMode="contain" />
         <Text style={styles.subtitulo}>Elige cómo quieres entrar</Text>
       </View>
 
@@ -42,7 +42,7 @@ export default function SeleccionarModoScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f5f5', padding: 24, justifyContent: 'center' },
   centro: { alignItems: 'center', marginBottom: 40 },
-  titulo: { fontSize: 26, fontWeight: 'bold', marginBottom: 6, textAlign: 'center' },
+  icono: { width: 180, height: 180, marginBottom: 10 },
   subtitulo: { fontSize: 14, color: '#666', textAlign: 'center' },
   opciones: { gap: 14 },
   opcion: {
