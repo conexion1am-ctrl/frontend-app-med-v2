@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import axios from 'axios';
+import api from '../utils/apiClient';
 import * as Contacts from 'expo-contacts';
 import * as DocumentPicker from 'expo-document-picker';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
@@ -100,8 +100,8 @@ export default function GrupoTrabajoScreen({ route }) {
     setCargando(true);
     try {
       const [resPersonal, resAreas] = await Promise.all([
-        axios.get(`https://backend-app-mediterraneo.onrender.com/api/areas/personal/${empresa.id}`),
-        axios.get('https://backend-app-mediterraneo.onrender.com/api/areas'),
+        api.get(`/areas/personal/${empresa.id}`),
+        api.get('/areas'),
       ]);
       setPersonal(resPersonal.data.personal);
       // "AREA DE CLIENTES" se quita de las opciones acá: los clientes ya no se invitan desde
@@ -193,7 +193,7 @@ export default function GrupoTrabajoScreen({ route }) {
     try {
       const celularCompleto = `${paisCelular.prefijo} ${celular}`;
       for (const areaId of areasSeleccionadas) {
-        await axios.post('https://backend-app-mediterraneo.onrender.com/api/invitaciones/generar', {
+        await api.post('/invitaciones/generar', {
           empresa_id: empresa.id,
           area_id: areaId,
           nombre_invitado: nombre,
@@ -241,8 +241,8 @@ export default function GrupoTrabajoScreen({ route }) {
     setGuardando(true);
     try {
       const celularCompleto = `${paisCelular.prefijo} ${celular}`;
-      const verificacion = await axios.get(
-        `https://backend-app-mediterraneo.onrender.com/api/areas/verificar-celular/${empresa.id}/${encodeURIComponent(celularCompleto)}`
+      const verificacion = await api.get(
+        `/areas/verificar-celular/${empresa.id}/${encodeURIComponent(celularCompleto)}`
       );
 
       if (verificacion.data.existe) {
@@ -292,7 +292,7 @@ export default function GrupoTrabajoScreen({ route }) {
     setModalProyectosVisible(true);
     setCargandoProyectos(true);
     try {
-      const res = await axios.get(`https://backend-app-mediterraneo.onrender.com/api/proyectos/asignaciones/${persona.usuario_id}`);
+      const res = await api.get(`/proyectos/asignaciones/${persona.usuario_id}`);
       setProyectosAsignados(res.data.asignaciones);
     } catch (error) {
       console.error('Error obteniendo proyectos asignados:', error);
@@ -394,7 +394,7 @@ export default function GrupoTrabajoScreen({ route }) {
         return;
       }
 
-      await axios.put(`https://backend-app-mediterraneo.onrender.com/api/areas/personal/vinculado/${editandoPersona.usuario_id}/arl`, {
+      await api.put(`/areas/personal/vinculado/${editandoPersona.usuario_id}/arl`, {
         arl_documento_url: urlDocumento,
         arl_vencimiento: fechaIso,
       });
@@ -420,7 +420,7 @@ export default function GrupoTrabajoScreen({ route }) {
         style: 'destructive',
         onPress: async () => {
           try {
-            await axios.delete(`https://backend-app-mediterraneo.onrender.com/api/areas/personal/vinculado/${editandoPersona.usuario_id}/arl`);
+            await api.delete(`/areas/personal/vinculado/${editandoPersona.usuario_id}/arl`);
             setArlVencimiento('');
             cargarDatos();
           } catch (error) {
@@ -448,13 +448,13 @@ export default function GrupoTrabajoScreen({ route }) {
     try {
       if (editandoPersona.estado === 'pendiente') {
         const nuevaArea = editAreasSeleccionadas[0];
-        await axios.put(`https://backend-app-mediterraneo.onrender.com/api/invitaciones/${editandoPersona.rol_id}`, {
+        await api.put(`/invitaciones/${editandoPersona.rol_id}`, {
           nombre_invitado: editNombre,
           celular_invitado: `${editPaisCelular.prefijo} ${editCelular}`,
           area_id: nuevaArea,
         });
       } else {
-        await axios.put(`https://backend-app-mediterraneo.onrender.com/api/areas/personal/vinculado/${editandoPersona.usuario_id}/nombre`, {
+        await api.put(`/areas/personal/vinculado/${editandoPersona.usuario_id}/nombre`, {
           nombre: editNombre,
           empresa_id: empresa.id,
           solicitante_id: usuario.id,
@@ -469,7 +469,7 @@ export default function GrupoTrabajoScreen({ route }) {
         const areasQuitadas = areasActuales.filter((a) => !editAreasSeleccionadas.includes(a.area_id));
 
         for (const areaId of nuevasAreas) {
-          await axios.post(`https://backend-app-mediterraneo.onrender.com/api/areas/personal/vinculado/${editandoPersona.usuario_id}/areas`, {
+          await api.post(`/areas/personal/vinculado/${editandoPersona.usuario_id}/areas`, {
             empresa_id: empresa.id,
             area_id: areaId,
             solicitante_id: usuario.id,
@@ -477,7 +477,7 @@ export default function GrupoTrabajoScreen({ route }) {
         }
 
         for (const areaQuitada of areasQuitadas) {
-          await axios.delete(`https://backend-app-mediterraneo.onrender.com/api/areas/personal/vinculado/${areaQuitada.rol_id}`, {
+          await api.delete(`/areas/personal/vinculado/${areaQuitada.rol_id}`, {
             data: { solicitante_id: usuario.id },
           });
         }
@@ -511,12 +511,12 @@ export default function GrupoTrabajoScreen({ route }) {
   const eliminarPersona = async (persona) => {
     try {
       if (persona.estado === 'pendiente') {
-        await axios.delete(`https://backend-app-mediterraneo.onrender.com/api/invitaciones/${persona.rol_id}`);
+        await api.delete(`/invitaciones/${persona.rol_id}`);
       } else {
         // Eliminación acotada a ESTA empresa: no toca la cuenta de la persona ni sus otras
         // empresas (si pertenece a más de una), solo su vínculo y proyectos aquí.
-        await axios.delete(
-          `https://backend-app-mediterraneo.onrender.com/api/areas/personal/${persona.usuario_id}/empresa/${empresa.id}`,
+        await api.delete(
+          `/areas/personal/${persona.usuario_id}/empresa/${empresa.id}`,
           { data: { solicitante_id: usuario.id } }
         );
       }

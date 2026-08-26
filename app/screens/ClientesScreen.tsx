@@ -1,4 +1,4 @@
-import axios from 'axios';
+import api from '../utils/apiClient';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Linking, Modal, Platform, ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -51,7 +51,7 @@ export default function ClientesScreen({ route }) {
   const cargarDatos = async () => {
     setCargando(true);
     try {
-      const res = await axios.get(`https://backend-app-mediterraneo.onrender.com/api/clientes/listar/${empresa.id}`);
+      const res = await api.get(`/clientes/listar/${empresa.id}`);
       setClientes(res.data.clientes);
     } catch (error) {
       console.error('Error cargando clientes:', error);
@@ -79,7 +79,7 @@ export default function ClientesScreen({ route }) {
 
     setGuardando(true);
     try {
-      await axios.post('https://backend-app-mediterraneo.onrender.com/api/clientes/crear', {
+      await api.post('/clientes/crear', {
         empresa_id: empresa.id,
         nombre,
         nombre_proyecto: nombreProyecto || null,
@@ -130,7 +130,7 @@ export default function ClientesScreen({ route }) {
     cerrarMenu();
     setInvitando(true);
     try {
-      await axios.post(`https://backend-app-mediterraneo.onrender.com/api/clientes/${cliente.id}/invitar`);
+      await api.post(`/clientes/${cliente.id}/invitar`);
       Alert.alert('¡Listo!', `${cliente.nombre} quedó vinculado a su proyecto. Avísale que descargue la app y entre con su celular.`, [
         { text: 'Cerrar' },
         {
@@ -176,7 +176,7 @@ export default function ClientesScreen({ route }) {
     }
     setGuardando(true);
     try {
-      await axios.put(`https://backend-app-mediterraneo.onrender.com/api/clientes/${editandoCliente.id}`, {
+      await api.put(`/clientes/${editandoCliente.id}`, {
         nombre: editNombre,
         nombre_proyecto: editNombreProyecto || null,
         celular: editCelular ? `${editPaisCelular.prefijo} ${editCelular}` : null,
@@ -203,7 +203,7 @@ export default function ClientesScreen({ route }) {
         style: 'destructive',
         onPress: async () => {
           try {
-            await axios.delete(`https://backend-app-mediterraneo.onrender.com/api/clientes/${cliente.id}`, {
+            await api.delete(`/clientes/${cliente.id}`, {
               data: { usuario_id: usuario?.id },
             });
             cargarDatos();

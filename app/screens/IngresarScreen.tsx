@@ -1,12 +1,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import axios from 'axios';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import InputCelular, { detectarPaisPorDispositivo, PAISES } from '../components/InputCelular';
 import InputContraseña from '../components/InputContraseña';
 import { registrarNotificacionesPush } from '../utils/notificacionesPush';
+import api from '../utils/apiClient';
 
 export default function IngresarScreen({ navigation }) {
+  const insets = useSafeAreaInsets();
   const [celular, setCelular] = useState('');
   const [paisCelular, setPaisCelular] = useState(detectarPaisPorDispositivo());
   const [contraseña, setContraseña] = useState('');
@@ -49,7 +51,7 @@ export default function IngresarScreen({ navigation }) {
     setCargando(true);
     try {
       const celularCompleto = `${paisCelular.prefijo} ${celular}`;
-      const response = await axios.post('https://backend-app-mediterraneo.onrender.com/api/auth/verificar', { celular: celularCompleto });
+      const response = await api.post('/auth/verificar', { celular: celularCompleto });
       setRequiereContraseña(response.data.requiere_contraseña);
       setDebeCrearContraseña(!!response.data.debe_crear_contraseña);
       setVerificado(true);
@@ -83,14 +85,17 @@ export default function IngresarScreen({ navigation }) {
     setCargando(true);
     try {
       const celularCompleto = `${paisCelular.prefijo} ${celular}`;
-      const response = await axios.post('https://backend-app-mediterraneo.onrender.com/api/auth/login', {
+      const response = await api.post('/auth/login', {
         celular: celularCompleto,
         contraseña: contraseñaValor || contraseña || undefined,
       });
 
+      // Guardamos el token de sesión (Paso 2 de la migración a autenticación real, 2026-08-25)
+      // junto con usuario/empresas: el interceptor de apiClient.js lo lee de aquí en cada request.
       const sesion = {
         usuario: response.data.usuario,
         empresas: response.data.empresas,
+        token: response.data.token,
       };
       await AsyncStorage.setItem('sesion', JSON.stringify(sesion));
       registrarNotificacionesPush(response.data.usuario.id);
@@ -117,7 +122,7 @@ export default function IngresarScreen({ navigation }) {
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-      <View style={styles.container}>
+      <View style={[styles.container, { paddingTop: Math.max(insets.top, 16) }]}>
         <Text style={styles.titulo}>Ingresar</Text>
         <Text style={styles.subtitulo}>Escribe tu número de celular para continuar</Text>
 

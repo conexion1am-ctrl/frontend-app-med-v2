@@ -1,5 +1,17 @@
 import React from 'react';
-import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Dimensions, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+// El archivo original (icono-bienvenida.png) medía 2816x1536 px, pero el ícono real (el cuadrado
+// blanco "C&D Manager") ocupaba solo una porción centrada de ~1037x1036 — el resto era un fondo
+// negro con "estrellitas" que, aunque técnicamente transparente en partes, visualmente se veía
+// como un margen enorme vacío alrededor del logo (2026-08-25, reportado por el usuario). Se
+// recortó la imagen para que el archivo contenga solo el ícono real (ahora 1139x1138, casi
+// cuadrado), así el logo se ve grande de verdad en vez de "perdido" en espacio vacío.
+const { width: anchoPantalla } = Dimensions.get('window');
+const RELACION_LOGO = 1138 / 1139; // alto/ancho real del archivo ya recortado
+const ANCHO_LOGO = anchoPantalla * 0.9; // casi todo el ancho de pantalla, con márgenes leves
+const ALTO_LOGO = ANCHO_LOGO * RELACION_LOGO;
 
 // Primera pantalla que ve cualquiera al abrir la app sin sesión activa. Separa los dos caminos
 // posibles: el dueño/administrador de un negocio ("Ingresar a mi empresa", flujo ya existente en
@@ -11,8 +23,9 @@ import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 // para empleados; antes decía "Trabajo para alguien más", lo que confundía a los clientes que
 // entran a chatear/ver el contrato de su propio proyecto. Reemplaza a "Ingresar" como ruta inicial.
 export default function SeleccionarModoScreen({ navigation }) {
+  const insets = useSafeAreaInsets();
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: Math.max(insets.top, 12) }]}>
       <View style={styles.centro}>
         <Image source={require('../../assets/images/icono-bienvenida.png')} style={styles.icono} resizeMode="contain" />
         <Text style={styles.subtitulo}>Elige cómo quieres entrar</Text>
@@ -40,14 +53,20 @@ export default function SeleccionarModoScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5', padding: 24, justifyContent: 'center' },
-  centro: { alignItems: 'center', marginBottom: 40 },
-  // Agrandado a pedido del usuario (2026-08-25): a 180x180 el logo se veía pequeño y "perdido"
-  // en el espacio blanco de esta pantalla. 260x260 lo hace notorio sin arriesgar que el resto
-  // del contenido (subtítulo + los 2 botones de abajo) se salga de la vista en celulares chicos.
-  icono: { width: 260, height: 260, marginBottom: 10 },
+  // Cambiado de justifyContent: 'center' a 'flex-start' (2026-08-25): con el logo al doble de
+  // tamaño (520x520), centrar TODO el bloque (logo+subtítulo+botones) como grupo dejaba muy poco
+  // margen en celulares de pantalla chica. Con flex-start el logo queda pegado arriba (como pidió
+  // el usuario, "subirlo hacia arriba") y los botones quedan fijos abajo con espacio garantizado.
+  // paddingTop fijo removido (2026-08-25): ahora se aplica dinámicamente con insets en el
+  // render (ver arriba) para no quedar tapado por la hora/notificaciones de Android.
+  container: { flex: 1, backgroundColor: '#f5f5f5', padding: 24, justifyContent: 'flex-start' },
+  centro: { alignItems: 'center', marginBottom: 12 },
+  // Agrandado al doble a pedido del usuario (2026-08-25) — ver cálculo de ANCHO_LOGO/ALTO_LOGO
+  // arriba: usa la proporción REAL de la imagen (ancha, no cuadrada) para que el logo se vea
+  // realmente grande en vez de quedar con espacio vacío dentro de un cuadro forzado.
+  icono: { width: ANCHO_LOGO, height: ALTO_LOGO, marginBottom: -10 },
   subtitulo: { fontSize: 14, color: '#666', textAlign: 'center' },
-  opciones: { gap: 14 },
+  opciones: { gap: 14, marginTop: 'auto', marginBottom: 20 },
   opcion: {
     backgroundColor: '#fff',
     borderRadius: 12,

@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import axios from 'axios';
+import api from '../utils/apiClient';
 import { AudioModule, RecordingPresets, useAudioPlayer, useAudioPlayerStatus, useAudioRecorder, useAudioRecorderState } from 'expo-audio';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -168,7 +168,7 @@ export default function AreaProyectoScreen({ route }) {
   const cerrarMenuMensaje = () => setMenuMensaje(null);
   const eliminarMensaje = async (mensaje) => {
     try {
-      await axios.delete(`https://backend-app-mediterraneo.onrender.com/api/mensajes/${mensaje.id}`, {
+      await api.delete(`/mensajes/${mensaje.id}`, {
         data: { usuario_id: usuario.id },
       });
       setMensajes((anteriores) => anteriores.filter((m) => m.id !== mensaje.id));
@@ -226,7 +226,7 @@ export default function AreaProyectoScreen({ route }) {
     setCargandoContrato(true);
     setContrato(null);
     try {
-      const res = await axios.get(`https://backend-app-mediterraneo.onrender.com/api/cotizaciones/contratos/por-proyecto/${proyecto.id}`);
+      const res = await api.get(`/cotizaciones/contratos/por-proyecto/${proyecto.id}`);
       setContrato(res.data.contrato);
     } catch (error) {
       // 404 = todavía no hay contrato asociado a este proyecto; no es un error real.
@@ -239,7 +239,7 @@ export default function AreaProyectoScreen({ route }) {
   const cargarFotos = async () => {
     setCargandoFotos(true);
     try {
-      const res = await axios.get(`https://backend-app-mediterraneo.onrender.com/api/fotos-avance/${proyecto.id}/${area.id}`);
+      const res = await api.get(`/fotos-avance/${proyecto.id}/${area.id}`);
       setFotos(res.data.fotos);
     } catch (error) {
       console.error('Error cargando fotos de avance:', error);
@@ -289,7 +289,7 @@ export default function AreaProyectoScreen({ route }) {
     setSubiendoFoto(true);
     try {
       const url = await subirFotoAFirebase(resultado.assets[0].uri);
-      await axios.post('https://backend-app-mediterraneo.onrender.com/api/fotos-avance/subir', {
+      await api.post('/fotos-avance/subir', {
         proyecto_id: proyecto.id,
         area_id: area.id,
         usuario_id: usuario.id,
@@ -363,7 +363,7 @@ export default function AreaProyectoScreen({ route }) {
         style: 'destructive',
         onPress: async () => {
           try {
-            await axios.delete(`https://backend-app-mediterraneo.onrender.com/api/fotos-avance/${foto.id}`);
+            await api.delete(`/fotos-avance/${foto.id}`);
             setFotoAmpliada(null);
             cargarFotos();
           } catch (error) {
@@ -378,7 +378,7 @@ export default function AreaProyectoScreen({ route }) {
   const cargarPlanos3d = async () => {
     setCargandoPlanos3d(true);
     try {
-      const res = await axios.get(`https://backend-app-mediterraneo.onrender.com/api/planos-3d/${proyecto.id}/${area.id}`);
+      const res = await api.get(`/planos-3d/${proyecto.id}/${area.id}`);
       setPlanos3d(res.data.planos);
     } catch (error) {
       console.error('Error cargando planos 3D:', error);
@@ -413,7 +413,7 @@ export default function AreaProyectoScreen({ route }) {
     setSubiendoPlano3d(true);
     try {
       const url = await subirPlano3dAFirebase(archivo.uri, archivo.name);
-      await axios.post('https://backend-app-mediterraneo.onrender.com/api/planos-3d/subir', {
+      await api.post('/planos-3d/subir', {
         proyecto_id: proyecto.id,
         area_id: area.id,
         usuario_id: usuario.id,
@@ -438,7 +438,7 @@ export default function AreaProyectoScreen({ route }) {
         style: 'destructive',
         onPress: async () => {
           try {
-            await axios.delete(`https://backend-app-mediterraneo.onrender.com/api/planos-3d/${plano.id}`, {
+            await api.delete(`/planos-3d/${plano.id}`, {
               data: { usuario_id: usuario.id },
             });
             setPlano3dAbierto(null);
@@ -464,8 +464,8 @@ export default function AreaProyectoScreen({ route }) {
       // si ESE gerente ya le escribió antes al usuario logueado (campo "le_ha_escrito" —
       // ver GET /:id/equipo en proyectos_v2.js). Se usa más abajo para exigir que gerencia
       // hable primero antes de aparecer como contacto disponible para oficio/Proveedores/Clientes.
-      const resEquipo = await axios.get(
-        `https://backend-app-mediterraneo.onrender.com/api/proyectos/${proyecto.id}/equipo`,
+      const resEquipo = await api.get(
+        `/proyectos/${proyecto.id}/equipo`,
         { params: { solicitante_id: usuario.id } }
       );
       // Rediseño 2026-08-24: cada ficha de área muestra EXCLUSIVAMENTE a quien está asignado a
@@ -505,8 +505,8 @@ export default function AreaProyectoScreen({ route }) {
   // visual (ver PUT /equipo/:id/pausar en el backend).
   const alternarPausaPersona = async (persona) => {
     try {
-      const res = await axios.put(
-        `https://backend-app-mediterraneo.onrender.com/api/proyectos/equipo/${persona.asignacion_id}/pausar`
+      const res = await api.put(
+        `/proyectos/equipo/${persona.asignacion_id}/pausar`
       );
       Alert.alert(res.data.asignacion.pausado ? 'Asignación pausada' : 'Asignación reanudada');
       cargarEquipo();
@@ -529,8 +529,8 @@ export default function AreaProyectoScreen({ route }) {
           style: 'destructive',
           onPress: async () => {
             try {
-              await axios.delete(
-                `https://backend-app-mediterraneo.onrender.com/api/mensajes/vaciar/${proyecto.id}/${persona.usuario_id}/${usuario.id}`
+              await api.delete(
+                `/mensajes/vaciar/${proyecto.id}/${persona.usuario_id}/${usuario.id}`
               );
               Alert.alert('Listo', 'El chat fue eliminado.');
             } catch (error) {
@@ -556,8 +556,8 @@ export default function AreaProyectoScreen({ route }) {
           style: 'destructive',
           onPress: async () => {
             try {
-              await axios.delete(
-                `https://backend-app-mediterraneo.onrender.com/api/proyectos/equipo/${persona.asignacion_id}`,
+              await api.delete(
+                `/proyectos/equipo/${persona.asignacion_id}`,
                 { data: { usuario_solicitante_id: usuario.id } }
               );
               cargarEquipo();
@@ -573,7 +573,7 @@ export default function AreaProyectoScreen({ route }) {
 
   const abrirAsignar = async () => {
     try {
-      const response = await axios.get(`https://backend-app-mediterraneo.onrender.com/api/areas/personal/${empresa.id}`);
+      const response = await api.get(`/areas/personal/${empresa.id}`);
       // Se puede asignar tanto personal ya VINCULADO (usuario_id real) como personal PENDIENTE
       // (invitado pero que aún no acepta el link, identificado por rol_id = id de la invitación).
       // Así gerencia puede dejar armado el equipo del proyecto desde ya, sin esperar a que la
@@ -589,7 +589,7 @@ export default function AreaProyectoScreen({ route }) {
 
   const asignarPersona = async (persona) => {
     try {
-      await axios.post(`https://backend-app-mediterraneo.onrender.com/api/proyectos/${proyecto.id}/equipo/asignar`, {
+      await api.post(`/proyectos/${proyecto.id}/equipo/asignar`, {
         usuario_id: persona.usuario_id || null,
         // Para personal pendiente, rol_id devuelto por /areas/personal es el id de la invitación.
         invitacion_id: persona.usuario_id ? null : persona.rol_id,
@@ -608,8 +608,8 @@ export default function AreaProyectoScreen({ route }) {
     setChatAbierto({ usuario_id: persona.usuario_id, nombre: persona.nombre });
     setCargandoChat(true);
     try {
-      const resMensajes = await axios.get(
-        `https://backend-app-mediterraneo.onrender.com/api/mensajes/${proyecto.id}/${persona.usuario_id}?mi_usuario_id=${usuario.id}`
+      const resMensajes = await api.get(
+        `/mensajes/${proyecto.id}/${persona.usuario_id}?mi_usuario_id=${usuario.id}`
       );
       setMensajes(resMensajes.data.mensajes);
       // Abrir el chat marca esos mensajes como leídos en el backend (ver GET en mensajes.js) —
@@ -634,7 +634,7 @@ export default function AreaProyectoScreen({ route }) {
     if (!nuevoMensaje.trim() && !archivo) return;
     setEnviando(true);
     try {
-      await axios.post('https://backend-app-mediterraneo.onrender.com/api/mensajes/enviar', {
+      await api.post('/mensajes/enviar', {
         proyecto_id: proyecto.id,
         usuario_id: usuario.id,
         destinatario_usuario_id: chatAbierto.usuario_id,
@@ -642,8 +642,8 @@ export default function AreaProyectoScreen({ route }) {
         archivo: archivo || undefined,
       });
       setNuevoMensaje('');
-      const resMensajes = await axios.get(
-        `https://backend-app-mediterraneo.onrender.com/api/mensajes/${proyecto.id}/${chatAbierto.usuario_id}?mi_usuario_id=${usuario.id}`
+      const resMensajes = await api.get(
+        `/mensajes/${proyecto.id}/${chatAbierto.usuario_id}?mi_usuario_id=${usuario.id}`
       );
       setMensajes(resMensajes.data.mensajes);
     } catch (error) {

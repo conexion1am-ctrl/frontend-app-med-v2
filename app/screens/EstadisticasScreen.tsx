@@ -1,5 +1,5 @@
 import { useFocusEffect } from '@react-navigation/native';
-import axios from 'axios';
+import api from '../utils/apiClient';
 import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, BackHandler, KeyboardAvoidingView, Linking, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -87,7 +87,7 @@ export default function EstadisticasScreen({ route }) {
   const descargarEstadoFinanciero = async (proyecto) => {
     setGenerandoExcel(true);
     try {
-      const res = await axios.get(`https://backend-app-mediterraneo.onrender.com/api/estadisticas/${proyecto.id}/excel`);
+      const res = await api.get(`/estadisticas/${proyecto.id}/excel`);
       Linking.openURL(res.data.url);
     } catch (error) {
       const mensaje = error.response?.data?.error || 'No se pudo generar el estado financiero.';
@@ -148,7 +148,7 @@ export default function EstadisticasScreen({ route }) {
 
   const cargarCategorias = async () => {
     try {
-      const res = await axios.get(`https://backend-app-mediterraneo.onrender.com/api/estadisticas/categorias/${empresa.id}`);
+      const res = await api.get(`/estadisticas/categorias/${empresa.id}`);
       setCategorias(res.data.categorias);
     } catch (error) {
       console.error('Error cargando categorías de costo:', error);
@@ -159,7 +159,7 @@ export default function EstadisticasScreen({ route }) {
     if (!nuevaCategoriaTexto.trim()) return;
     setCreandoCategoria(true);
     try {
-      const res = await axios.post(`https://backend-app-mediterraneo.onrender.com/api/estadisticas/categorias`, {
+      const res = await api.post(`/estadisticas/categorias`, {
         empresa_id: empresa.id,
         nombre: nuevaCategoriaTexto.trim(),
       });
@@ -181,7 +181,7 @@ export default function EstadisticasScreen({ route }) {
   const cargarProyectos = async () => {
     setCargandoProyectos(true);
     try {
-      const res = await axios.get(`https://backend-app-mediterraneo.onrender.com/api/proyectos/listar/${empresa.id}`);
+      const res = await api.get(`/proyectos/listar/${empresa.id}`);
       setProyectos(res.data.proyectos);
     } catch (error) {
       console.error('Error cargando proyectos:', error);
@@ -197,7 +197,7 @@ export default function EstadisticasScreen({ route }) {
     setSinDatos(false);
     setCategoriaAbierta(null);
     try {
-      const res = await axios.get(`https://backend-app-mediterraneo.onrender.com/api/estadisticas/${proyecto.id}`);
+      const res = await api.get(`/estadisticas/${proyecto.id}`);
       setEstadisticas(res.data);
     } catch (error) {
       if (error.response?.status === 404) {
@@ -236,7 +236,7 @@ export default function EstadisticasScreen({ route }) {
     }
     setGuardandoCosto(true);
     try {
-      await axios.post(`https://backend-app-mediterraneo.onrender.com/api/estadisticas/${proyectoSeleccionado.id}/movimiento`, {
+      await api.post(`/estadisticas/${proyectoSeleccionado.id}/movimiento`, {
         tipo: costoTipo,
         detalle: costoDetalle || null,
         valor: parseFloat(costoValor),
@@ -287,7 +287,7 @@ export default function EstadisticasScreen({ route }) {
     }
     setGuardandoEdicion(true);
     try {
-      await axios.put(`https://backend-app-mediterraneo.onrender.com/api/estadisticas/movimiento/${editando.id}`, {
+      await api.put(`/estadisticas/movimiento/${editando.id}`, {
         tipo: editando.tipo,
         detalle: editando.detalle || null,
         valor: parseFloat(editando.valor),
@@ -314,7 +314,7 @@ export default function EstadisticasScreen({ route }) {
         style: 'destructive',
         onPress: async () => {
           try {
-            await axios.delete(`https://backend-app-mediterraneo.onrender.com/api/estadisticas/movimiento/${mov.id}`);
+            await api.delete(`/estadisticas/movimiento/${mov.id}`);
             seleccionarProyecto(proyectoSeleccionado);
           } catch (error) {
             console.error('Error eliminando movimiento de costo:', error);
@@ -354,7 +354,7 @@ export default function EstadisticasScreen({ route }) {
         style: 'destructive',
         onPress: async () => {
           try {
-            await axios.delete(`https://backend-app-mediterraneo.onrender.com/api/estadisticas/abono/${abono.id}`);
+            await api.delete(`/estadisticas/abono/${abono.id}`);
             seleccionarProyecto(proyectoSeleccionado);
           } catch (error) {
             console.error('Error eliminando abono:', error);
@@ -378,12 +378,12 @@ export default function EstadisticasScreen({ route }) {
     setGuardandoAbono(true);
     try {
       if (abonoEditandoId) {
-        await axios.put(`https://backend-app-mediterraneo.onrender.com/api/estadisticas/abono/${abonoEditandoId}`, {
+        await api.put(`/estadisticas/abono/${abonoEditandoId}`, {
           valor: parseFloat(abonoValor),
           fecha: fechaIso,
         });
       } else {
-        await axios.post(`https://backend-app-mediterraneo.onrender.com/api/estadisticas/${proyectoSeleccionado.id}/abono`, {
+        await api.post(`/estadisticas/${proyectoSeleccionado.id}/abono`, {
           valor: parseFloat(abonoValor),
           fecha: fechaIso,
         });

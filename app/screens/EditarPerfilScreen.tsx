@@ -1,9 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import axios from 'axios';
+import api from '../utils/apiClient';
 import * as ImagePicker from 'expo-image-picker';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import React, { useState } from 'react';
 import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { storage } from '../../firebaseConfig';
 import InputContraseña from '../components/InputContraseña';
 import { permisosDe } from '../utils/roles';
@@ -12,6 +13,7 @@ const COLORES = ['#1E90FF', '#FF6347', '#32CD32', '#FFD700', '#8A2BE2', '#FF69B4
 
 export default function EditarPerfilScreen({ route, navigation }) {
   const { empresa, usuario } = route.params;
+  const insets = useSafeAreaInsets();
   const puedeEditarEmpresa = permisosDe(empresa).editarPerfilEmpresa;
 
   // Datos de empresa
@@ -97,7 +99,7 @@ export default function EditarPerfilScreen({ route, navigation }) {
       // Áreas administrativas sin este permiso solo actualizan su propio usuario.
       let empresaFinal = empresa;
       if (puedeEditarEmpresa) {
-        const respuestaEmpresa = await axios.put(`https://backend-app-mediterraneo.onrender.com/api/empresas/${empresa.id}`, {
+        const respuestaEmpresa = await api.put(`/empresas/${empresa.id}`, {
           nombre_empresa: nombreEmpresa,
           logo_url: logoUrlFinal,
           sitio_web: sitioWeb || null,
@@ -114,7 +116,7 @@ export default function EditarPerfilScreen({ route, navigation }) {
       }
 
       // 3. Actualizar datos del usuario
-      const respuestaUsuario = await axios.put(`https://backend-app-mediterraneo.onrender.com/api/auth/usuario/${usuario.id}`, {
+      const respuestaUsuario = await api.put(`/auth/usuario/${usuario.id}`, {
         nombre: nombreUsuario,
         contraseña_actual: contraseñaActual || undefined,
         contraseña_nueva: contraseñaNueva || undefined,
@@ -185,7 +187,11 @@ export default function EditarPerfilScreen({ route, navigation }) {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 0}
     >
-      <ScrollView style={[styles.container, { backgroundColor: empresa.color_hex || '#1E90FF' }]} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        style={[styles.container, { backgroundColor: empresa.color_hex || '#1E90FF' }]}
+        contentContainerStyle={[styles.scrollContent, { paddingTop: Math.max(insets.top, 20) }]}
+        keyboardShouldPersistTaps="handled"
+      >
         <Text style={styles.titulo}>Editar Perfil</Text>
 
         {/* SECCIÓN EMPRESA: solo Gerencia puede editar logo/nombre/sitio web/color */}

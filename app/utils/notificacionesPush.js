@@ -1,4 +1,4 @@
-import axios from 'axios';
+import api from './apiClient';
 import Constants from 'expo-constants';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
@@ -47,7 +47,7 @@ export async function registrarNotificacionesPush(usuarioId) {
     const pushToken = tokenResponse.data;
 
     if (usuarioId && pushToken) {
-      await axios.put(`https://backend-app-mediterraneo.onrender.com/api/auth/usuario/${usuarioId}/push-token`, {
+      await api.put(`/auth/usuario/${usuarioId}/push-token`, {
         push_token: pushToken,
       });
     }

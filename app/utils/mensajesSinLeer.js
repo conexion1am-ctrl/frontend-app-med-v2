@@ -1,4 +1,4 @@
-import axios from 'axios';
+import api from './apiClient';
 import * as Notifications from 'expo-notifications';
 
 // Utilidad compartida para el indicador de "mensajes sin leer" en cascada (Empresas → Proyecto →
@@ -11,7 +11,7 @@ import * as Notifications from 'expo-notifications';
 export async function obtenerMensajesSinLeer(usuarioId) {
   if (!usuarioId) return [];
   try {
-    const res = await axios.get(`https://backend-app-mediterraneo.onrender.com/api/mensajes/no-leidos/${usuarioId}`);
+    const res = await api.get(`/mensajes/no-leidos/${usuarioId}`);
     return res.data.sinLeer || [];
   } catch (error) {
     console.error('Error obteniendo mensajes sin leer:', error);

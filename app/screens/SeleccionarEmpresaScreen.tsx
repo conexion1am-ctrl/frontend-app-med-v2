@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import axios from 'axios';
-import React, { useEffect, useState } from 'react';
+import api from '../utils/apiClient';
+import { useFocusEffect } from '@react-navigation/native';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, Image, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { setNavigationGlobal } from '../utils/navigationGlobal';
@@ -29,11 +30,17 @@ export default function SeleccionarEmpresaScreen({ route, navigation }) {
     setNavigationGlobal(navigation);
   }, [navigation]);
 
-  useEffect(() => {
-    if (!usuario?.id) return;
-    obtenerMensajesSinLeer(usuario.id).then(setSinLeer);
-    actualizarBadge(usuario.id);
-  }, [usuario?.id]);
+  // useFocusEffect (no un simple useEffect) para que, al volver aquí desde Inicio/Proyectos/etc.
+  // con el botón atrás, el ícono de mensaje se recalcule con datos frescos — antes solo se
+  // cargaba una vez al montar la pantalla, así que un mensaje nuevo llegado mientras el usuario
+  // ya estaba navegando dentro de la app no se reflejaba hasta cerrar y reabrir la app entera.
+  useFocusEffect(
+    useCallback(() => {
+      if (!usuario?.id) return;
+      obtenerMensajesSinLeer(usuario.id).then(setSinLeer);
+      actualizarBadge(usuario.id);
+    }, [usuario?.id])
+  );
 
   const elegirEmpresa = (empresaSeleccionada) => {
     navigation.replace('Inicio', {
@@ -93,7 +100,7 @@ export default function SeleccionarEmpresaScreen({ route, navigation }) {
           style: 'destructive',
           onPress: async () => {
             try {
-              await axios.delete(`https://backend-app-mediterraneo.onrender.com/api/empresas/${empresaAEliminar.empresa_id}`, {
+              await api.delete(`/empresas/${empresaAEliminar.empresa_id}`, {
                 data: { usuario_id: usuario.id },
               });
 
@@ -127,7 +134,7 @@ export default function SeleccionarEmpresaScreen({ route, navigation }) {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: Math.max(insets.top, 60) }]}>
       <Text style={styles.titulo}>{empresasVisibles.length > 1 ? '¿Con cuál empresa quieres entrar?' : 'Tu empresa'}</Text>
       <Text style={styles.subtitulo}>
         {empresasVisibles.length > 1 ? 'Perteneces a más de una empresa en C&D Manager' : 'Toca para entrar'}
@@ -189,7 +196,9 @@ export default function SeleccionarEmpresaScreen({ route, navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5', padding: 24, paddingTop: 60 },
+  // paddingTop fijo removido (2026-08-25): ahora se aplica dinámicamente con insets en el
+  // render (ver arriba) para no quedar tapado por la hora/notificaciones de Android.
+  container: { flex: 1, backgroundColor: '#f5f5f5', padding: 24 },
   titulo: { fontSize: 22, fontWeight: 'bold', textAlign: 'center', marginBottom: 6 },
   subtitulo: { fontSize: 14, color: '#666', textAlign: 'center', marginBottom: 30 },
   empresaCard: {

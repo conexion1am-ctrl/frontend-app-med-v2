@@ -1,9 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import axios from 'axios';
+import api from '../utils/apiClient';
 import * as ImagePicker from 'expo-image-picker';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import React, { useState } from 'react';
 import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { storage } from '../../firebaseConfig';
 import InputCelular, { detectarPaisPorDispositivo } from '../components/InputCelular';
 import InputContraseña from '../components/InputContraseña';
@@ -11,6 +12,7 @@ import InputContraseña from '../components/InputContraseña';
 const COLORES = ['#1E90FF', '#FF6347', '#32CD32', '#FFD700', '#8A2BE2', '#FF69B4', '#20B2AA', '#DC143C', '#A8C69F', '#C9B79C', '#9CAF88', '#D4B896', '#87A96B', '#000000', '#808080', '#FFFFFF'];
 
 export default function PerfilEmpresaScreen({ navigation }) {
+  const insets = useSafeAreaInsets();
   const [nombreEmpresa, setNombreEmpresa] = useState('');
   const [nombreUsuario, setNombreUsuario] = useState('');
   const [celular, setCelular] = useState('');
@@ -78,7 +80,7 @@ export default function PerfilEmpresaScreen({ navigation }) {
         setSubiendoLogo(false);
       }
 
-      const response = await axios.post('https://backend-app-mediterraneo.onrender.com/api/empresas/crear-perfil', {
+      const response = await api.post('/empresas/crear-perfil', {
         nombre_empresa: nombreEmpresa,
         nombre_usuario: nombreUsuario,
         celular: `${paisCelular.prefijo} ${celular}`,
@@ -122,7 +124,11 @@ export default function PerfilEmpresaScreen({ navigation }) {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 0}
     >
-      <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={[styles.scrollContent, { paddingTop: Math.max(insets.top, 20) }]}
+        keyboardShouldPersistTaps="handled"
+      >
         <Text style={styles.titulo}>Perfil de la Empresa</Text>
         <Text style={styles.subtitulo}>Crea el perfil de tu empresa para comenzar</Text>
 

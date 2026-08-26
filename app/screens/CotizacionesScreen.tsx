@@ -1,4 +1,4 @@
-import axios from 'axios';
+import api from '../utils/apiClient';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -86,8 +86,8 @@ export default function CotizacionesScreen({ route }) {
     setCargando(true);
     try {
       const [resCotizaciones, resClientes] = await Promise.all([
-        axios.get(`https://backend-app-mediterraneo.onrender.com/api/cotizaciones/listar/${empresa.id}`),
-        axios.get(`https://backend-app-mediterraneo.onrender.com/api/clientes/listar/${empresa.id}`),
+        api.get(`/cotizaciones/listar/${empresa.id}`),
+        api.get(`/clientes/listar/${empresa.id}`),
       ]);
       setCotizaciones(resCotizaciones.data.cotizaciones);
       setClientes(resClientes.data.clientes);
@@ -168,7 +168,7 @@ export default function CotizacionesScreen({ route }) {
 
     setGuardando(true);
     try {
-      await axios.post('https://backend-app-mediterraneo.onrender.com/api/cotizaciones/crear', {
+      await api.post('/cotizaciones/crear', {
         empresa_id: empresa.id,
         cliente_id: clienteSeleccionado,
         numero: numero || null,
@@ -200,7 +200,7 @@ export default function CotizacionesScreen({ route }) {
   const abrirEditar = async (cot) => {
     cerrarMenu();
     try {
-      const res = await axios.get(`https://backend-app-mediterraneo.onrender.com/api/cotizaciones/${cot.id}`);
+      const res = await api.get(`/cotizaciones/${cot.id}`);
       setEditandoCotizacion(cot);
       setEditNumero(cot.numero || '');
       setEditItems(res.data.items.map((i) => ({ descripcion: i.descripcion, cantidad: i.cantidad != null ? String(i.cantidad) : '', valor: String(i.valor), seccion: i.seccion || '', adicional: i.adicional })));
@@ -246,7 +246,7 @@ export default function CotizacionesScreen({ route }) {
     try {
       if (editandoCotizacion.aceptada) {
         // Cotización ya aceptada: usamos el endpoint que actualiza también el contrato.
-        await axios.put(`https://backend-app-mediterraneo.onrender.com/api/cotizaciones/${editandoCotizacion.id}/items-aceptada`, {
+        await api.put(`/cotizaciones/${editandoCotizacion.id}/items-aceptada`, {
           items: itemsValidos,
           descuento: editDescuento || 0,
           propietario: editPropietario || null,
@@ -259,7 +259,7 @@ export default function CotizacionesScreen({ route }) {
         });
         Alert.alert('¡Listo!', 'La cotización y el contrato se actualizaron correctamente.');
       } else {
-        await axios.put(`https://backend-app-mediterraneo.onrender.com/api/cotizaciones/${editandoCotizacion.id}`, {
+        await api.put(`/cotizaciones/${editandoCotizacion.id}`, {
           numero: editNumero || null,
           items: itemsValidos,
           descuento: editDescuento || 0,
@@ -288,7 +288,7 @@ export default function CotizacionesScreen({ route }) {
     const cliente = clientes.find((c) => c.id === cot.cliente_id) || { nombre: cot.cliente_nombre };
     setCotizacionParaPdf(cot);
     try {
-      const res = await axios.get(`https://backend-app-mediterraneo.onrender.com/api/cotizaciones/${cot.id}`);
+      const res = await api.get(`/cotizaciones/${cot.id}`);
       setPdfPropietario(res.data.propietario || cliente.nombre || '');
       setPdfCiudad(res.data.ciudad || '');
       setPdfSaludo(res.data.saludo || SALUDO_DEFECTO);
@@ -318,7 +318,7 @@ export default function CotizacionesScreen({ route }) {
     setModalPdfVisible(false);
     setGenerandoPdf(true);
     try {
-      const res = await axios.get(`https://backend-app-mediterraneo.onrender.com/api/cotizaciones/${cot.id}`);
+      const res = await api.get(`/cotizaciones/${cot.id}`);
       const cliente = clientes.find((c) => c.id === cot.cliente_id) || { nombre: cot.cliente_nombre };
       const uriPdf = await generarPdfDocumento({
         tipoDocumento: 'cotizacion',
@@ -387,7 +387,7 @@ export default function CotizacionesScreen({ route }) {
         style: 'destructive',
         onPress: async () => {
           try {
-            await axios.delete(`https://backend-app-mediterraneo.onrender.com/api/cotizaciones/${cot.id}`, {
+            await api.delete(`/cotizaciones/${cot.id}`, {
               data: { solicitante_id: usuario?.id },
             });
             cargarDatos();
@@ -411,7 +411,7 @@ export default function CotizacionesScreen({ route }) {
           text: 'Aceptar',
           onPress: async () => {
             try {
-              await axios.post(`https://backend-app-mediterraneo.onrender.com/api/cotizaciones/${cotizacion.id}/aceptar`, {});
+              await api.post(`/cotizaciones/${cotizacion.id}/aceptar`, {});
               Alert.alert('¡Listo!', 'Contrato generado exitosamente.');
               cargarDatos();
             } catch (error) {

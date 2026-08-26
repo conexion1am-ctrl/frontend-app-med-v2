@@ -1,4 +1,4 @@
-import axios from 'axios';
+import api from '../utils/apiClient';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Linking, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -55,7 +55,7 @@ export default function RevisarContratoScreen({ route, navigation }) {
   const cargarContrato = async () => {
     setCargando(true);
     try {
-      const res = await axios.get(`https://backend-app-mediterraneo.onrender.com/api/cotizaciones/contratos/${contratoId}`);
+      const res = await api.get(`/cotizaciones/contratos/${contratoId}`);
       const c = res.data;
       setCiudad(c.ciudad || '');
       setNumero(c.numero || '');
@@ -89,7 +89,7 @@ export default function RevisarContratoScreen({ route, navigation }) {
   const guardarCambios = async () => {
     setGuardando(true);
     try {
-      await axios.put(`https://backend-app-mediterraneo.onrender.com/api/cotizaciones/contratos/${contratoId}/texto`, cuerpoParaGuardar());
+      await api.put(`/cotizaciones/contratos/${contratoId}/texto`, cuerpoParaGuardar());
       Alert.alert('¡Listo!', 'Los cambios se guardaron.');
     } catch (error) {
       console.error('Error guardando texto del contrato:', error);
@@ -102,8 +102,8 @@ export default function RevisarContratoScreen({ route, navigation }) {
   const generarPdf = async () => {
     setGenerando(true);
     try {
-      const res = await axios.post(
-        `https://backend-app-mediterraneo.onrender.com/api/cotizaciones/contratos/${contratoId}/generar-pdf`,
+      const res = await api.post(
+        `/cotizaciones/contratos/${contratoId}/generar-pdf`,
         cuerpoParaGuardar()
       );
       const url = res.data?.contrato?.pdf_url;

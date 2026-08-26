@@ -1,4 +1,4 @@
-import axios from 'axios';
+import api from '../utils/apiClient';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Linking, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -36,7 +36,7 @@ export default function ContratosScreen({ route, navigation }) {
   const cargarContratos = async () => {
     setCargando(true);
     try {
-      const res = await axios.get(`https://backend-app-mediterraneo.onrender.com/api/cotizaciones/contratos/listar/${empresa.id}`);
+      const res = await api.get(`/cotizaciones/contratos/listar/${empresa.id}`);
       setContratos(res.data.contratos);
     } catch (error) {
       console.error('Error cargando contratos:', error);
@@ -54,7 +54,7 @@ export default function ContratosScreen({ route, navigation }) {
     cerrarMenu();
     if (!contrato.proyecto_id) return;
     try {
-      await axios.put(`https://backend-app-mediterraneo.onrender.com/api/proyectos/${contrato.proyecto_id}/finalizar`);
+      await api.put(`/proyectos/${contrato.proyecto_id}/finalizar`);
       cargarContratos();
     } catch (error) {
       console.error('Error finalizando proyecto:', error);
@@ -67,7 +67,7 @@ export default function ContratosScreen({ route, navigation }) {
     cerrarMenu();
     if (!contrato.proyecto_id) return;
     try {
-      await axios.put(`https://backend-app-mediterraneo.onrender.com/api/proyectos/${contrato.proyecto_id}/reactivar`);
+      await api.put(`/proyectos/${contrato.proyecto_id}/reactivar`);
       cargarContratos();
     } catch (error) {
       console.error('Error reactivando proyecto:', error);
@@ -82,7 +82,7 @@ export default function ContratosScreen({ route, navigation }) {
     cerrarMenu();
     setCreandoProyecto(true);
     try {
-      await axios.post(`https://backend-app-mediterraneo.onrender.com/api/cotizaciones/contratos/${contrato.id}/crear-proyecto`);
+      await api.post(`/cotizaciones/contratos/${contrato.id}/crear-proyecto`);
       Alert.alert('¡Listo!', 'Proyecto creado exitosamente.');
       cargarContratos();
     } catch (error) {
@@ -120,7 +120,7 @@ export default function ContratosScreen({ route, navigation }) {
           style: 'destructive',
           onPress: async () => {
             try {
-              await axios.delete(`https://backend-app-mediterraneo.onrender.com/api/cotizaciones/contratos/${contrato.id}`, {
+              await api.delete(`/cotizaciones/contratos/${contrato.id}`, {
                 data: { solicitante_id: usuario?.id },
               });
               cargarContratos();

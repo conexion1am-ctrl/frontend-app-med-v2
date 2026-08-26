@@ -1,5 +1,6 @@
-import axios from 'axios';
-import React, { useEffect, useState } from 'react';
+import api from '../utils/apiClient';
+import { useFocusEffect } from '@react-navigation/native';
+import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import EncabezadoLogo from '../components/EncabezadoLogo';
@@ -37,11 +38,16 @@ export default function ProyectosScreen({ route, navigation }) {
     cargarDatos();
   }, []);
 
-  useEffect(() => {
-    if (!usuario?.id) return;
-    obtenerMensajesSinLeer(usuario.id).then(setSinLeer);
-    actualizarBadge(usuario.id);
-  }, [usuario?.id]);
+  // useFocusEffect (no un simple useEffect) para refrescar el ícono de mensaje cada vez que se
+  // vuelve a esta pantalla — antes solo se cargaba al montar, así que mensajes nuevos llegados
+  // mientras el usuario ya navegaba dentro de la app no se veían hasta reabrir la app entera.
+  useFocusEffect(
+    useCallback(() => {
+      if (!usuario?.id) return;
+      obtenerMensajesSinLeer(usuario.id).then(setSinLeer);
+      actualizarBadge(usuario.id);
+    }, [usuario?.id])
+  );
 
   const cargarDatos = async () => {
     setCargando(true);
@@ -49,8 +55,8 @@ export default function ProyectosScreen({ route, navigation }) {
       if (accesoReducido) {
         // Mano de obra / áreas especiales: solo ven los proyectos y áreas donde están
         // asignados, no el listado completo de la empresa.
-        const resAsignaciones = await axios.get(
-          `https://backend-app-mediterraneo.onrender.com/api/proyectos/asignaciones/${usuario.id}`
+        const resAsignaciones = await api.get(
+          `/proyectos/asignaciones/${usuario.id}`
         );
         // Puede estar asignado a varias áreas del mismo proyecto: agrupamos por proyecto.
         const proyectosMap = {};
@@ -67,8 +73,8 @@ export default function ProyectosScreen({ route, navigation }) {
         setProyectos(Object.values(proyectosMap));
       } else {
         const [resProyectos, resAreas] = await Promise.all([
-          axios.get(`https://backend-app-mediterraneo.onrender.com/api/proyectos/listar/${empresa.id}`),
-          axios.get('https://backend-app-mediterraneo.onrender.com/api/areas'),
+          api.get(`/proyectos/listar/${empresa.id}`),
+          api.get('/areas'),
         ]);
         setProyectos(resProyectos.data.proyectos);
         // GERENCIA, AREA ADMINISTRATIVA y AREA DE LOGISTICA ya no se ofrecen como actividad
@@ -120,7 +126,7 @@ export default function ProyectosScreen({ route, navigation }) {
 
     setGuardando(true);
     try {
-      await axios.post('https://backend-app-mediterraneo.onrender.com/api/proyectos/crear', {
+      await api.post('/proyectos/crear', {
         empresa_id: empresa.id,
         nombre,
         direccion: direccion || null,
@@ -160,7 +166,7 @@ export default function ProyectosScreen({ route, navigation }) {
           onPress: async () => {
             setEliminando(true);
             try {
-              await axios.delete(`https://backend-app-mediterraneo.onrender.com/api/proyectos/${proyecto.id}`, {
+              await api.delete(`/proyectos/${proyecto.id}`, {
                 data: { usuario_id: usuario?.id },
               });
               cargarDatos();

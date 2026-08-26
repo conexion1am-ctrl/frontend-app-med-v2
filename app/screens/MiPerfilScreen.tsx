@@ -1,4 +1,4 @@
-import axios from 'axios';
+import api from '../utils/apiClient';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import EncabezadoLogo from '../components/EncabezadoLogo';
@@ -44,7 +44,7 @@ export default function MiPerfilScreen({ route, navigation }) {
   const cargarDatos = async () => {
     setCargando(true);
     try {
-      const res = await axios.get(`https://backend-app-mediterraneo.onrender.com/api/auth/usuario/${usuario.id}`);
+      const res = await api.get(`/auth/usuario/${usuario.id}`);
       setDatos(res.data);
     } catch (error) {
       console.error('Error cargando perfil:', error);
@@ -66,7 +66,7 @@ export default function MiPerfilScreen({ route, navigation }) {
 
     setGuardando(true);
     try {
-      await axios.put(`https://backend-app-mediterraneo.onrender.com/api/auth/usuario/${usuario.id}`, {
+      await api.put(`/auth/usuario/${usuario.id}`, {
         nombre: datos.nombre,
         contraseña_actual: contraseñaActual || undefined,
         contraseña_nueva: contraseñaNueva,

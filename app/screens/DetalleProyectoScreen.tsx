@@ -1,5 +1,6 @@
-import axios from 'axios';
-import React, { useEffect, useState } from 'react';
+import api from '../utils/apiClient';
+import { useFocusEffect } from '@react-navigation/native';
+import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Linking, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import EncabezadoLogo from '../components/EncabezadoLogo';
@@ -35,22 +36,27 @@ export default function DetalleProyectoScreen({ route, navigation }) {
     cargarDetalle();
   }, []);
 
-  useEffect(() => {
-    if (!usuario?.id) return;
-    obtenerMensajesSinLeer(usuario.id).then(setSinLeer);
-    actualizarBadge(usuario.id);
-  }, [usuario?.id]);
+  // useFocusEffect (no un simple useEffect) para refrescar el ícono de mensaje cada vez que se
+  // vuelve a esta pantalla — antes solo se cargaba al montar, así que mensajes nuevos llegados
+  // mientras el usuario ya navegaba dentro de la app no se veían hasta reabrir la app entera.
+  useFocusEffect(
+    useCallback(() => {
+      if (!usuario?.id) return;
+      obtenerMensajesSinLeer(usuario.id).then(setSinLeer);
+      actualizarBadge(usuario.id);
+    }, [usuario?.id])
+  );
 
   const cargarDetalle = async () => {
     setCargando(true);
     try {
       const [resDetalle, resAreas, resEquipo] = await Promise.all([
-        axios.get(`https://backend-app-mediterraneo.onrender.com/api/proyectos/${proyecto.id}`),
-        axios.get('https://backend-app-mediterraneo.onrender.com/api/areas'),
+        api.get(`/proyectos/${proyecto.id}`),
+        api.get('/areas'),
         // Mismo endpoint que ya usa AreaProyectoScreen para calcular "le_ha_escrito" por cada
         // gerente — aquí solo necesitamos saber si AL MENOS UNO de ellos ya le escribió a este
         // usuario en este proyecto, para decidir si la ficha GERENCIA tiene borde de acceso.
-        axios.get(`https://backend-app-mediterraneo.onrender.com/api/proyectos/${proyecto.id}/equipo`, {
+        api.get(`/proyectos/${proyecto.id}/equipo`, {
           params: { solicitante_id: usuario.id },
         }),
       ]);
@@ -72,7 +78,7 @@ export default function DetalleProyectoScreen({ route, navigation }) {
   const guardarEdicion = async () => {
     setGuardando(true);
     try {
-      await axios.put(`https://backend-app-mediterraneo.onrender.com/api/proyectos/${proyecto.id}`, {
+      await api.put(`/proyectos/${proyecto.id}`, {
         nombre,
         direccion,
         area_m2: areaM2 ? parseFloat(areaM2) : null,
@@ -112,7 +118,7 @@ export default function DetalleProyectoScreen({ route, navigation }) {
     setGuardando(true);
     try {
       for (const areaId of nuevas) {
-        await axios.post(`https://backend-app-mediterraneo.onrender.com/api/proyectos/${proyecto.id}/actividades/agregar`, {
+        await api.post(`/proyectos/${proyecto.id}/actividades/agregar`, {
           area_id: areaId,
         });
       }
@@ -141,7 +147,7 @@ export default function DetalleProyectoScreen({ route, navigation }) {
   const eliminarActividad = async (area) => {
     setEliminandoActividad(true);
     try {
-      await axios.delete(`https://backend-app-mediterraneo.onrender.com/api/proyectos/${proyecto.id}/actividades/${area.id}`);
+      await api.delete(`/proyectos/${proyecto.id}/actividades/${area.id}`);
       cargarDetalle();
     } catch (error) {
       console.error('Error eliminando actividad:', error);

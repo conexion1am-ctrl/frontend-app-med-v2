@@ -1,16 +1,18 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import axios from 'axios';
 import React, { useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import InputCelular, { detectarPaisPorDispositivo } from '../components/InputCelular';
 import InputContraseña from '../components/InputContraseña';
 import { registrarNotificacionesPush } from '../utils/notificacionesPush';
+import api from '../utils/apiClient';
 
 // Pantalla para quien fue asignado a un proyecto por otro negocio (trabajador, contratista,
 // cliente, etc.), sin necesidad de ningún link de invitación: el vínculo ya existe en el
 // servidor desde el momento en que gerencia lo asignó (tabla invitaciones, por celular). Aquí
 // solo confirma su número y la app descubre automáticamente a qué empresas/proyectos pertenece.
 export default function IngresarInvitadoScreen({ navigation }) {
+  const insets = useSafeAreaInsets();
   const [celular, setCelular] = useState('');
   const [paisCelular, setPaisCelular] = useState(detectarPaisPorDispositivo());
   const [contraseña, setContraseña] = useState('');
@@ -46,8 +48,8 @@ export default function IngresarInvitadoScreen({ navigation }) {
     setCargando(true);
     try {
       const celularCompleto = `${paisCelular.prefijo} ${celular}`;
-      const response = await axios.get(
-        `https://backend-app-mediterraneo.onrender.com/api/invitaciones/verificar-celular/${encodeURIComponent(celularCompleto)}`
+      const response = await api.get(
+        `/invitaciones/verificar-celular/${encodeURIComponent(celularCompleto)}`
       );
 
       if (response.data.tiene_invitacion_pendiente) {
@@ -91,11 +93,11 @@ export default function IngresarInvitadoScreen({ navigation }) {
     setCargando(true);
     try {
       const celularCompleto = `${paisCelular.prefijo} ${celular}`;
-      const response = await axios.post('https://backend-app-mediterraneo.onrender.com/api/auth/login', {
+      const response = await api.post('/auth/login', {
         celular: celularCompleto,
         contraseña,
       });
-      await guardarSesionYEntrar(response.data.usuario, response.data.empresas);
+      await guardarSesionYEntrar(response.data.usuario, response.data.empresas, response.data.token);
     } catch (error) {
       console.error('Error en login de invitado:', error);
       const mensaje = error.response?.data?.error || 'No se pudo iniciar sesión.';
@@ -127,11 +129,11 @@ export default function IngresarInvitadoScreen({ navigation }) {
     setCargando(true);
     try {
       const celularCompleto = `${paisCelular.prefijo} ${celular}`;
-      const response = await axios.post('https://backend-app-mediterraneo.onrender.com/api/invitaciones/aceptar-por-celular', {
+      const response = await api.post('/invitaciones/aceptar-por-celular', {
         celular: celularCompleto,
         contraseña,
       });
-      await guardarSesionYEntrar(response.data.usuario, response.data.empresas);
+      await guardarSesionYEntrar(response.data.usuario, response.data.empresas, response.data.token);
     } catch (error) {
       console.error('Error aceptando invitación por celular:', error);
       const mensaje = error.response?.data?.error || 'No se pudo completar el ingreso.';
@@ -158,7 +160,7 @@ export default function IngresarInvitadoScreen({ navigation }) {
     setCargando(true);
     try {
       const celularCompleto = `${paisCelular.prefijo} ${celular}`;
-      await axios.post('https://backend-app-mediterraneo.onrender.com/api/invitaciones/recuperar-contraseña', {
+      await api.post('/invitaciones/recuperar-contraseña', {
         celular: celularCompleto,
         nombre: nombreRecuperar,
         contraseña_nueva: nuevaContraseñaRecuperar,
@@ -178,8 +180,10 @@ export default function IngresarInvitadoScreen({ navigation }) {
     }
   };
 
-  const guardarSesionYEntrar = async (usuario, empresas) => {
-    const sesion = { usuario, empresas };
+  const guardarSesionYEntrar = async (usuario, empresas, token) => {
+    // Token de sesión (Paso 2 de la migración a autenticación real, 2026-08-25): se guarda junto
+    // con usuario/empresas — el interceptor de apiClient.js lo toma de aquí en cada request.
+    const sesion = { usuario, empresas, token };
     await AsyncStorage.setItem('sesion', JSON.stringify(sesion));
     registrarNotificacionesPush(usuario.id);
 
@@ -195,7 +199,7 @@ export default function IngresarInvitadoScreen({ navigation }) {
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-      <View style={styles.container}>
+      <View style={[styles.container, { paddingTop: Math.max(insets.top, 16) }]}>
         <Text style={styles.titulo}>Ingresar como invitado</Text>
         <Text style={styles.subtitulo}>
           {modoRecuperar
