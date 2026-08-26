@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../utils/apiClient';
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, Image, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Image, ImageBackground, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { setNavigationGlobal } from '../utils/navigationGlobal';
 import { obtenerMensajesSinLeer, empresaTieneSinLeer, actualizarBadge } from '../utils/mensajesSinLeer';
@@ -134,39 +134,48 @@ export default function SeleccionarEmpresaScreen({ route, navigation }) {
   };
 
   return (
-    <View style={[styles.container, { paddingTop: Math.max(insets.top, 60) }]}>
-      <Text style={styles.titulo}>{empresasVisibles.length > 1 ? '¿Con cuál empresa quieres entrar?' : 'Tu empresa'}</Text>
-      <Text style={styles.subtitulo}>
-        {empresasVisibles.length > 1 ? 'Perteneces a más de una empresa en C&D Manager' : 'Toca para entrar'}
-      </Text>
+    // Fondo oscuro (2026-08-25, a pedido del usuario): esta es la ÚLTIMA pantalla "blanca" antes
+    // de entrar a una empresa — desde que el usuario toca una empresa (elegirEmpresa → Inicio),
+    // ya se aplican los colores propios de esa compañía, lógica que no se toca aquí.
+    <ImageBackground
+      source={require('../../assets/images/fondo-seleccionar-modo.jpg')}
+      style={styles.fondo}
+      resizeMode="cover"
+    >
+      <ScrollView contentContainerStyle={[styles.container, { paddingTop: Math.max(insets.top, 60) }]}>
+        <Text style={styles.titulo}>{empresasVisibles.length > 1 ? '¿Con cuál empresa quieres entrar?' : 'Tu empresa'}</Text>
+        <Text style={styles.subtitulo}>
+          {empresasVisibles.length > 1 ? 'Perteneces a más de una empresa en C&D Manager' : 'Toca para entrar'}
+        </Text>
 
-      {empresasVisibles.map((empresa, index) => (
-        <TouchableOpacity
-          key={index}
-          style={[styles.empresaCard, { borderColor: empresa.color_hex || '#1E90FF' }]}
-          onPress={() => elegirEmpresa(empresa)}
-          onLongPress={() => setMenuEmpresa(empresa)}
-        >
-          {empresa.logo_url ? (
-            <Image source={{ uri: empresa.logo_url }} style={styles.logo} />
-          ) : (
-            <View style={[styles.logoPlaceholder, { backgroundColor: empresa.color_hex || '#1E90FF' }]}>
-              <Text style={styles.logoPlaceholderTexto}>
-                {empresa.empresa_nombre ? empresa.empresa_nombre.charAt(0).toUpperCase() : '?'}
-              </Text>
+        {empresasVisibles.map((empresa, index) => (
+          <TouchableOpacity
+            key={index}
+            style={[styles.empresaCard, { borderColor: empresa.color_hex || '#1E90FF' }]}
+            onPress={() => elegirEmpresa(empresa)}
+            onLongPress={() => setMenuEmpresa(empresa)}
+          >
+            {empresa.logo_url ? (
+              <Image source={{ uri: empresa.logo_url }} style={styles.logo} />
+            ) : (
+              <View style={[styles.logoPlaceholder, { backgroundColor: empresa.color_hex || '#1E90FF' }]}>
+                <Text style={styles.logoPlaceholderTexto}>
+                  {empresa.empresa_nombre ? empresa.empresa_nombre.charAt(0).toUpperCase() : '?'}
+                </Text>
+              </View>
+            )}
+            <View style={{ flex: 1 }}>
+              <View style={styles.empresaNombreFila}>
+                <Text style={styles.empresaNombre}>{empresa.empresa_nombre}</Text>
+                {empresaTieneSinLeer(sinLeer, empresa.empresa_id) && <Text style={styles.iconoMensaje}>💬</Text>}
+              </View>
+              <Text style={styles.empresaArea}>{empresa.area_nombre}</Text>
             </View>
-          )}
-          <View style={{ flex: 1 }}>
-            <View style={styles.empresaNombreFila}>
-              <Text style={styles.empresaNombre}>{empresa.empresa_nombre}</Text>
-              {empresaTieneSinLeer(sinLeer, empresa.empresa_id) && <Text style={styles.iconoMensaje}>💬</Text>}
-            </View>
-            <Text style={styles.empresaArea}>{empresa.area_nombre}</Text>
-          </View>
-        </TouchableOpacity>
-      ))}
+          </TouchableOpacity>
+        ))}
 
-      <Text style={styles.ayudaTexto}>Mantén presionada una empresa para editarla o eliminarla</Text>
+        <Text style={styles.ayudaTexto}>Mantén presionada una empresa para editarla o eliminarla</Text>
+      </ScrollView>
 
       <Modal visible={!!menuEmpresa} animationType="fade" transparent>
         <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={cerrarMenu}>
@@ -191,20 +200,29 @@ export default function SeleccionarEmpresaScreen({ route, navigation }) {
           </View>
         </TouchableOpacity>
       </Modal>
-    </View>
+    </ImageBackground>
   );
 }
 
 const styles = StyleSheet.create({
+  fondo: { flex: 1, width: '100%', height: '100%' },
   // paddingTop fijo removido (2026-08-25): ahora se aplica dinámicamente con insets en el
   // render (ver arriba) para no quedar tapado por la hora/notificaciones de Android.
-  container: { flex: 1, backgroundColor: '#f5f5f5', padding: 24 },
-  titulo: { fontSize: 22, fontWeight: 'bold', textAlign: 'center', marginBottom: 6 },
-  subtitulo: { fontSize: 14, color: '#666', textAlign: 'center', marginBottom: 30 },
+  container: { flexGrow: 1, padding: 24 },
+  // Texto claro (2026-08-25): mismo criterio que las demás pantallas de portada, para legibilidad
+  // sobre el fondo oscuro de circuito.
+  titulo: {
+    fontSize: 22, fontWeight: 'bold', textAlign: 'center', marginBottom: 6, color: '#fff',
+    textShadowColor: 'rgba(0,0,0,0.6)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3,
+  },
+  subtitulo: {
+    fontSize: 14, color: '#eee', textAlign: 'center', marginBottom: 30,
+    textShadowColor: 'rgba(0,0,0,0.6)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3,
+  },
   empresaCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: 'rgba(255,255,255,0.92)',
     borderRadius: 12,
     padding: 14,
     marginBottom: 14,
@@ -227,7 +245,10 @@ const styles = StyleSheet.create({
   empresaNombre: { fontSize: 16, fontWeight: '600', color: '#222' },
   iconoMensaje: { fontSize: 15 },
   empresaArea: { fontSize: 13, color: '#777', marginTop: 2 },
-  ayudaTexto: { fontSize: 12, color: '#999', textAlign: 'center', marginTop: 10 },
+  ayudaTexto: {
+    fontSize: 12, color: '#eee', textAlign: 'center', marginTop: 10,
+    textShadowColor: 'rgba(0,0,0,0.6)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3,
+  },
   menuOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
   menuBox: { backgroundColor: '#fff', borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 20, paddingBottom: 34 },
   menuTitulo: { fontSize: 15, fontWeight: 'bold', color: '#222', marginBottom: 14, textAlign: 'center' },

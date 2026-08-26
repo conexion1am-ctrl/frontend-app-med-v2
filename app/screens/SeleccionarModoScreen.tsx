@@ -1,5 +1,5 @@
 import React from 'react';
-import { Dimensions, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Dimensions, ImageBackground, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // El archivo original (icono-bienvenida.png) medía 2816x1536 px, pero el ícono real (el cuadrado
@@ -10,7 +10,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 // cuadrado), así el logo se ve grande de verdad en vez de "perdido" en espacio vacío.
 const { width: anchoPantalla } = Dimensions.get('window');
 const RELACION_LOGO = 1138 / 1139; // alto/ancho real del archivo ya recortado
-const ANCHO_LOGO = anchoPantalla * 0.9; // casi todo el ancho de pantalla, con márgenes leves
+// Vuelto a 0.45 (2026-08-25, cuarta ronda): el usuario aclaró que el término medio pedido era
+// entre 90% (tamaño original, muy grande) y 45% (primera reducción a la mitad) — es decir, 45%
+// YA ERA el término medio pedido, no un punto de partida a reducir más. Vista previa pendiente
+// de confirmación con este valor.
+const ANCHO_LOGO = anchoPantalla * 0.45;
 const ALTO_LOGO = ANCHO_LOGO * RELACION_LOGO;
 
 // Primera pantalla que ve cualquiera al abrir la app sin sesión activa. Separa los dos caminos
@@ -22,57 +26,89 @@ const ALTO_LOGO = ANCHO_LOGO * RELACION_LOGO;
 // gerencia le asignó al invitarlos, así que el texto del botón no debe sonar como si fuera solo
 // para empleados; antes decía "Trabajo para alguien más", lo que confundía a los clientes que
 // entran a chatear/ver el contrato de su propio proyecto. Reemplaza a "Ingresar" como ruta inicial.
+//
+// Fondo con imagen (2026-08-25, a pedido del usuario): reemplaza el fondo blanco liso por
+// fondo-seleccionar-modo.jpg (imagen de circuito/espacio azul oscuro provista por el usuario).
+// Esto es SOLO para esta pantalla de portada — las pantallas siguientes (Ingresar, Ingresar
+// Invitado) siguen con su fondo claro normal hasta que el usuario entra a una empresa (ahí ya
+// aplican los colores propios de esa compañía, lógica que no se toca aquí).
 export default function SeleccionarModoScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   return (
-    <View style={[styles.container, { paddingTop: Math.max(insets.top, 12) }]}>
-      <View style={styles.centro}>
-        <Image source={require('../../assets/images/icono-bienvenida.png')} style={styles.icono} resizeMode="contain" />
-        <Text style={styles.subtitulo}>Elige cómo quieres entrar</Text>
-      </View>
+    <ImageBackground
+      source={require('../../assets/images/fondo-seleccionar-modo.jpg')}
+      style={styles.fondo}
+      resizeMode="cover"
+    >
+      <View style={[styles.container, { paddingTop: Math.max(insets.top, 12) }]}>
+        <View style={styles.centro}>
+          <ImageBackground
+            source={require('../../assets/images/icono-bienvenida.png')}
+            style={styles.icono}
+            imageStyle={{ resizeMode: 'contain' }}
+          />
+          <Text style={styles.subtitulo}>Elige cómo quieres entrar</Text>
+        </View>
 
-      <View style={styles.opciones}>
-        <TouchableOpacity
-          style={styles.opcion}
-          onPress={() => navigation.navigate('Ingresar')}
-        >
-          <Text style={styles.opcionTitulo}>Ingresar a mi empresa</Text>
-          <Text style={styles.opcionTexto}>Soy dueño o administro un negocio</Text>
-        </TouchableOpacity>
+        <View style={styles.opciones}>
+          <TouchableOpacity
+            style={styles.opcion}
+            onPress={() => navigation.navigate('Ingresar')}
+          >
+            <Text style={styles.opcionTitulo}>Ingresar a mi empresa</Text>
+            <Text style={styles.opcionTexto}>Soy dueño o administro un negocio</Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.opcion}
-          onPress={() => navigation.navigate('IngresarInvitado')}
-        >
-          <Text style={styles.opcionTitulo}>Me invitaron a un proyecto</Text>
-          <Text style={styles.opcionTexto}>Trabajo ahí o soy el cliente de ese proyecto</Text>
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.opcion}
+            onPress={() => navigation.navigate('IngresarInvitado')}
+          >
+            <Text style={styles.opcionTitulo}>Me invitaron a un proyecto</Text>
+            <Text style={styles.opcionTexto}>Trabajo ahí o soy el cliente de ese proyecto</Text>
+          </TouchableOpacity>
+        </View>
       </View>
-    </View>
+    </ImageBackground>
   );
 }
 
 const styles = StyleSheet.create({
-  // Cambiado de justifyContent: 'center' a 'flex-start' (2026-08-25): con el logo al doble de
-  // tamaño (520x520), centrar TODO el bloque (logo+subtítulo+botones) como grupo dejaba muy poco
-  // margen en celulares de pantalla chica. Con flex-start el logo queda pegado arriba (como pidió
-  // el usuario, "subirlo hacia arriba") y los botones quedan fijos abajo con espacio garantizado.
-  // paddingTop fijo removido (2026-08-25): ahora se aplica dinámicamente con insets en el
-  // render (ver arriba) para no quedar tapado por la hora/notificaciones de Android.
-  container: { flex: 1, backgroundColor: '#f5f5f5', padding: 24, justifyContent: 'flex-start' },
-  centro: { alignItems: 'center', marginBottom: 12 },
-  // Agrandado al doble a pedido del usuario (2026-08-25) — ver cálculo de ANCHO_LOGO/ALTO_LOGO
-  // arriba: usa la proporción REAL de la imagen (ancha, no cuadrada) para que el logo se vea
-  // realmente grande en vez de quedar con espacio vacío dentro de un cuadro forzado.
-  icono: { width: ANCHO_LOGO, height: ALTO_LOGO, marginBottom: -10 },
-  subtitulo: { fontSize: 14, color: '#666', textAlign: 'center' },
-  opciones: { gap: 14, marginTop: 'auto', marginBottom: 20 },
+  fondo: { flex: 1, width: '100%', height: '100%' },
+  // justifyContent: 'center' quitado (2026-08-25, cuarta ronda): con 'center', al volver el logo
+  // a 0.45 el bloque completo se agranda y empuja los botones hacia abajo otra vez. El usuario
+  // pidió "sube el logo un poco, pero deja los botones en la misma posición" — así que ahora el
+  // logo se ancla arriba (marginTop reducido) y los botones quedan fijos con marginTop absoluto,
+  // independientes del tamaño del logo.
+  container: { flex: 1, padding: 24 },
+  centro: { alignItems: 'center', marginTop: 40, marginBottom: 12 },
+  // Vuelto a 0.45 — ver ANCHO_LOGO arriba. "Subir un poco" se logra con menos separación hacia
+  // el subtítulo (subtitulo.marginTop bajado de 30 a 16) en vez de mover el logo mismo, para no
+  // desplazar el bloque de botones que debe quedar fijo.
+  icono: { width: ANCHO_LOGO, height: ALTO_LOGO, marginBottom: 0 },
+  // Texto claro (2026-08-25): con el fondo oscuro de circuito/espacio, el gris oscuro anterior
+  // (#666) quedaba casi ilegible. Se agregó sombra de texto por legibilidad extra sobre la imagen.
+  subtitulo: {
+    fontSize: 15,
+    color: '#fff',
+    textAlign: 'center',
+    marginTop: 16,
+    textShadowColor: 'rgba(0,0,0,0.6)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  // marginTop fijo en vez de depender de justifyContent: 'center' (2026-08-25, cuarta ronda):
+  // este valor mantiene los botones en la MISMA posición aproximada de la ronda anterior (32%),
+  // independiente de que el logo haya vuelto a crecer a 0.45.
+  opciones: { gap: 14, marginTop: 90 },
+  // Tarjetas semi-transparentes (2026-08-25): sobre el fondo oscuro de circuito, un fondo blanco
+  // sólido se veía como "una caja pegada encima" de la imagen; con transparencia se integra mejor
+  // sin perder legibilidad del texto.
   opcion: {
-    backgroundColor: '#fff',
+    backgroundColor: 'rgba(255,255,255,0.92)',
     borderRadius: 12,
     padding: 18,
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: 'rgba(255,255,255,0.4)',
   },
   opcionTitulo: { fontSize: 16, fontWeight: '600', color: '#222', marginBottom: 4 },
   opcionTexto: { fontSize: 13, color: '#777' },

@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, ImageBackground, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import InputCelular, { detectarPaisPorDispositivo, PAISES } from '../components/InputCelular';
 import InputContraseña from '../components/InputContraseña';
@@ -121,67 +121,80 @@ export default function IngresarScreen({ navigation }) {
   };
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-      <View style={[styles.container, { paddingTop: Math.max(insets.top, 16) }]}>
-        <Text style={styles.titulo}>Ingresar</Text>
-        <Text style={styles.subtitulo}>Escribe tu número de celular para continuar</Text>
+    <ImageBackground
+      source={require('../../assets/images/fondo-seleccionar-modo.jpg')}
+      style={styles.fondo}
+      resizeMode="cover"
+    >
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <View style={[styles.container, { paddingTop: Math.max(insets.top, 16) }]}>
+          <View style={styles.tarjeta}>
+            <Text style={styles.titulo}>Ingresar</Text>
+            <Text style={styles.subtitulo}>Escribe tu número de celular para continuar</Text>
 
-        <Text style={styles.label}>Número de celular</Text>
-        <InputCelular
-          numero={celular}
-          onChangeNumero={(texto) => {
-            setCelular(texto);
-            setVerificado(false);
-          }}
-          pais={paisCelular}
-          onChangePais={(p) => {
-            setPaisCelular(p);
-            setVerificado(false);
-          }}
-          disabled={cargando}
-        />
-
-        {verificado && requiereContraseña && (
-          <>
-            <Text style={styles.label}>{debeCrearContraseña ? 'Crea tu contraseña' : 'Contraseña'}</Text>
-            {debeCrearContraseña && (
-              <Text style={styles.notaTexto}>
-                Es la primera vez que ingresas con contraseña. Crea una de al menos 6 caracteres.
-              </Text>
-            )}
-            <InputContraseña
-              value={contraseña}
-              onChangeText={setContraseña}
-              placeholder={debeCrearContraseña ? 'Crea tu contraseña (mínimo 6 caracteres)' : 'Tu contraseña'}
+            <Text style={styles.label}>Número de celular</Text>
+            <InputCelular
+              numero={celular}
+              onChangeNumero={(texto) => {
+                setCelular(texto);
+                setVerificado(false);
+              }}
+              pais={paisCelular}
+              onChangePais={(p) => {
+                setPaisCelular(p);
+                setVerificado(false);
+              }}
+              disabled={cargando}
             />
-            {debeCrearContraseña && (
-              <InputContraseña
-                value={confirmarContraseña}
-                onChangeText={setConfirmarContraseña}
-                placeholder="Confirma tu contraseña"
-              />
+
+            {verificado && requiereContraseña && (
+              <>
+                <Text style={styles.label}>{debeCrearContraseña ? 'Crea tu contraseña' : 'Contraseña'}</Text>
+                {debeCrearContraseña && (
+                  <Text style={styles.notaTexto}>
+                    Es la primera vez que ingresas con contraseña. Crea una de al menos 6 caracteres.
+                  </Text>
+                )}
+                <InputContraseña
+                  value={contraseña}
+                  onChangeText={setContraseña}
+                  placeholder={debeCrearContraseña ? 'Crea tu contraseña (mínimo 6 caracteres)' : 'Tu contraseña'}
+                />
+                {debeCrearContraseña && (
+                  <InputContraseña
+                    value={confirmarContraseña}
+                    onChangeText={setConfirmarContraseña}
+                    placeholder="Confirma tu contraseña"
+                  />
+                )}
+              </>
             )}
-          </>
-        )}
 
-        <TouchableOpacity
-          style={styles.boton}
-          onPress={verificado && requiereContraseña ? () => intentarLogin() : verificarCelular}
-          disabled={cargando}
-        >
-          {cargando ? <ActivityIndicator color="#fff" /> : <Text style={styles.botonTexto}>INGRESAR</Text>}
-        </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.boton}
+              onPress={verificado && requiereContraseña ? () => intentarLogin() : verificarCelular}
+              disabled={cargando}
+            >
+              {cargando ? <ActivityIndicator color="#fff" /> : <Text style={styles.botonTexto}>INGRESAR</Text>}
+            </TouchableOpacity>
 
-        <TouchableOpacity style={styles.botonSecundario} onPress={() => navigation.replace('PerfilEmpresa')}>
-          <Text style={styles.botonSecundarioTexto}>¿Nuevo aquí? Crear perfil de empresa</Text>
-        </TouchableOpacity>
-      </View>
-    </KeyboardAvoidingView>
+            <TouchableOpacity style={styles.botonSecundario} onPress={() => navigation.replace('PerfilEmpresa')}>
+              <Text style={styles.botonSecundarioTexto}>¿Nuevo aquí? Crear perfil de empresa</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </KeyboardAvoidingView>
+    </ImageBackground>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5', padding: 24, justifyContent: 'center' },
+  fondo: { flex: 1, width: '100%', height: '100%' },
+  container: { flex: 1, padding: 24, justifyContent: 'center' },
+  // Tarjeta semi-transparente (2026-08-25, mismo criterio usado en SeleccionarModoScreen): sobre
+  // el fondo oscuro de circuito, el formulario necesita una superficie clara para que los inputs
+  // y el texto sigan siendo legibles, sin perder la imagen de fondo detrás.
+  tarjeta: { backgroundColor: 'rgba(255,255,255,0.92)', borderRadius: 16, padding: 24 },
   titulo: { fontSize: 26, fontWeight: 'bold', marginBottom: 6, textAlign: 'center' },
   subtitulo: { fontSize: 14, color: '#666', marginBottom: 30, textAlign: 'center' },
   label: { fontSize: 13, fontWeight: '600', color: '#333', marginBottom: 6, marginTop: 14 },

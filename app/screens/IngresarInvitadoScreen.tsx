@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, ImageBackground, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import InputCelular, { detectarPaisPorDispositivo } from '../components/InputCelular';
 import InputContraseña from '../components/InputContraseña';
@@ -198,8 +198,17 @@ export default function IngresarInvitadoScreen({ navigation }) {
   };
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-      <View style={[styles.container, { paddingTop: Math.max(insets.top, 16) }]}>
+    <ImageBackground
+      source={require('../../assets/images/fondo-seleccionar-modo.jpg')}
+      style={styles.fondo}
+      resizeMode="cover"
+    >
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <ScrollView
+          contentContainerStyle={[styles.container, { paddingTop: Math.max(insets.top, 16) }]}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.tarjeta}>
         <Text style={styles.titulo}>Ingresar como invitado</Text>
         <Text style={styles.subtitulo}>
           {modoRecuperar
@@ -380,13 +389,19 @@ export default function IngresarInvitadoScreen({ navigation }) {
         <TouchableOpacity style={styles.botonSecundario} onPress={() => navigation.goBack()}>
           <Text style={styles.botonSecundarioTexto}>Volver</Text>
         </TouchableOpacity>
-      </View>
-    </KeyboardAvoidingView>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </ImageBackground>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5', padding: 24, justifyContent: 'center' },
+  fondo: { flex: 1, width: '100%', height: '100%' },
+  container: { flexGrow: 1, padding: 24, justifyContent: 'center' },
+  // Tarjeta semi-transparente (2026-08-25): mismo criterio que IngresarScreen/SeleccionarModoScreen
+  // para mantener el formulario legible sobre el fondo oscuro de circuito.
+  tarjeta: { backgroundColor: 'rgba(255,255,255,0.92)', borderRadius: 16, padding: 24 },
   titulo: { fontSize: 26, fontWeight: 'bold', marginBottom: 6, textAlign: 'center' },
   subtitulo: { fontSize: 14, color: '#666', marginBottom: 30, textAlign: 'center' },
   label: { fontSize: 13, fontWeight: '600', color: '#333', marginBottom: 6, marginTop: 14 },
