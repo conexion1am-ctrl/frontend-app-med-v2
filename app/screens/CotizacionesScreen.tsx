@@ -317,9 +317,20 @@ export default function CotizacionesScreen({ route }) {
       setEditNombreProyecto(res.data.nombre_proyecto || '');
       setEditSaludo(res.data.saludo || SALUDO_DEFECTO);
       setEditParrafoContexto(res.data.parrafo_contexto || PARRAFO_CONTEXTO_DEFECTO);
+      // Mismo fix que en generarYCompartirPdf (2026-08-27): condiciones_pago puede llegar como
+      // array ya parseado o como string JSON sin parsear, según cómo haya quedado esa columna en
+      // la base real. Sin esto, .length/.map() sobre un string rompían la carga del editor.
+      let editCondicionesPagoArray = res.data.condiciones_pago;
+      if (typeof editCondicionesPagoArray === 'string') {
+        try {
+          editCondicionesPagoArray = JSON.parse(editCondicionesPagoArray);
+        } catch (e) {
+          editCondicionesPagoArray = null;
+        }
+      }
       setEditCondicionesPago(
-        res.data.condiciones_pago && res.data.condiciones_pago.length
-          ? res.data.condiciones_pago.map((c) => ({ porcentaje: String(c.porcentaje ?? ''), descripcion: c.descripcion || '' }))
+        Array.isArray(editCondicionesPagoArray) && editCondicionesPagoArray.length
+          ? editCondicionesPagoArray.map((c) => ({ porcentaje: String(c.porcentaje ?? ''), descripcion: c.descripcion || '' }))
           : condicionesPagoDefecto()
       );
       setEditTiempoEntrega(res.data.tiempo_entrega || TIEMPO_ENTREGA_DEFECTO);
