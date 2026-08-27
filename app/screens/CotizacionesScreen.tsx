@@ -135,17 +135,32 @@ export default function CotizacionesScreen({ route }) {
     setPropietario(cliente.nombre);
     setNombreProyecto(cliente.nombre_proyecto || '');
     if (cliente.mts2) {
-      setParrafoContexto(`${PARRAFO_CONTEXTO_DEFECTO} de ${cliente.mts2} m2.`);
+      // FIX (2026-08-27): clientes.mts2 es DECIMAL(10,2) — sin normalizar, este párrafo (que se
+      // guarda tal cual en la cotización/contrato) mostraba "de 180.00 m2" en vez de "de 180 m2".
+      setParrafoContexto(`${PARRAFO_CONTEXTO_DEFECTO} de ${parseFloat(cliente.mts2)} m2.`);
     } else {
       setParrafoContexto(PARRAFO_CONTEXTO_DEFECTO);
     }
   };
 
+  // FIX (2026-08-27, bug reportado: descuento de plantilla aparecía x100, ej. 550.000 se veía
+  // como 55.000.000): plantillas_cotizacion.descuento (y cotizacion_items.valor/cantidad) son
+  // columnas DECIMAL, así que pg las devuelve como string con dos decimales (ej. "550000.00").
+  // InputMoneda/formatearConPuntosDeMiles limpian todo lo que no sea dígito, así que el punto
+  // decimal desaparecía y el "00" final se pegaba al número: "550000.00" -> "55000000". Se
+  // normaliza con parseFloat+String (igual que formatearCantidad en otros archivos) para quitar
+  // el ".00" antes de guardarlo en el estado.
+  const normalizarNumero = (valor) => {
+    if (valor == null || valor === '') return '';
+    const numero = parseFloat(valor);
+    return Number.isNaN(numero) ? String(valor) : String(numero);
+  };
+
   // Aplica una plantilla guardada: precarga ítems, saludo, párrafo, condiciones de pago y
   // descuento, dejando cliente/ciudad/propietario/proyecto intactos si ya se habían elegido.
   const aplicarPlantilla = (plantilla) => {
-    setItems(plantilla.items.map((i) => ({ ...i, cantidad: i.cantidad != null ? String(i.cantidad) : '', valor: String(i.valor) })));
-    setDescuento(plantilla.descuento ? String(plantilla.descuento) : '');
+    setItems(plantilla.items.map((i) => ({ ...i, cantidad: i.cantidad != null ? normalizarNumero(i.cantidad) : '', valor: normalizarNumero(i.valor) })));
+    setDescuento(plantilla.descuento ? normalizarNumero(plantilla.descuento) : '');
     setSaludo(plantilla.saludo || SALUDO_DEFECTO);
     setParrafoContexto(plantilla.parrafo_contexto || PARRAFO_CONTEXTO_DEFECTO);
     setCondicionesPago(
@@ -310,8 +325,10 @@ export default function CotizacionesScreen({ route }) {
     try {
       const res = await api.get(`/cotizaciones/${cot.id}`);
       setEditandoCotizacion(cot);
-      setEditItems(res.data.items.map((i) => ({ descripcion: i.descripcion, cantidad: i.cantidad != null ? String(i.cantidad) : '', valor: String(i.valor), seccion: i.seccion || '', adicional: i.adicional })));
-      setEditDescuento(cot.descuento ? String(cot.descuento) : '');
+      // FIX (2026-08-27): mismo bug de columnas DECIMAL devueltas como string con ".00" que en
+      // aplicarPlantilla — sin normalizar, InputMoneda mostraba el descuento/valor x100.
+      setEditItems(res.data.items.map((i) => ({ descripcion: i.descripcion, cantidad: i.cantidad != null ? normalizarNumero(i.cantidad) : '', valor: normalizarNumero(i.valor), seccion: i.seccion || '', adicional: i.adicional })));
+      setEditDescuento(cot.descuento ? normalizarNumero(cot.descuento) : '');
       setEditPropietario(res.data.propietario || '');
       setEditCiudad(res.data.ciudad || '');
       setEditNombreProyecto(res.data.nombre_proyecto || '');
@@ -573,7 +590,7 @@ export default function CotizacionesScreen({ route }) {
               <View style={{ flex: 1 }}>
                 <Text style={styles.cotizacionProyecto}>{cot.nombre_proyecto || 'Sin nombre de proyecto'}</Text>
                 <Text style={styles.cotizacionCliente}>{cot.cliente_nombre}</Text>
-                {cot.mts2 ? <Text style={styles.cotizacionMts2}>📐 {cot.mts2} m²</Text> : null}
+                {cot.mts2 ? <Text style={styles.cotizacionMts2}>📐 {parseFloat(cot.mts2)} m²</Text> : null}
                 {cot.numero ? <Text style={styles.cotizacionNumero}>N° {cot.numero}</Text> : null}
                 <Text style={styles.cotizacionTotal}>{formatearMoneda(cot.total)}</Text>
                 <View

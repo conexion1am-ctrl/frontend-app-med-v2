@@ -230,7 +230,7 @@ export default function ProyectosScreen({ route, navigation }) {
                 <Text style={styles.proyectoCliente}>Cliente: {proyecto.cliente_nombre_snapshot}</Text>
               ) : null}
               {proyecto.direccion ? <Text style={styles.proyectoDireccion}>{proyecto.direccion}</Text> : null}
-              {proyecto.area_m2 ? <Text style={styles.proyectoArea}>{proyecto.area_m2} m²</Text> : null}
+              {proyecto.area_m2 ? <Text style={styles.proyectoArea}>{parseFloat(proyecto.area_m2)} m²</Text> : null}
               {accesoReducido && proyecto.misAreas && (
                 <Text style={styles.proyectoDireccion}>
                   {proyecto.misAreas.map((a) => a.nombre).join(', ')}

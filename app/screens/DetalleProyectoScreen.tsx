@@ -63,7 +63,9 @@ export default function DetalleProyectoScreen({ route, navigation }) {
       setDetalle(resDetalle.data);
       setNombre(resDetalle.data.nombre);
       setDireccion(resDetalle.data.direccion || '');
-      setAreaM2(resDetalle.data.area_m2 ? String(resDetalle.data.area_m2) : '');
+      // FIX (2026-08-27): proyectos.area_m2 es DECIMAL(10,2) — pg lo devuelve como string con
+      // decimales (ej. "180.00"). Sin normalizar, el campo mostraba "180.00" en vez de "180".
+      setAreaM2(resDetalle.data.area_m2 ? String(parseFloat(resDetalle.data.area_m2)) : '');
       setAreas(resAreas.data.areas);
       setLeHaEscritoAlgunGerente(
         resEquipo.data.equipo.some((p) => p.area_nombre === 'GERENCIA' && p.le_ha_escrito === true)
@@ -195,7 +197,7 @@ export default function DetalleProyectoScreen({ route, navigation }) {
             </TouchableOpacity>
           </View>
         ) : null}
-        {detalle.area_m2 ? <Text style={styles.info}>{detalle.area_m2} m²</Text> : null}
+        {detalle.area_m2 ? <Text style={styles.info}>{parseFloat(detalle.area_m2)} m²</Text> : null}
 
         {puedeGestionar && (
           <View style={styles.accionesFila}>

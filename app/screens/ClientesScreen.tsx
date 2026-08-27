@@ -163,7 +163,9 @@ export default function ClientesScreen({ route }) {
     const { pais, numero } = separarCelular(cliente.celular);
     setEditPaisCelular(pais);
     setEditCelular(numero);
-    setEditMts2(cliente.mts2 != null ? String(cliente.mts2) : '');
+    // FIX (2026-08-27): clientes.mts2 es DECIMAL(10,2) — pg lo devuelve como string con
+    // decimales (ej. "180.00"). Sin normalizar, el campo mostraba "180.00" en vez de "180".
+    setEditMts2(cliente.mts2 != null && cliente.mts2 !== '' ? String(parseFloat(cliente.mts2)) : '');
     setEditDireccion(cliente.direccion || '');
     setEditCedula(cliente.cedula || '');
     setModalEditarVisible(true);
