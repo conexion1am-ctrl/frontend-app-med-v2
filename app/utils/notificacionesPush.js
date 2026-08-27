@@ -25,6 +25,20 @@ export async function registrarNotificacionesPush(usuarioId) {
       return;
     }
 
+    // FIX (2026-08-26): en Android 13+ el aviso del sistema pidiendo permiso de notificaciones
+    // NO aparece hasta que existe al menos un canal de notificación creado (documentación oficial
+    // de Expo: "This prompt will not appear until at least one notification channel is created.
+    // setNotificationChannelAsync must be called before getExpoPushTokenAsync"). El código nacía
+    // pidiendo el permiso ANTES de crear el canal, así que en celulares con Android 13+ el permiso
+    // probablemente nunca se concedía de verdad, el token nunca se generaba, y por eso nunca
+    // llegaban notificaciones aunque todo lo demás (backend, envío, badge) estuviera bien armado.
+    if (Platform.OS === 'android') {
+      await Notifications.setNotificationChannelAsync('default', {
+        name: 'default',
+        importance: Notifications.AndroidImportance.DEFAULT,
+      });
+    }
+
     const { status: estadoActual } = await Notifications.getPermissionsAsync();
     let estadoFinal = estadoActual;
     if (estadoActual !== 'granted') {
@@ -33,13 +47,6 @@ export async function registrarNotificacionesPush(usuarioId) {
     }
     if (estadoFinal !== 'granted') {
       return;
-    }
-
-    if (Platform.OS === 'android') {
-      await Notifications.setNotificationChannelAsync('default', {
-        name: 'default',
-        importance: Notifications.AndroidImportance.DEFAULT,
-      });
     }
 
     const projectId = Constants.expoConfig?.extra?.eas?.projectId;

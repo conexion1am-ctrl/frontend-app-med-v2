@@ -1,7 +1,9 @@
 import api from '../utils/apiClient';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Linking, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
 import EncabezadoLogo from '../components/EncabezadoLogo';
 
 // Pantalla "Revisar y editar documento" del contrato (2026-08-25, a pedido del usuario): antes el
@@ -99,6 +101,18 @@ export default function RevisarContratoScreen({ route, navigation }) {
     }
   };
 
+  // Descarga el PDF (ya generado y subido a Storage por el servidor) a un archivo local antes de
+  // poder compartirlo — expo-sharing no puede compartir directamente una URL remota (https://...),
+  // necesita un archivo en el dispositivo. Mismo patrón que generarPdfCotizacion.js.
+  const descargarPdfLocal = async (url, nombreArchivo) => {
+    const destino = `${FileSystem.cacheDirectory}${nombreArchivo}`;
+    const { uri } = await FileSystem.downloadAsync(url, destino);
+    return uri;
+  };
+
+  // Genera el PDF final del contrato (2026-08-26: antes solo lo abría con Linking.openURL, sin
+  // dar la opción de compartirlo por WhatsApp/correo/etc. al cliente — a pedido del usuario, ahora
+  // ofrece Descargar o Compartir, igual que ya funciona en Cotizaciones).
   const generarPdf = async () => {
     setGenerando(true);
     try {
@@ -107,12 +121,48 @@ export default function RevisarContratoScreen({ route, navigation }) {
         cuerpoParaGuardar()
       );
       const url = res.data?.contrato?.pdf_url;
-      if (url) {
-        Linking.openURL(url);
-      } else {
+      if (!url) {
         Alert.alert('Listo', 'El PDF se generó, pero no se pudo abrir automáticamente.');
+        navigation.goBack();
+        return;
       }
-      navigation.goBack();
+      const nombreArchivo = `Contrato_${numero || contratoId}.pdf`;
+      const uriLocal = await descargarPdfLocal(url, nombreArchivo);
+      Alert.alert('¡PDF generado!', '¿Qué quieres hacer con el documento?', [
+        {
+          text: 'Compartir',
+          onPress: async () => {
+            const disponible = await Sharing.isAvailableAsync();
+            if (disponible) {
+              await Sharing.shareAsync(uriLocal, { mimeType: 'application/pdf', dialogTitle: nombreArchivo });
+            } else {
+              Alert.alert('No disponible', 'Compartir no está disponible en este dispositivo.');
+            }
+            navigation.goBack();
+          },
+        },
+        {
+          text: 'Descargar',
+          onPress: async () => {
+            try {
+              const permiso = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+              if (permiso.granted) {
+                const contenidoBase64 = await FileSystem.readAsStringAsync(uriLocal, { encoding: FileSystem.EncodingType.Base64 });
+                const nuevoUri = await FileSystem.StorageAccessFramework.createFileAsync(
+                  permiso.directoryUri,
+                  nombreArchivo.replace(/\.pdf$/i, ''),
+                  'application/pdf'
+                );
+                await FileSystem.writeAsStringAsync(nuevoUri, contenidoBase64, { encoding: FileSystem.EncodingType.Base64 });
+              }
+            } catch (error) {
+              console.error('Error descargando PDF del contrato:', error);
+            }
+            navigation.goBack();
+          },
+        },
+        { text: 'Cerrar', style: 'cancel', onPress: () => navigation.goBack() },
+      ]);
     } catch (error) {
       console.error('Error generando PDF del contrato:', error);
       Alert.alert('Error', 'No se pudo generar el PDF. Intenta de nuevo en unos minutos.');

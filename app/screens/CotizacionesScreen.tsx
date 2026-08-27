@@ -25,6 +25,9 @@ const condicionesPagoDefecto = () => [
   { porcentaje: '25', descripcion: 'A la entrega de la obra blanca' },
   { porcentaje: '25', descripcion: 'A la entrega final de la obra, incluyendo carpintería' },
 ];
+// Frase fija que antecede a los porcentajes de condiciones de pago (2026-08-26), tal como
+// aparece en el documento real de la empresa. No es editable — solo cambian los porcentajes.
+const PARRAFO_CONDICIONES_PAGO = 'El pago del costo total se plantea de la siguiente manera:';
 
 export default function CotizacionesScreen({ route }) {
   const { empresa, usuario } = route.params;
@@ -37,46 +40,54 @@ export default function CotizacionesScreen({ route }) {
   const [busqueda, setBusqueda] = useState('');
 
   const [clienteSeleccionado, setClienteSeleccionado] = useState(null);
-  const [numero, setNumero] = useState('');
+  // Buscador de clientes dentro del modal de Nueva Cotización (2026-08-26): reemplaza la lista
+  // de chips de TODOS los clientes, que se volvía inmanejable con muchos clientes registrados.
+  const [busquedaCliente, setBusquedaCliente] = useState('');
   const [items, setItems] = useState([{ descripcion: '', cantidad: '', valor: '', seccion: '' }]);
   const [descuento, setDescuento] = useState('');
   const [guardando, setGuardando] = useState(false);
 
-  // Campos de la carta (propietario/ciudad/firmante son llenables; párrafo, condiciones de
-  // pago y tiempo de entrega vienen con un valor por defecto editable).
+  // Campos de la carta, en el MISMO ORDEN en que aparecen en el documento real de la empresa
+  // (2026-08-26, a pedido del usuario): ciudad, propietario, nombre de proyecto, saludo, párrafo.
+  // El número de cotización YA NO se llena aquí — lo asigna el backend automáticamente (1001, 1002...).
   const [propietario, setPropietario] = useState('');
   const [ciudad, setCiudad] = useState('');
+  const [nombreProyecto, setNombreProyecto] = useState('');
   const [saludo, setSaludo] = useState(SALUDO_DEFECTO);
   const [parrafoContexto, setParrafoContexto] = useState(PARRAFO_CONTEXTO_DEFECTO);
   const [condicionesPago, setCondicionesPago] = useState(condicionesPagoDefecto());
   const [tiempoEntrega, setTiempoEntrega] = useState(TIEMPO_ENTREGA_DEFECTO);
   const [firmante, setFirmante] = useState('');
 
+  // Plantillas reutilizables (2026-08-26): precargan items/textos ya definidos para no reescribir
+  // cotizaciones muy parecidas cada vez. Se eligen ANTES que todo lo demás, pero cada campo sigue
+  // siendo editable después de aplicarla.
+  const [plantillas, setPlantillas] = useState([]);
+  const [modalPlantillasVisible, setModalPlantillasVisible] = useState(false);
+  const [modalGuardarPlantillaVisible, setModalGuardarPlantillaVisible] = useState(false);
+  const [nombreNuevaPlantilla, setNombreNuevaPlantilla] = useState('');
+  const [guardandoPlantilla, setGuardandoPlantilla] = useState(false);
+
   const [menuCotizacion, setMenuCotizacion] = useState(null);
   const [modalEditarVisible, setModalEditarVisible] = useState(false);
   const [editandoCotizacion, setEditandoCotizacion] = useState(null);
-  const [editNumero, setEditNumero] = useState('');
+  // editNumero eliminado (2026-08-26): el número es automático y permanente, ya no se edita.
   const [editItems, setEditItems] = useState([{ descripcion: '', cantidad: '', valor: '', seccion: '' }]);
   const [editDescuento, setEditDescuento] = useState('');
   const [editPropietario, setEditPropietario] = useState('');
   const [editCiudad, setEditCiudad] = useState('');
+  const [editNombreProyecto, setEditNombreProyecto] = useState('');
   const [editSaludo, setEditSaludo] = useState(SALUDO_DEFECTO);
   const [editParrafoContexto, setEditParrafoContexto] = useState(PARRAFO_CONTEXTO_DEFECTO);
   const [editCondicionesPago, setEditCondicionesPago] = useState(condicionesPagoDefecto());
   const [editTiempoEntrega, setEditTiempoEntrega] = useState(TIEMPO_ENTREGA_DEFECTO);
   const [editFirmante, setEditFirmante] = useState('');
 
-
+  // Modal "Datos para el PDF" eliminado por completo (2026-08-26, a pedido del usuario): pedía de
+  // nuevo toda la información que ya se había guardado al crear la cotización. Generar PDF ahora
+  // usa directamente los datos guardados, sin volver a preguntar nada (mismo criterio ya aplicado
+  // en Contratos, ver tarea histórica #95).
   const [generandoPdf, setGenerandoPdf] = useState(false);
-  const [modalPdfVisible, setModalPdfVisible] = useState(false);
-  const [cotizacionParaPdf, setCotizacionParaPdf] = useState(null);
-  const [pdfPropietario, setPdfPropietario] = useState('');
-  const [pdfCiudad, setPdfCiudad] = useState('');
-  const [pdfSaludo, setPdfSaludo] = useState(SALUDO_DEFECTO);
-  const [pdfParrafo, setPdfParrafo] = useState('');
-  const [pdfCondicionesPago, setPdfCondicionesPago] = useState('');
-  const [pdfTiempoEntrega, setPdfTiempoEntrega] = useState('');
-  const [pdfFirmante, setPdfFirmante] = useState('');
 
   useEffect(() => {
     cargarDatos();
@@ -85,12 +96,14 @@ export default function CotizacionesScreen({ route }) {
   const cargarDatos = async () => {
     setCargando(true);
     try {
-      const [resCotizaciones, resClientes] = await Promise.all([
+      const [resCotizaciones, resClientes, resPlantillas] = await Promise.all([
         api.get(`/cotizaciones/listar/${empresa.id}`),
         api.get(`/clientes/listar/${empresa.id}`),
+        api.get(`/cotizaciones/plantillas/listar/${empresa.id}`),
       ]);
       setCotizaciones(resCotizaciones.data.cotizaciones);
       setClientes(resClientes.data.clientes);
+      setPlantillas(resPlantillas.data.plantillas);
     } catch (error) {
       console.error('Error cargando cotizaciones:', error);
       Alert.alert('Error', 'No se pudieron cargar las cotizaciones.');
@@ -101,17 +114,112 @@ export default function CotizacionesScreen({ route }) {
 
   const limpiarFormulario = () => {
     setClienteSeleccionado(null);
-    setNumero('');
+    setBusquedaCliente('');
     setItems([{ descripcion: '', cantidad: '', valor: '', seccion: '' }]);
     setDescuento('');
     setPropietario('');
     setCiudad('');
+    setNombreProyecto('');
     setSaludo(SALUDO_DEFECTO);
     setParrafoContexto(PARRAFO_CONTEXTO_DEFECTO);
     setCondicionesPago(condicionesPagoDefecto());
     setTiempoEntrega(TIEMPO_ENTREGA_DEFECTO);
     setFirmante('');
   };
+
+  // Al elegir un cliente en el buscador: autocompleta propietario, ciudad si el cliente la trae,
+  // nombre del proyecto y, si tiene m2 registrados, los agrega al final del párrafo de contexto
+  // (2026-08-26, a pedido del usuario) — todo queda editable después de autocompletarse.
+  const seleccionarCliente = (cliente) => {
+    setClienteSeleccionado(cliente.id);
+    setPropietario(cliente.nombre);
+    setNombreProyecto(cliente.nombre_proyecto || '');
+    if (cliente.mts2) {
+      setParrafoContexto(`${PARRAFO_CONTEXTO_DEFECTO} de ${cliente.mts2} m2.`);
+    } else {
+      setParrafoContexto(PARRAFO_CONTEXTO_DEFECTO);
+    }
+  };
+
+  // Aplica una plantilla guardada: precarga ítems, saludo, párrafo, condiciones de pago y
+  // descuento, dejando cliente/ciudad/propietario/proyecto intactos si ya se habían elegido.
+  const aplicarPlantilla = (plantilla) => {
+    setItems(plantilla.items.map((i) => ({ ...i, cantidad: i.cantidad != null ? String(i.cantidad) : '', valor: String(i.valor) })));
+    setDescuento(plantilla.descuento ? String(plantilla.descuento) : '');
+    setSaludo(plantilla.saludo || SALUDO_DEFECTO);
+    setParrafoContexto(plantilla.parrafo_contexto || PARRAFO_CONTEXTO_DEFECTO);
+    setCondicionesPago(
+      plantilla.condiciones_pago && plantilla.condiciones_pago.length
+        ? plantilla.condiciones_pago.map((c) => ({ porcentaje: String(c.porcentaje ?? ''), descripcion: c.descripcion || '' }))
+        : condicionesPagoDefecto()
+    );
+    setTiempoEntrega(plantilla.tiempo_entrega || TIEMPO_ENTREGA_DEFECTO);
+    setModalPlantillasVisible(false);
+  };
+
+  const guardarComoPlantilla = async () => {
+    if (!nombreNuevaPlantilla.trim()) {
+      Alert.alert('Campo obligatorio', 'Ponle un nombre a la plantilla.');
+      return;
+    }
+    const itemsValidos = items.filter((i) => i.descripcion.trim() && i.valor);
+    if (itemsValidos.length === 0) {
+      Alert.alert('Campos incompletos', 'Agrega al menos un ítem antes de guardar la plantilla.');
+      return;
+    }
+    setGuardandoPlantilla(true);
+    try {
+      await api.post('/cotizaciones/plantillas/crear', {
+        empresa_id: empresa.id,
+        nombre: nombreNuevaPlantilla,
+        saludo,
+        parrafo_contexto: parrafoContexto,
+        condiciones_pago: condicionesPago.filter((c) => c.porcentaje || c.descripcion),
+        tiempo_entrega: tiempoEntrega,
+        items: itemsValidos,
+        descuento: descuento || 0,
+      });
+      Alert.alert('¡Listo!', 'Plantilla guardada. Ya está disponible para futuras cotizaciones.');
+      setModalGuardarPlantillaVisible(false);
+      setNombreNuevaPlantilla('');
+      cargarDatos();
+    } catch (error) {
+      console.error('Error guardando plantilla:', error);
+      Alert.alert('Error', 'No se pudo guardar la plantilla.');
+    } finally {
+      setGuardandoPlantilla(false);
+    }
+  };
+
+  const eliminarPlantilla = (plantilla) => {
+    Alert.alert('Eliminar plantilla', `¿Eliminar la plantilla "${plantilla.nombre}"?`, [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Eliminar',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await api.delete(`/cotizaciones/plantillas/${plantilla.id}`);
+            cargarDatos();
+          } catch (error) {
+            console.error('Error eliminando plantilla:', error);
+            Alert.alert('Error', 'No se pudo eliminar la plantilla.');
+          }
+        },
+      },
+    ]);
+  };
+
+  // Filtra clientes por nombre o nombre de proyecto para el buscador del modal de Nueva
+  // Cotización (2026-08-26): reemplaza la lista completa de chips, inmanejable con muchos clientes.
+  const textoNormalizadoCliente = (t) => (t || '').toString().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const busquedaClienteNormalizada = textoNormalizadoCliente(busquedaCliente);
+  const clientesFiltrados = busquedaClienteNormalizada
+    ? clientes.filter((c) =>
+        textoNormalizadoCliente(c.nombre).includes(busquedaClienteNormalizada) ||
+        textoNormalizadoCliente(c.nombre_proyecto).includes(busquedaClienteNormalizada)
+      )
+    : clientes;
 
   const actualizarCondicionPago = (index, campo, valor) => {
     const nuevas = [...condicionesPago];
@@ -171,11 +279,11 @@ export default function CotizacionesScreen({ route }) {
       await api.post('/cotizaciones/crear', {
         empresa_id: empresa.id,
         cliente_id: clienteSeleccionado,
-        numero: numero || null,
         items: itemsValidos,
         descuento: descuento || 0,
         propietario: propietario || null,
         ciudad: ciudad || null,
+        nombre_proyecto: nombreProyecto || null,
         saludo: saludo || null,
         parrafo_contexto: parrafoContexto || null,
         condiciones_pago: condicionesPago.filter((c) => c.porcentaje || c.descripcion),
@@ -202,11 +310,11 @@ export default function CotizacionesScreen({ route }) {
     try {
       const res = await api.get(`/cotizaciones/${cot.id}`);
       setEditandoCotizacion(cot);
-      setEditNumero(cot.numero || '');
       setEditItems(res.data.items.map((i) => ({ descripcion: i.descripcion, cantidad: i.cantidad != null ? String(i.cantidad) : '', valor: String(i.valor), seccion: i.seccion || '', adicional: i.adicional })));
       setEditDescuento(cot.descuento ? String(cot.descuento) : '');
       setEditPropietario(res.data.propietario || '');
       setEditCiudad(res.data.ciudad || '');
+      setEditNombreProyecto(res.data.nombre_proyecto || '');
       setEditSaludo(res.data.saludo || SALUDO_DEFECTO);
       setEditParrafoContexto(res.data.parrafo_contexto || PARRAFO_CONTEXTO_DEFECTO);
       setEditCondicionesPago(
@@ -251,6 +359,7 @@ export default function CotizacionesScreen({ route }) {
           descuento: editDescuento || 0,
           propietario: editPropietario || null,
           ciudad: editCiudad || null,
+          nombre_proyecto: editNombreProyecto || null,
           saludo: editSaludo || null,
           parrafo_contexto: editParrafoContexto || null,
           condiciones_pago: editCondicionesPago.filter((c) => c.porcentaje || c.descripcion),
@@ -260,11 +369,11 @@ export default function CotizacionesScreen({ route }) {
         Alert.alert('¡Listo!', 'La cotización y el contrato se actualizaron correctamente.');
       } else {
         await api.put(`/cotizaciones/${editandoCotizacion.id}`, {
-          numero: editNumero || null,
           items: itemsValidos,
           descuento: editDescuento || 0,
           propietario: editPropietario || null,
           ciudad: editCiudad || null,
+          nombre_proyecto: editNombreProyecto || null,
           saludo: editSaludo || null,
           parrafo_contexto: editParrafoContexto || null,
           condiciones_pago: editCondicionesPago.filter((c) => c.porcentaje || c.descripcion),
@@ -283,59 +392,33 @@ export default function CotizacionesScreen({ route }) {
     }
   };
 
-  const abrirModalPdf = async (cot) => {
+  // Generar PDF ya NO abre un modal a preguntar datos otra vez (2026-08-26, a pedido del
+  // usuario): usa directamente lo que ya está guardado en la cotización desde que se creó/editó.
+  const generarYCompartirPdf = async (cot) => {
     cerrarMenu();
-    const cliente = clientes.find((c) => c.id === cot.cliente_id) || { nombre: cot.cliente_nombre };
-    setCotizacionParaPdf(cot);
-    try {
-      const res = await api.get(`/cotizaciones/${cot.id}`);
-      setPdfPropietario(res.data.propietario || cliente.nombre || '');
-      setPdfCiudad(res.data.ciudad || '');
-      setPdfSaludo(res.data.saludo || SALUDO_DEFECTO);
-      setPdfParrafo(res.data.parrafo_contexto || PARRAFO_CONTEXTO_DEFECTO);
-      setPdfCondicionesPago(
-        (res.data.condiciones_pago && res.data.condiciones_pago.length ? res.data.condiciones_pago : condicionesPagoDefecto())
-          .map((c) => `${c.porcentaje}% — ${c.descripcion}`)
-          .join('\n')
-      );
-      setPdfTiempoEntrega(res.data.tiempo_entrega || TIEMPO_ENTREGA_DEFECTO);
-      setPdfFirmante(res.data.firmante || '');
-    } catch (error) {
-      console.error('Error precargando datos del PDF:', error);
-      setPdfPropietario(cliente.nombre || '');
-      setPdfCiudad('');
-      setPdfSaludo(SALUDO_DEFECTO);
-      setPdfParrafo(PARRAFO_CONTEXTO_DEFECTO);
-      setPdfCondicionesPago('');
-      setPdfTiempoEntrega(TIEMPO_ENTREGA_DEFECTO);
-      setPdfFirmante('');
-    }
-    setModalPdfVisible(true);
-  };
-
-  const generarYCompartirPdf = async () => {
-    const cot = cotizacionParaPdf;
-    setModalPdfVisible(false);
     setGenerandoPdf(true);
     try {
       const res = await api.get(`/cotizaciones/${cot.id}`);
       const cliente = clientes.find((c) => c.id === cot.cliente_id) || { nombre: cot.cliente_nombre };
+      const condicionesPagoTexto = (res.data.condiciones_pago && res.data.condiciones_pago.length ? res.data.condiciones_pago : condicionesPagoDefecto())
+        .map((c) => `${c.porcentaje}% — ${c.descripcion}`)
+        .join('\n');
       const uriPdf = await generarPdfDocumento({
         tipoDocumento: 'cotizacion',
         empresa,
-        cliente,
+        cliente: { ...cliente, nombre_proyecto: res.data.nombre_proyecto || cliente.nombre_proyecto },
         numero: cot.numero,
         fecha: cot.created_at,
         items: res.data.items,
         total: cot.total,
         descuento: cot.descuento,
-        ciudad: pdfCiudad,
-        propietario: pdfPropietario,
-        saludo: pdfSaludo,
-        parrafo: pdfParrafo,
-        condicionesPago: pdfCondicionesPago,
-        tiempoEntrega: pdfTiempoEntrega,
-        firmante: pdfFirmante,
+        ciudad: res.data.ciudad || '',
+        propietario: res.data.propietario || cliente.nombre || '',
+        saludo: res.data.saludo || SALUDO_DEFECTO,
+        parrafo: res.data.parrafo_contexto || PARRAFO_CONTEXTO_DEFECTO,
+        condicionesPago: condicionesPagoTexto,
+        tiempoEntrega: res.data.tiempo_entrega || TIEMPO_ENTREGA_DEFECTO,
+        firmante: res.data.firmante || '',
       });
       const nombreArchivo = `Cotizacion_${(cot.cliente_nombre || 'cliente').replace(/\s+/g, '_')}.pdf`;
 
@@ -525,7 +608,7 @@ export default function CotizacionesScreen({ route }) {
                 )}
               </>
             )}
-            <TouchableOpacity style={styles.menuOpcion} onPress={() => abrirModalPdf(menuCotizacion)} disabled={generandoPdf}>
+            <TouchableOpacity style={styles.menuOpcion} onPress={() => generarYCompartirPdf(menuCotizacion)} disabled={generandoPdf}>
               <Text style={styles.menuOpcionTexto}>{generandoPdf ? 'Generando PDF...' : '📄  Generar PDF'}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.menuOpcion} onPress={cerrarMenu}>
@@ -541,32 +624,63 @@ export default function CotizacionesScreen({ route }) {
           <ScrollView style={styles.modalContainer} contentContainerStyle={{ paddingTop: Math.max(insets.top, 20), paddingHorizontal: 20, paddingBottom: Math.max(insets.bottom, 60) }}>
             <Text style={styles.modalTitulo}>Nueva Cotización</Text>
 
+            {/* Orden de todo el formulario (2026-08-26, a pedido del usuario): sigue el MISMO
+                orden en que aparece la información en el documento real de la empresa —
+                plantilla (opcional) → cliente → ciudad → propietario → nombre del proyecto →
+                saludo → párrafo de contexto → ítems → descuento/total → condiciones de pago →
+                tiempo de entrega → firmante. El número de cotización ya no aparece aquí: lo
+                asigna el backend automáticamente. */}
+            {plantillas.length > 0 && (
+              <TouchableOpacity style={styles.botonPlantilla} onPress={() => setModalPlantillasVisible(true)}>
+                <Text style={styles.botonPlantillaTexto}>📋  Usar una plantilla guardada</Text>
+              </TouchableOpacity>
+            )}
+
             <Text style={styles.label}>Cliente *</Text>
             {clientes.length === 0 ? (
               <Text style={styles.notaTexto}>No hay clientes creados. Ve primero a la pantalla de Clientes.</Text>
             ) : (
-              <View style={styles.opcionesLista}>
-                {clientes.map((cliente) => (
-                  <TouchableOpacity
-                    key={cliente.id}
-                    style={[styles.opcion, clienteSeleccionado === cliente.id && styles.opcionSeleccionada]}
-                    onPress={() => {
-                      setClienteSeleccionado(cliente.id);
-                      // Precargamos "propietario" con el nombre del cliente al seleccionarlo,
-                      // pero el campo sigue siendo editable por si hay que ponerlo distinto.
-                      setPropietario(cliente.nombre);
-                    }}
-                  >
-                    <Text style={[styles.opcionTexto, clienteSeleccionado === cliente.id && styles.opcionTextoSeleccionado]}>
-                      {cliente.nombre}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
+              <>
+                <TextInput
+                  style={styles.input}
+                  value={busquedaCliente}
+                  onChangeText={setBusquedaCliente}
+                  placeholder="🔍 Buscar cliente por nombre o proyecto..."
+                  placeholderTextColor="#999"
+                />
+                <View style={styles.opcionesLista}>
+                  {clientesFiltrados.map((cliente) => (
+                    <TouchableOpacity
+                      key={cliente.id}
+                      style={[styles.opcion, clienteSeleccionado === cliente.id && styles.opcionSeleccionada]}
+                      onPress={() => seleccionarCliente(cliente)}
+                    >
+                      <Text style={[styles.opcionTexto, clienteSeleccionado === cliente.id && styles.opcionTextoSeleccionado]}>
+                        {cliente.nombre}{cliente.nombre_proyecto ? ` — ${cliente.nombre_proyecto}` : ''}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                  {clientesFiltrados.length === 0 && (
+                    <Text style={styles.notaTexto}>No se encontró ningún cliente con ese texto.</Text>
+                  )}
+                </View>
+              </>
             )}
 
-            <Text style={styles.label}>Número de cotización (opcional)</Text>
-            <TextInput style={styles.input} value={numero} onChangeText={setNumero} placeholder="Ej: COT-001" placeholderTextColor="#999" />
+            <Text style={styles.label}>Ciudad</Text>
+            <TextInput style={styles.input} value={ciudad} onChangeText={setCiudad} placeholder="Ej: Medellín" placeholderTextColor="#999" />
+
+            <Text style={styles.label}>Propietario (a quién va dirigido)</Text>
+            <TextInput style={styles.input} value={propietario} onChangeText={setPropietario} placeholder="Nombre del propietario" placeholderTextColor="#999" />
+
+            <Text style={styles.label}>Nombre del proyecto</Text>
+            <TextInput style={styles.input} value={nombreProyecto} onChangeText={setNombreProyecto} placeholder="Ej: Llano Azul Casa 3464" placeholderTextColor="#999" />
+
+            <Text style={styles.label}>Saludo</Text>
+            <TextInput style={styles.input} value={saludo} onChangeText={setSaludo} placeholder="Ej: Cordial Saludo:" placeholderTextColor="#999" />
+
+            <Text style={styles.label}>Párrafo de contexto</Text>
+            <TextInput style={[styles.input, styles.inputMultilinea]} value={parrafoContexto} onChangeText={setParrafoContexto} multiline placeholderTextColor="#999" />
 
             <Text style={styles.label}>Ítems de la cotización *</Text>
             {items.map((item, index) => (
@@ -631,21 +745,8 @@ export default function CotizacionesScreen({ route }) {
 
             <Text style={styles.totalTexto}>Total: {formatearMoneda(totalCotizacion)}</Text>
 
-            <Text style={[styles.seccionTitulo, { marginTop: 20 }]}>Datos para la carta</Text>
-
-            <Text style={styles.label}>Propietario (a quién va dirigido)</Text>
-            <TextInput style={styles.input} value={propietario} onChangeText={setPropietario} placeholder="Nombre del propietario" placeholderTextColor="#999" />
-
-            <Text style={styles.label}>Ciudad</Text>
-            <TextInput style={styles.input} value={ciudad} onChangeText={setCiudad} placeholder="Ej: Medellín" placeholderTextColor="#999" />
-
-            <Text style={styles.label}>Saludo</Text>
-            <TextInput style={styles.input} value={saludo} onChangeText={setSaludo} placeholder="Ej: Cordial Saludo:" placeholderTextColor="#999" />
-
-            <Text style={styles.label}>Párrafo de contexto</Text>
-            <TextInput style={[styles.input, styles.inputMultilinea]} value={parrafoContexto} onChangeText={setParrafoContexto} multiline placeholderTextColor="#999" />
-
             <Text style={styles.label}>Condiciones de pago</Text>
+            <Text style={styles.notaTexto}>{PARRAFO_CONDICIONES_PAGO}</Text>
             {condicionesPago.map((cond, index) => (
               <View key={index} style={styles.filaCondicionPago}>
                 <TextInput
@@ -682,6 +783,10 @@ export default function CotizacionesScreen({ route }) {
               {guardando ? <ActivityIndicator color="#fff" /> : <Text style={styles.botonAgregarTexto}>CREAR COTIZACIÓN</Text>}
             </TouchableOpacity>
 
+            <TouchableOpacity style={styles.botonGuardarPlantilla} onPress={() => setModalGuardarPlantillaVisible(true)}>
+              <Text style={styles.botonGuardarPlantillaTexto}>💾  Guardar estos ítems como plantilla</Text>
+            </TouchableOpacity>
+
             <TouchableOpacity
               style={styles.botonCancelar}
               onPress={() => {
@@ -695,6 +800,51 @@ export default function CotizacionesScreen({ route }) {
         </KeyboardAvoidingView>
       </Modal>
 
+      {/* MODAL: Seleccionar plantilla */}
+      <Modal visible={modalPlantillasVisible} animationType="fade" transparent>
+        <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={() => setModalPlantillasVisible(false)}>
+          <View style={[styles.menuBox, { paddingBottom: Math.max(insets.bottom, 20) + 14 }]}>
+            <Text style={styles.menuTitulo}>Elige una plantilla</Text>
+            {plantillas.map((plantilla) => (
+              <TouchableOpacity
+                key={plantilla.id}
+                style={styles.menuOpcion}
+                onPress={() => aplicarPlantilla(plantilla)}
+                onLongPress={() => eliminarPlantilla(plantilla)}
+              >
+                <Text style={styles.menuOpcionTexto}>{plantilla.nombre}</Text>
+              </TouchableOpacity>
+            ))}
+            <Text style={styles.menuNotaTexto}>Mantén presionada una plantilla para eliminarla</Text>
+            <TouchableOpacity style={styles.menuOpcion} onPress={() => setModalPlantillasVisible(false)}>
+              <Text style={[styles.menuOpcionTexto, { color: '#888' }]}>Cancelar</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* MODAL: Guardar como plantilla */}
+      <Modal visible={modalGuardarPlantillaVisible} animationType="fade" transparent>
+        <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={() => setModalGuardarPlantillaVisible(false)}>
+          <TouchableOpacity activeOpacity={1} style={[styles.menuBox, { paddingBottom: Math.max(insets.bottom, 20) + 14 }]}>
+            <Text style={styles.menuTitulo}>Guardar como plantilla</Text>
+            <TextInput
+              style={styles.input}
+              value={nombreNuevaPlantilla}
+              onChangeText={setNombreNuevaPlantilla}
+              placeholder="Ej: Kit de acabados estándar"
+              placeholderTextColor="#999"
+            />
+            <TouchableOpacity style={[styles.botonGuardar, { marginTop: 16 }]} onPress={guardarComoPlantilla} disabled={guardandoPlantilla}>
+              {guardandoPlantilla ? <ActivityIndicator color="#fff" /> : <Text style={styles.botonAgregarTexto}>GUARDAR PLANTILLA</Text>}
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.botonCancelar} onPress={() => setModalGuardarPlantillaVisible(false)}>
+              <Text style={styles.botonCancelarTexto}>Cancelar</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
       {/* MODAL: Editar cotización */}
       <Modal visible={modalEditarVisible} animationType="slide">
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
@@ -706,8 +856,20 @@ export default function CotizacionesScreen({ route }) {
               <Text style={styles.notaTexto}>Esta cotización ya fue aceptada: al guardar, el contrato se actualizará con los cambios.</Text>
             )}
 
-            <Text style={styles.label}>Número de cotización (opcional)</Text>
-            <TextInput style={styles.input} value={editNumero} onChangeText={setEditNumero} placeholder="Ej: COT-001" placeholderTextColor="#999" />
+            <Text style={styles.label}>Ciudad</Text>
+            <TextInput style={styles.input} value={editCiudad} onChangeText={setEditCiudad} placeholder="Ej: Medellín" placeholderTextColor="#999" />
+
+            <Text style={styles.label}>Propietario (a quién va dirigido)</Text>
+            <TextInput style={styles.input} value={editPropietario} onChangeText={setEditPropietario} placeholder="Nombre del propietario" placeholderTextColor="#999" />
+
+            <Text style={styles.label}>Nombre del proyecto</Text>
+            <TextInput style={styles.input} value={editNombreProyecto} onChangeText={setEditNombreProyecto} placeholder="Ej: Llano Azul Casa 3464" placeholderTextColor="#999" />
+
+            <Text style={styles.label}>Saludo</Text>
+            <TextInput style={styles.input} value={editSaludo} onChangeText={setEditSaludo} placeholder="Ej: Cordial Saludo:" placeholderTextColor="#999" />
+
+            <Text style={styles.label}>Párrafo de contexto</Text>
+            <TextInput style={[styles.input, styles.inputMultilinea]} value={editParrafoContexto} onChangeText={setEditParrafoContexto} multiline placeholderTextColor="#999" />
 
             <Text style={styles.label}>Ítems de la cotización *</Text>
             {editItems.map((item, index) => (
@@ -772,21 +934,8 @@ export default function CotizacionesScreen({ route }) {
 
             <Text style={styles.totalTexto}>Total: {formatearMoneda(totalEditCotizacion)}</Text>
 
-            <Text style={[styles.seccionTitulo, { marginTop: 20 }]}>Datos para la carta</Text>
-
-            <Text style={styles.label}>Propietario (a quién va dirigido)</Text>
-            <TextInput style={styles.input} value={editPropietario} onChangeText={setEditPropietario} placeholder="Nombre del propietario" placeholderTextColor="#999" />
-
-            <Text style={styles.label}>Ciudad</Text>
-            <TextInput style={styles.input} value={editCiudad} onChangeText={setEditCiudad} placeholder="Ej: Medellín" placeholderTextColor="#999" />
-
-            <Text style={styles.label}>Saludo</Text>
-            <TextInput style={styles.input} value={editSaludo} onChangeText={setEditSaludo} placeholder="Ej: Cordial Saludo:" placeholderTextColor="#999" />
-
-            <Text style={styles.label}>Párrafo de contexto</Text>
-            <TextInput style={[styles.input, styles.inputMultilinea]} value={editParrafoContexto} onChangeText={setEditParrafoContexto} multiline placeholderTextColor="#999" />
-
             <Text style={styles.label}>Condiciones de pago</Text>
+            <Text style={styles.notaTexto}>{PARRAFO_CONDICIONES_PAGO}</Text>
             {editCondicionesPago.map((cond, index) => (
               <View key={index} style={styles.filaCondicionPago}>
                 <TextInput
@@ -830,59 +979,6 @@ export default function CotizacionesScreen({ route }) {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* MODAL: Datos para el PDF (carta, condiciones de pago, firma) */}
-      <Modal visible={modalPdfVisible} animationType="slide">
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-          {/* insets.top/bottom evitan que el contenido quede pegado a la barra de estado y a la barra de gestos en Android (edgeToEdgeEnabled) */}
-          <ScrollView style={styles.modalContainer} contentContainerStyle={{ paddingTop: Math.max(insets.top, 20), paddingHorizontal: 20, paddingBottom: Math.max(insets.bottom, 60) }}>
-            <Text style={styles.modalTitulo}>Datos para el PDF</Text>
-            <Text style={styles.notaTexto}>Estos datos se usan solo para armar el documento; puedes dejarlos en blanco si no aplican.</Text>
-
-            <Text style={styles.label}>Ciudad (opcional)</Text>
-            <TextInput style={styles.input} value={pdfCiudad} onChangeText={setPdfCiudad} placeholder="Ej: Tu ciudad" placeholderTextColor="#999" />
-
-            <Text style={styles.label}>Dirigido a (propietario)</Text>
-            <TextInput style={styles.input} value={pdfPropietario} onChangeText={setPdfPropietario} placeholder="Ej: Nombre del propietario" placeholderTextColor="#999" />
-
-            <Text style={styles.label}>Saludo</Text>
-            <TextInput style={styles.input} value={pdfSaludo} onChangeText={setPdfSaludo} placeholder="Ej: Cordial Saludo:" placeholderTextColor="#999" />
-
-            <Text style={styles.label}>Párrafo de contexto (opcional)</Text>
-            <TextInput
-              style={[styles.input, { minHeight: 70, textAlignVertical: 'top' }]}
-              value={pdfParrafo}
-              onChangeText={setPdfParrafo}
-              placeholder="Ej: Por solicitud efectuada paso a cotizar los precios de..."
-              placeholderTextColor="#999"
-              multiline
-            />
-
-            <Text style={styles.label}>Condiciones de pago (opcional)</Text>
-            <TextInput
-              style={[styles.input, { minHeight: 90, textAlignVertical: 'top' }]}
-              value={pdfCondicionesPago}
-              onChangeText={setPdfCondicionesPago}
-              placeholder={'Ej: 25% a la firma del contrato\n25% a la 3-4 semanas con avance\n25% a la entrega de obra blanca\n25% a la entrega final'}
-              placeholderTextColor="#999"
-              multiline
-            />
-
-            <Text style={styles.label}>Tiempo de entrega (opcional)</Text>
-            <TextInput style={styles.input} value={pdfTiempoEntrega} onChangeText={setPdfTiempoEntrega} placeholder="Ej: 12 - 14 semanas" placeholderTextColor="#999" />
-
-            <Text style={styles.label}>Firma (nombre de quien envía)</Text>
-            <TextInput style={styles.input} value={pdfFirmante} onChangeText={setPdfFirmante} placeholder="Ej: Nombre de quien firma" placeholderTextColor="#999" />
-
-            <TouchableOpacity style={styles.botonGuardar} onPress={generarYCompartirPdf} disabled={generandoPdf}>
-              {generandoPdf ? <ActivityIndicator color="#fff" /> : <Text style={styles.botonAgregarTexto}>GENERAR PDF</Text>}
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.botonCancelar} onPress={() => setModalPdfVisible(false)}>
-              <Text style={styles.botonCancelarTexto}>Cancelar</Text>
-            </TouchableOpacity>
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </Modal>
     </View>
   );
 }
@@ -1002,4 +1098,8 @@ const styles = StyleSheet.create({
   menuOpcion: { paddingVertical: 14, borderTopWidth: 1, borderTopColor: '#f0f0f0' },
   menuOpcionTexto: { fontSize: 16, color: '#333', textAlign: 'center' },
   menuNotaTexto: { fontSize: 13, color: '#999', textAlign: 'center', paddingVertical: 14 },
+  botonPlantilla: { backgroundColor: '#eef4ff', borderRadius: 10, padding: 14, alignItems: 'center', marginBottom: 18 },
+  botonPlantillaTexto: { color: '#2255aa', fontWeight: 'bold', fontSize: 14 },
+  botonGuardarPlantilla: { alignItems: 'center', marginTop: 14, padding: 10 },
+  botonGuardarPlantillaTexto: { color: '#2255aa', fontSize: 14, fontWeight: '600' },
 });

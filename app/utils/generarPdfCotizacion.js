@@ -7,6 +7,17 @@ const formatearMoneda = (valor) => {
   return numero.toLocaleString('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
 };
 
+// La columna "cantidad" es DECIMAL en la base de datos, así que llega como string con dos
+// decimales (ej. "1.00") aunque el usuario haya escrito un entero. La app no maneja decimales
+// salvo que el usuario los escriba a propósito (2026-08-26, a pedido del usuario), así que se
+// muestra sin ceros de relleno: "1.00" -> "1", "2.50" -> "2.5".
+const formatearCantidad = (valor) => {
+  if (valor == null || valor === '') return '';
+  const numero = parseFloat(valor);
+  if (Number.isNaN(numero)) return valor;
+  return String(numero);
+};
+
 const formatearFechaDdMmAa = (fecha) => {
   if (!fecha) return '';
   const d = new Date(fecha);
@@ -51,7 +62,7 @@ function construirHtml({
 
   const filaItem = (item, index) => `
     <tr style="background:${index % 2 === 0 ? '#fff' : '#f7f7f7'};">
-      <td style="padding:8px 10px; border-bottom:1px solid #eee; text-align:center;">${item.cantidad != null && item.cantidad !== '' ? item.cantidad : '-'}</td>
+      <td style="padding:8px 10px; border-bottom:1px solid #eee; text-align:center;">${item.cantidad != null && item.cantidad !== '' ? formatearCantidad(item.cantidad) : '-'}</td>
       <td style="padding:8px 10px; border-bottom:1px solid #eee;">${item.descripcion || ''}${item.adicional ? ' <span style="color:#888; font-size:11px;">(adicional)</span>' : ''}</td>
       <td style="padding:8px 10px; border-bottom:1px solid #eee; text-align:right;">${formatearMoneda(item.valor)}</td>
     </tr>`;
@@ -150,7 +161,7 @@ function construirHtml({
 
       ${condicionesPago || tiempoEntrega ? `
       <div class="condiciones">
-        ${condicionesPago ? `<p><strong>Condiciones de pago:</strong><br/>${condicionesPago.replace(/\n/g, '<br/>')}</p>` : ''}
+        ${condicionesPago ? `<p>El pago del costo total se plantea de la siguiente manera:<br/>${condicionesPago.replace(/\n/g, '<br/>')}</p>` : ''}
         ${tiempoEntrega ? `<p><strong>Tiempo de entrega:</strong> ${tiempoEntrega}</p>` : ''}
       </div>` : ''}
 

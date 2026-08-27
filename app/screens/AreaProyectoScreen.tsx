@@ -629,6 +629,34 @@ export default function AreaProyectoScreen({ route }) {
     setNuevoMensaje('');
   };
 
+  // FIX (2026-08-26, a pedido del usuario): mientras el chat está abierto, antes NO se volvía a
+  // pedir mensajes nuevos — solo se recargaba justo después de enviar uno propio (ver
+  // enviarMensaje). Si la otra persona escribía mientras uno tenía el chat abierto, el mensaje no
+  // aparecía hasta cerrar y volver a entrar. Ahora, mientras chatAbierto tenga valor, se refresca
+  // la conversación cada 4 segundos (polling simple, sin infraestructura de websockets) para que
+  // los mensajes lleguen solos. cargandoRef evita que un refresco se solape con el anterior si la
+  // red va lenta.
+  const cargandoRefrescoChatRef = useRef(false);
+  useEffect(() => {
+    if (!chatAbierto) return undefined;
+    const intervalo = setInterval(async () => {
+      if (cargandoRefrescoChatRef.current) return;
+      cargandoRefrescoChatRef.current = true;
+      try {
+        const resMensajes = await api.get(
+          `/mensajes/${proyecto.id}/${chatAbierto.usuario_id}?mi_usuario_id=${usuario.id}`
+        );
+        setMensajes(resMensajes.data.mensajes);
+      } catch (error) {
+        // Silencioso: un fallo puntual de red no debe interrumpir el chat ni mostrar alertas
+        // repetidas cada 4 segundos.
+      } finally {
+        cargandoRefrescoChatRef.current = false;
+      }
+    }, 4000);
+    return () => clearInterval(intervalo);
+  }, [chatAbierto]);
+
   const enviarMensaje = async (archivo) => {
     if (!chatAbierto) return;
     if (!nuevoMensaje.trim() && !archivo) return;

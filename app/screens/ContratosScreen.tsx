@@ -187,7 +187,10 @@ export default function ContratosScreen({ route, navigation }) {
                   activeOpacity={contrato.proyecto_id ? 0.7 : 1}
                 >
                   <View style={styles.contratoEncabezado}>
-                    <Text style={styles.contratoProyecto}>{contrato.proyecto_nombre || 'Sin proyecto asociado'}</Text>
+                    <Text style={styles.contratoProyecto}>
+                      {contrato.proyecto_nombre || 'Sin nombre de proyecto'}
+                      {contrato.cliente_nombre ? ` — ${contrato.cliente_nombre}` : ''}
+                    </Text>
                     {finalizado && (
                       <View style={styles.etiquetaFinalizado}>
                         <Text style={styles.etiquetaFinalizadoTexto}>Finalizado</Text>
