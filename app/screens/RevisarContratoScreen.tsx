@@ -37,9 +37,23 @@ export default function RevisarContratoScreen({ route, navigation }) {
     cargarContrato();
   }, []);
 
+  // FIX (2026-08-27, bug reportado: "Revisar y editar documento" mostraba Condiciones de pago
+  // vacío aunque el contrato sí las tenía guardadas): igual que en CotizacionesScreen.tsx,
+  // contratos.condiciones_pago puede llegar de la API como un array ya parseado (columna JSONB) o
+  // como un string JSON sin parsear, según cómo haya quedado esa columna en la base real. Esta
+  // función solo comprobaba Array.isArray() y devolvía '' de inmediato si llegaba como string,
+  // dejando el campo en blanco en pantalla aunque el dato sí existiera.
   const condicionesATexto = (condiciones) => {
-    if (!Array.isArray(condiciones)) return '';
-    return condiciones.map((c) => `${c.porcentaje}% — ${c.descripcion}`).join('\n');
+    let lista = condiciones;
+    if (typeof lista === 'string') {
+      try {
+        lista = JSON.parse(lista);
+      } catch (e) {
+        lista = null;
+      }
+    }
+    if (!Array.isArray(lista)) return '';
+    return lista.map((c) => `${c.porcentaje}% — ${c.descripcion}`).join('\n');
   };
 
   const textoACondiciones = (texto) => {
