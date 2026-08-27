@@ -400,7 +400,19 @@ export default function CotizacionesScreen({ route }) {
     try {
       const res = await api.get(`/cotizaciones/${cot.id}`);
       const cliente = clientes.find((c) => c.id === cot.cliente_id) || { nombre: cot.cliente_nombre };
-      const condicionesPagoTexto = (res.data.condiciones_pago && res.data.condiciones_pago.length ? res.data.condiciones_pago : condicionesPagoDefecto())
+      // condiciones_pago puede llegar como array ya parseado (columna JSONB) o como string JSON
+      // sin parsear, según cómo haya quedado esa columna en la base real — se normaliza a array
+      // antes de usar .map() para no reventar la generación del PDF si viene en cualquiera de las
+      // dos formas (2026-08-27, bug reportado: "no se puede generar el PDF de la cotización").
+      let condicionesPagoArray = res.data.condiciones_pago;
+      if (typeof condicionesPagoArray === 'string') {
+        try {
+          condicionesPagoArray = JSON.parse(condicionesPagoArray);
+        } catch (e) {
+          condicionesPagoArray = null;
+        }
+      }
+      const condicionesPagoTexto = (Array.isArray(condicionesPagoArray) && condicionesPagoArray.length ? condicionesPagoArray : condicionesPagoDefecto())
         .map((c) => `${c.porcentaje}% — ${c.descripcion}`)
         .join('\n');
       const uriPdf = await generarPdfDocumento({
