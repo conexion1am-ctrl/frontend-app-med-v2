@@ -9,7 +9,23 @@ import { storage } from '../../firebaseConfig';
 import InputContraseña from '../components/InputContraseña';
 import { permisosDe } from '../utils/roles';
 
-const COLORES = ['#1E90FF', '#FF6347', '#32CD32', '#FFD700', '#8A2BE2', '#FF69B4', '#20B2AA', '#DC143C', '#A8C69F', '#C9B79C', '#9CAF88', '#D4B896', '#87A96B', '#000000', '#808080', '#FFFFFF'];
+// TEMAS (2026-08-27, a pedido del usuario): antes eran 16 colores sueltos elegidos al azar sin
+// relación entre sí ("demasiados colores"). Ahora son 8 paletas de tema, cada una con 4 tonos
+// coordinados (claro/medio/base/oscuro) ya probados para que el texto nunca choque con el fondo.
+// Por ahora seguimos guardando SOLO el tono "base" en empresa.color_hex — exactamente el mismo
+// campo y formato de siempre — para no tocar ninguna de las ~18 pantallas, PDFs, ni las sombras
+// de texto que ya dependen de ese único valor hexadecimal. Los tonos claro/medio/oscuro quedan
+// listos para una futura fase que aplique fondos no-blancos por tema.
+const TEMAS = [
+  { nombre: 'Gris pizarra', base: '#5F5E5A', claro: '#F1EFE8', medio: '#B4B2A9', oscuro: '#2C2C2A' },
+  { nombre: 'Azul acero', base: '#185FA5', claro: '#E6F1FB', medio: '#85B7EB', oscuro: '#042C53' },
+  { nombre: 'Ocre tierra', base: '#854F0B', claro: '#FAEEDA', medio: '#EF9F27', oscuro: '#412402' },
+  { nombre: 'Verde bosque', base: '#3B6D11', claro: '#EAF3DE', medio: '#97C459', oscuro: '#173404' },
+  { nombre: 'Rojo ladrillo', base: '#993C1D', claro: '#FAECE7', medio: '#F0997B', oscuro: '#4A1B0C' },
+  { nombre: 'Amarillo quemado', base: '#A66A00', claro: '#FCF3DC', medio: '#E3A424', oscuro: '#4D3200' },
+  { nombre: 'Rosa pastel', base: '#C46E90', claro: '#FBEFF3', medio: '#E3A9C0', oscuro: '#5E2C3E' },
+  { nombre: 'Morado pastel', base: '#8B7BB8', claro: '#F2EFFA', medio: '#C0B4E0', oscuro: '#3C3260' },
+];
 
 export default function EditarPerfilScreen({ route, navigation }) {
   const { empresa, usuario } = route.params;
@@ -19,7 +35,7 @@ export default function EditarPerfilScreen({ route, navigation }) {
   // Datos de empresa
   const [nombreEmpresa, setNombreEmpresa] = useState(empresa.nombre || '');
   const [sitioWeb, setSitioWeb] = useState(empresa.sitio_web || '');
-  const [colorSeleccionado, setColorSeleccionado] = useState(empresa.color_hex || COLORES[0]);
+  const [colorSeleccionado, setColorSeleccionado] = useState(empresa.color_hex || TEMAS[0].base);
   const [logoUri, setLogoUri] = useState<string | null>(null);
   const [logoUrlActual, setLogoUrlActual] = useState(empresa.logo_url || null);
   const [cedulaRepresentante, setCedulaRepresentante] = useState(empresa.cedula_representante || '');
@@ -221,14 +237,22 @@ export default function EditarPerfilScreen({ route, navigation }) {
             <Text style={styles.label}>URL de la empresa</Text>
             <TextInput style={styles.input} value={sitioWeb} onChangeText={setSitioWeb} placeholder="Ej: www.miempresa.com" placeholderTextColor="#999" />
 
-            <Text style={styles.label}>Color distintivo</Text>
-            <View style={styles.coloresContainer}>
-              {COLORES.map((color) => (
+            <Text style={styles.label}>Tema de la empresa</Text>
+            <View style={styles.temasContainer}>
+              {TEMAS.map((tema) => (
                 <TouchableOpacity
-                  key={color}
-                  style={[styles.colorCirculo, { backgroundColor: color }, colorSeleccionado === color && styles.colorSeleccionado]}
-                  onPress={() => setColorSeleccionado(color)}
-                />
+                  key={tema.nombre}
+                  style={[styles.temaCard, colorSeleccionado === tema.base && styles.temaCardSeleccionada]}
+                  onPress={() => setColorSeleccionado(tema.base)}
+                >
+                  <View style={styles.temaFranjas}>
+                    <View style={[styles.temaFranja, { backgroundColor: tema.claro }]} />
+                    <View style={[styles.temaFranja, { backgroundColor: tema.medio }]} />
+                    <View style={[styles.temaFranja, { backgroundColor: tema.base }]} />
+                    <View style={[styles.temaFranja, { backgroundColor: tema.oscuro }]} />
+                  </View>
+                  <Text style={styles.temaNombre}>{tema.nombre}</Text>
+                </TouchableOpacity>
               ))}
             </View>
 
@@ -330,9 +354,12 @@ const styles = StyleSheet.create({
   logoImagen: { width: 100, height: 100, borderRadius: 50 },
   logoPlaceholder: { textAlign: 'center', color: '#888', fontSize: 13, fontWeight: '600' },
   logoCambiar: { color: '#1E90FF', fontSize: 13, fontWeight: '600', marginTop: 8 },
-  coloresContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 4 },
-  colorCirculo: { width: 40, height: 40, borderRadius: 20, borderWidth: 2, borderColor: '#ccc' },
-  colorSeleccionado: { borderColor: '#000' },
+  temasContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 4 },
+  temaCard: { width: '30%', padding: 8, borderRadius: 10, borderWidth: 2, borderColor: '#ddd', backgroundColor: '#fff' },
+  temaCardSeleccionada: { borderColor: '#000' },
+  temaFranjas: { flexDirection: 'row', gap: 3, height: 22 },
+  temaFranja: { flex: 1, borderRadius: 3 },
+  temaNombre: { fontSize: 11, fontWeight: '600', color: '#333', marginTop: 6, textAlign: 'center' },
   boton: {
     backgroundColor: '#1E90FF',
     borderRadius: 8,
