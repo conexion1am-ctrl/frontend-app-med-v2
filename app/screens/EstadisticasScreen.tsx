@@ -88,6 +88,46 @@ export default function EstadisticasScreen({ route }) {
   const [menuProyecto, setMenuProyecto] = useState(null); // el proyecto (item de `proyectos`) sobre el que se hizo long-press
   const [generandoExcel, setGenerandoExcel] = useState(false);
 
+  // BALANCE FINANCIERO GENERAL (2026-08-28, a pedido explícito del usuario): suma las estadísticas
+  // de TODOS los proyectos de la empresa (activos + eliminados) en un solo balance — reservado a
+  // Gerencia, igual que "Eliminar estadísticas". Es una vista aparte (verBalanceGeneral) que se
+  // abre desde un botón en la pantalla 1, sin tocar la navegación por proyecto individual que ya
+  // funciona bien.
+  const [verBalanceGeneral, setVerBalanceGeneral] = useState(false);
+  const [balanceGeneral, setBalanceGeneral] = useState(null);
+  const [cargandoBalance, setCargandoBalance] = useState(false);
+  const [generandoExcelBalance, setGenerandoExcelBalance] = useState(false);
+
+  const abrirBalanceGeneral = async () => {
+    setVerBalanceGeneral(true);
+    setCargandoBalance(true);
+    try {
+      const res = await api.get(`/estadisticas/balance-general/${empresa.id}`, { params: { usuario_id: usuario?.id } });
+      setBalanceGeneral(res.data);
+    } catch (error) {
+      const mensaje = error.response?.data?.error || 'No se pudo cargar el balance general.';
+      console.error('Error cargando balance general:', error);
+      Alert.alert('Error', mensaje);
+      setVerBalanceGeneral(false);
+    } finally {
+      setCargandoBalance(false);
+    }
+  };
+
+  const descargarBalanceGeneral = async () => {
+    setGenerandoExcelBalance(true);
+    try {
+      const res = await api.get(`/estadisticas/balance-general/${empresa.id}/excel`, { params: { usuario_id: usuario?.id } });
+      Linking.openURL(res.data.url);
+    } catch (error) {
+      const mensaje = error.response?.data?.error || 'No se pudo generar el balance general.';
+      console.error('Error generando balance general:', error);
+      Alert.alert('Error', mensaje);
+    } finally {
+      setGenerandoExcelBalance(false);
+    }
+  };
+
   const descargarEstadoFinanciero = async (proyecto) => {
     setGenerandoExcel(true);
     try {
@@ -176,11 +216,15 @@ export default function EstadisticasScreen({ route }) {
           setProyectoSeleccionado(null);
           return true;
         }
+        if (verBalanceGeneral) {
+          setVerBalanceGeneral(false);
+          return true;
+        }
         return false; // en el nivel más externo: dejar que el botón físico salga de la pantalla, como siempre
       };
       const subscripcion = BackHandler.addEventListener('hardwareBackPress', alPresionarAtras);
       return () => subscripcion.remove();
-    }, [categoriaAbierta, proyectoSeleccionado])
+    }, [categoriaAbierta, proyectoSeleccionado, verBalanceGeneral])
   );
 
   const cargarCategorias = async () => {
@@ -448,6 +492,99 @@ export default function EstadisticasScreen({ route }) {
     );
   }
 
+  // Pantalla 1b: balance financiero general (todos los proyectos sumados) — solo Gerencia.
+  if (verBalanceGeneral) {
+    return (
+      <View style={[styles.container, { backgroundColor: tema.claro }]}>
+        <EncabezadoLogo empresa={empresa} />
+        <TouchableOpacity style={styles.botonVolver} onPress={() => setVerBalanceGeneral(false)}>
+          <Text style={styles.botonVolverTexto}>‹ Volver a Estadísticas</Text>
+        </TouchableOpacity>
+
+        {cargandoBalance ? (
+          <View style={styles.center}>
+            <ActivityIndicator size="large" color={empresa.color_hex || '#1E90FF'} />
+          </View>
+        ) : balanceGeneral ? (
+          <ScrollView contentContainerStyle={styles.scrollContent}>
+            <Text style={styles.tituloProyecto}>Balance General de la Empresa</Text>
+            <Text style={styles.ayudaTexto}>
+              Suma de {balanceGeneral.total_proyectos} proyecto(s), incluidos los que ya fueron eliminados.
+            </Text>
+
+            <View style={styles.resumenCard}>
+              <View style={styles.resumenFila}>
+                <Text style={styles.resumenLabel}>Total contratado</Text>
+                <Text style={styles.resumenValor}>{formatearMoneda(balanceGeneral.total_contratado)}</Text>
+              </View>
+              <View style={styles.resumenFila}>
+                <Text style={styles.resumenLabel}>Total abonado</Text>
+                <Text style={styles.resumenValor}>{formatearMoneda(balanceGeneral.total_abonado)}</Text>
+              </View>
+              <View style={styles.resumenFila}>
+                <Text style={styles.resumenLabel}>Saldo pendiente</Text>
+                <Text style={styles.resumenValor}>{formatearMoneda(balanceGeneral.total_saldo_pendiente)}</Text>
+              </View>
+              <View style={styles.resumenFila}>
+                <Text style={styles.resumenLabel}>Total de costos</Text>
+                <Text style={styles.resumenValor}>{formatearMoneda(balanceGeneral.total_costos)}</Text>
+              </View>
+              <View style={[styles.resumenFila, { marginTop: 8, borderTopWidth: 1, borderTopColor: '#eee', paddingTop: 8 }]}>
+                <Text style={styles.resumenLabelDestacado}>Utilidad total</Text>
+                <Text
+                  style={[
+                    styles.resumenValorDestacado,
+                    { color: balanceGeneral.utilidad_total >= 0 ? '#2e7d32' : '#c62828' },
+                  ]}
+                >
+                  {formatearMoneda(balanceGeneral.utilidad_total)}
+                </Text>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={styles.botonSecundario}
+              onPress={descargarBalanceGeneral}
+              disabled={generandoExcelBalance}
+            >
+              <Text style={styles.botonSecundarioTexto}>
+                {generandoExcelBalance ? 'Generando...' : '📊 Descargar balance general (Excel)'}
+              </Text>
+            </TouchableOpacity>
+
+            {balanceGeneral.por_categoria && balanceGeneral.por_categoria.length > 0 && (
+              <>
+                <Text style={styles.seccionTitulo}>Costos por categoría (todos los proyectos)</Text>
+                <View style={styles.resumenCard}>
+                  {balanceGeneral.por_categoria.map((cat) => (
+                    <View key={cat.categoria_id} style={[styles.resumenFila, { paddingVertical: 10 }]}>
+                      <Text style={styles.resumenLabel}>{cat.categoria_nombre}</Text>
+                      <Text style={styles.resumenValor}>{formatearMoneda(cat.total)}</Text>
+                    </View>
+                  ))}
+                </View>
+              </>
+            )}
+
+            <Text style={styles.seccionTitulo}>Desglose por proyecto</Text>
+            {(balanceGeneral.por_proyecto || []).map((p) => (
+              <View key={p.ficha_id} style={styles.abonoCard}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.movimientoTipo}>{p.proyecto_nombre || 'Proyecto eliminado'}</Text>
+                  {p.proyecto_eliminado ? <Text style={styles.badgeEliminado}>Proyecto eliminado</Text> : null}
+                  <Text style={styles.abonoFecha}>Contrato: {formatearMoneda(p.valor_contrato)} · Abonado: {formatearMoneda(p.total_abonado)}</Text>
+                </View>
+                <Text style={[styles.abonoValor, { color: p.utilidad >= 0 ? '#2e7d32' : '#c62828' }]}>
+                  {formatearMoneda(p.utilidad)}
+                </Text>
+              </View>
+            ))}
+          </ScrollView>
+        ) : null}
+      </View>
+    );
+  }
+
   // Pantalla 1: elegir proyecto
   if (!proyectoSeleccionado) {
     return (
@@ -455,6 +592,11 @@ export default function EstadisticasScreen({ route }) {
         <EncabezadoLogo empresa={empresa} />
         <ScrollView contentContainerStyle={styles.scrollContent}>
           <Text style={styles.seccionTitulo}>Elige un proyecto para ver sus estadísticas</Text>
+          {esGerencia(empresa) && (
+            <TouchableOpacity style={styles.botonBalanceGeneral} onPress={abrirBalanceGeneral}>
+              <Text style={styles.botonBalanceGeneralTexto}>📊  Ver balance general de la empresa</Text>
+            </TouchableOpacity>
+          )}
           {proyectos.length === 0 ? (
             <Text style={styles.vacioTexto}>Aún no hay proyectos creados.</Text>
           ) : (
@@ -1015,6 +1157,15 @@ const styles = StyleSheet.create({
   botonVolver: { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 4 },
   botonVolverTexto: { color: '#1E90FF', fontSize: 14, fontWeight: '600' },
   tituloProyecto: { fontSize: 20, fontWeight: 'bold', color: '#222', marginBottom: 10 },
+  ayudaTexto: { fontSize: 13, color: '#888', marginBottom: 16 },
+  botonBalanceGeneral: {
+    backgroundColor: '#1E3A5F',
+    borderRadius: 8,
+    padding: 14,
+    marginBottom: 16,
+    alignItems: 'center',
+  },
+  botonBalanceGeneralTexto: { color: '#fff', fontSize: 15, fontWeight: '600' },
   resumenCard: { backgroundColor: '#fff', borderRadius: 10, padding: 16, borderWidth: 1, borderColor: '#eee' },
   resumenFila: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
   resumenLabel: { fontSize: 14, color: '#666' },
