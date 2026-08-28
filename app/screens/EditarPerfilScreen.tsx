@@ -54,6 +54,24 @@ export default function EditarPerfilScreen({ route, navigation }) {
   const [guardando, setGuardando] = useState(false);
   const [subiendoLogo, setSubiendoLogo] = useState(false);
 
+  // REDISEÑO VISUAL (2026-08-28, a pedido del usuario): pantalla organizada en 3 secciones
+  // colapsables (acordeón, estilo Ajustes de Android/Samsung) en vez de todos los campos sueltos
+  // uno tras otro. `seccionAbierta` guarda cuál de las 3 está desplegada — solo una a la vez, y
+  // todas empiezan cerradas. Esto es puramente visual: no cambia ningún estado de datos, validación
+  // ni llamada a la API, todo lo demás de esta pantalla sigue exactamente igual.
+  const [seccionAbierta, setSeccionAbierta] = useState<'empresa' | 'contratos' | 'seguridad' | null>(null);
+  const alternarSeccion = (seccion: 'empresa' | 'contratos' | 'seguridad') => {
+    setSeccionAbierta((actual) => (actual === seccion ? null : seccion));
+  };
+
+  // Vista previa en vivo del tema: al tocar un tema en la lista, el fondo de ESTA pantalla cambia
+  // al momento para que Gerencia vea cómo se vería antes de decidir. Si sale sin guardar, este
+  // valor se pierde junto con la pantalla y nunca se aplicó a la empresa real (empresa.color_hex
+  // en el resto de la app no cambia hasta que se presiona "Guardar Cambios", que sigue mandando
+  // colorSeleccionado exactamente como antes). colorSeleccionado sigue siendo el valor real que se
+  // guarda; fondoVistaPrevia solo decide qué color se pinta en pantalla mientras se edita.
+  const fondoVistaPrevia = colorSeleccionado || empresa.color_hex || '#1E90FF';
+
   const elegirLogo = async () => {
     const permiso = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permiso.granted) {
@@ -204,107 +222,133 @@ export default function EditarPerfilScreen({ route, navigation }) {
       keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 0}
     >
       <ScrollView
-        style={[styles.container, { backgroundColor: empresa.color_hex || '#1E90FF' }]}
+        style={[styles.container, { backgroundColor: fondoVistaPrevia }]}
         contentContainerStyle={[styles.scrollContent, { paddingTop: Math.max(insets.top, 20) }]}
         keyboardShouldPersistTaps="handled"
       >
         <Text style={styles.titulo}>Editar Perfil</Text>
 
-        {/* SECCIÓN EMPRESA: solo Gerencia puede editar logo/nombre/sitio web/color */}
+        {/* SECCIÓN EMPRESA: solo Gerencia puede editar logo/nombre/sitio web/color. Organizada como
+            acordeón (estilo Ajustes de Android/Samsung, a pedido del usuario): el encabezado
+            siempre visible, y el contenido se despliega solo al tocarlo. */}
         {puedeEditarEmpresa && (
           <>
-            <Text style={styles.seccionTitulo}>Datos de la Empresa</Text>
+            <TouchableOpacity style={styles.accordionHeader} onPress={() => alternarSeccion('empresa')} activeOpacity={0.7}>
+              <Text style={styles.accordionHeaderTexto}>🏢  Datos de la Empresa</Text>
+              <Text style={styles.accordionFlecha}>{seccionAbierta === 'empresa' ? '⌄' : '›'}</Text>
+            </TouchableOpacity>
 
-            <Text style={styles.label}>Logo de la empresa</Text>
-            <View style={styles.logoContainer}>
-              <TouchableOpacity style={styles.logoCirculo} onPress={elegirLogo}>
-                {logoUri ? (
-                  <Image source={{ uri: logoUri }} style={styles.logoImagen} />
-                ) : logoUrlActual ? (
-                  <Image source={{ uri: logoUrlActual }} style={styles.logoImagen} />
-                ) : (
-                  <Text style={styles.logoPlaceholder}>+{'\n'}Logo</Text>
-                )}
-              </TouchableOpacity>
-              <TouchableOpacity onPress={elegirLogo}>
-                <Text style={styles.logoCambiar}>Cambiar imagen</Text>
-              </TouchableOpacity>
-            </View>
+            {seccionAbierta === 'empresa' && (
+              <View style={styles.accordionContenido}>
+                <Text style={styles.label}>Logo de la empresa</Text>
+                <View style={styles.logoContainer}>
+                  <TouchableOpacity style={styles.logoCirculo} onPress={elegirLogo}>
+                    {logoUri ? (
+                      <Image source={{ uri: logoUri }} style={styles.logoImagen} />
+                    ) : logoUrlActual ? (
+                      <Image source={{ uri: logoUrlActual }} style={styles.logoImagen} />
+                    ) : (
+                      <Text style={styles.logoPlaceholder}>+{'\n'}Logo</Text>
+                    )}
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={elegirLogo}>
+                    <Text style={styles.logoCambiar}>Cambiar imagen</Text>
+                  </TouchableOpacity>
+                </View>
 
-            <Text style={styles.label}>Nombre de la empresa *</Text>
-            <TextInput style={styles.input} value={nombreEmpresa} onChangeText={setNombreEmpresa} placeholderTextColor="#999" />
+                <Text style={styles.label}>Nombre de la empresa *</Text>
+                <TextInput style={styles.input} value={nombreEmpresa} onChangeText={setNombreEmpresa} placeholderTextColor="#999" />
 
-            <Text style={styles.label}>URL de la empresa</Text>
-            <TextInput style={styles.input} value={sitioWeb} onChangeText={setSitioWeb} placeholder="Ej: www.miempresa.com" placeholderTextColor="#999" />
+                <Text style={styles.label}>URL de la empresa</Text>
+                <TextInput style={styles.input} value={sitioWeb} onChangeText={setSitioWeb} placeholder="Ej: www.miempresa.com" placeholderTextColor="#999" />
 
-            <Text style={styles.label}>Tema de la empresa</Text>
-            <View style={styles.temasContainer}>
-              {TEMAS.map((tema) => (
-                <TouchableOpacity
-                  key={tema.nombre}
-                  style={[styles.temaCard, colorSeleccionado === tema.base && styles.temaCardSeleccionada]}
-                  onPress={() => setColorSeleccionado(tema.base)}
-                >
-                  <View style={styles.temaFranjas}>
-                    <View style={[styles.temaFranja, { backgroundColor: tema.claro }]} />
-                    <View style={[styles.temaFranja, { backgroundColor: tema.medio }]} />
-                    <View style={[styles.temaFranja, { backgroundColor: tema.base }]} />
-                    <View style={[styles.temaFranja, { backgroundColor: tema.oscuro }]} />
-                  </View>
-                  <Text style={styles.temaNombre}>{tema.nombre}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+                <Text style={styles.label}>Tema de la empresa</Text>
+                <Text style={styles.ayudaTexto}>Toca un tema para ver cómo se vería en el fondo de esta pantalla. Se aplica a toda la app solo cuando guardas.</Text>
+                <View style={styles.temasContainer}>
+                  {TEMAS.map((tema) => (
+                    <TouchableOpacity
+                      key={tema.nombre}
+                      style={[styles.temaCard, colorSeleccionado === tema.base && styles.temaCardSeleccionada]}
+                      onPress={() => setColorSeleccionado(tema.base)}
+                    >
+                      <View style={styles.temaFranjas}>
+                        <View style={[styles.temaFranja, { backgroundColor: tema.claro }]} />
+                        <View style={[styles.temaFranja, { backgroundColor: tema.medio }]} />
+                        <View style={[styles.temaFranja, { backgroundColor: tema.base }]} />
+                        <View style={[styles.temaFranja, { backgroundColor: tema.oscuro }]} />
+                      </View>
+                      <Text style={styles.temaNombre}>{tema.nombre}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
 
-            <Text style={styles.seccionTitulo2}>Datos para contratos</Text>
-            <Text style={styles.ayudaTexto}>Estos datos aparecen automáticamente en los contratos que genera la app.</Text>
+            <TouchableOpacity style={styles.accordionHeader} onPress={() => alternarSeccion('contratos')} activeOpacity={0.7}>
+              <Text style={styles.accordionHeaderTexto}>📄  Datos para Contratos</Text>
+              <Text style={styles.accordionFlecha}>{seccionAbierta === 'contratos' ? '⌄' : '›'}</Text>
+            </TouchableOpacity>
 
-            <Text style={styles.label}>Cédula del representante legal</Text>
-            <TextInput style={styles.input} value={cedulaRepresentante} onChangeText={setCedulaRepresentante} placeholder="Ej: 1.234.567.891" placeholderTextColor="#999" keyboardType="number-pad" />
+            {seccionAbierta === 'contratos' && (
+              <View style={styles.accordionContenido}>
+                <Text style={styles.ayudaTexto}>Estos datos aparecen automáticamente en los contratos que genera la app.</Text>
 
-            <Text style={styles.label}>NIT de la empresa</Text>
-            <TextInput style={styles.input} value={nit} onChangeText={setNit} placeholder="Ej: 900123456-1" placeholderTextColor="#999" />
+                <Text style={styles.label}>Cédula del representante legal</Text>
+                <TextInput style={styles.input} value={cedulaRepresentante} onChangeText={setCedulaRepresentante} placeholder="Ej: 1.234.567.891" placeholderTextColor="#999" keyboardType="number-pad" />
 
-            <Text style={styles.label}>Banco</Text>
-            <TextInput style={styles.input} value={bancoNombre} onChangeText={setBancoNombre} placeholder="Ej: Nombre de tu banco" placeholderTextColor="#999" />
+                <Text style={styles.label}>NIT de la empresa</Text>
+                <TextInput style={styles.input} value={nit} onChangeText={setNit} placeholder="Ej: 900123456-1" placeholderTextColor="#999" />
 
-            <Text style={styles.label}>Tipo de cuenta</Text>
-            <TextInput style={styles.input} value={bancoTipoCuenta} onChangeText={setBancoTipoCuenta} placeholder="Ej: Ahorros" placeholderTextColor="#999" />
+                <Text style={styles.label}>Banco</Text>
+                <TextInput style={styles.input} value={bancoNombre} onChangeText={setBancoNombre} placeholder="Ej: Nombre de tu banco" placeholderTextColor="#999" />
 
-            <Text style={styles.label}>Número de cuenta</Text>
-            <TextInput style={styles.input} value={bancoNumero} onChangeText={setBancoNumero} placeholder="Ej: 00000000000" placeholderTextColor="#999" keyboardType="number-pad" />
+                <Text style={styles.label}>Tipo de cuenta</Text>
+                <TextInput style={styles.input} value={bancoTipoCuenta} onChangeText={setBancoTipoCuenta} placeholder="Ej: Ahorros" placeholderTextColor="#999" />
 
-            <Text style={styles.label}>Titular de la cuenta</Text>
-            <TextInput style={styles.input} value={bancoTitular} onChangeText={setBancoTitular} placeholder="Ej: Empresa Ejemplo S.A.S" placeholderTextColor="#999" />
+                <Text style={styles.label}>Número de cuenta</Text>
+                <TextInput style={styles.input} value={bancoNumero} onChangeText={setBancoNumero} placeholder="Ej: 00000000000" placeholderTextColor="#999" keyboardType="number-pad" />
+
+                <Text style={styles.label}>Titular de la cuenta</Text>
+                <TextInput style={styles.input} value={bancoTitular} onChangeText={setBancoTitular} placeholder="Ej: Empresa Ejemplo S.A.S" placeholderTextColor="#999" />
+              </View>
+            )}
           </>
         )}
 
-        {/* SECCIÓN USUARIO */}
-        <Text style={[styles.seccionTitulo, { marginTop: 32 }]}>Datos de tu Usuario</Text>
+        {/* SECCIÓN SEGURIDAD: nombre de usuario + contraseña, agrupados aparte del resto porque son
+            datos personales de la cuenta (no de la empresa) — visible para todas las áreas. */}
+        <TouchableOpacity style={[styles.accordionHeader, { marginTop: 18 }]} onPress={() => alternarSeccion('seguridad')} activeOpacity={0.7}>
+          <Text style={styles.accordionHeaderTexto}>🔒  Seguridad y Usuario</Text>
+          <Text style={styles.accordionFlecha}>{seccionAbierta === 'seguridad' ? '⌄' : '›'}</Text>
+        </TouchableOpacity>
 
-        <Text style={styles.label}>Tu nombre *</Text>
-        <TextInput style={styles.input} value={nombreUsuario} onChangeText={setNombreUsuario} placeholderTextColor="#999" />
+        {seccionAbierta === 'seguridad' && (
+          <View style={styles.accordionContenido}>
+            <Text style={styles.label}>Tu nombre *</Text>
+            <TextInput style={styles.input} value={nombreUsuario} onChangeText={setNombreUsuario} placeholderTextColor="#999" />
 
-        <Text style={styles.label}>Contraseña actual</Text>
-        <InputContraseña
-          value={contraseñaActual}
-          onChangeText={setContraseñaActual}
-          placeholder="Solo si vas a cambiar tu contraseña"
-        />
+            <Text style={styles.label}>Contraseña actual</Text>
+            <InputContraseña
+              value={contraseñaActual}
+              onChangeText={setContraseñaActual}
+              placeholder="Solo si vas a cambiar tu contraseña"
+            />
 
-        <Text style={styles.label}>Contraseña nueva (opcional)</Text>
-        <InputContraseña
-          value={contraseñaNueva}
-          onChangeText={setContraseñaNueva}
-          placeholder="Déjalo vacío si no quieres cambiarla"
-        />
+            <Text style={styles.label}>Contraseña nueva (opcional)</Text>
+            <InputContraseña
+              value={contraseñaNueva}
+              onChangeText={setContraseñaNueva}
+              placeholder="Déjalo vacío si no quieres cambiarla"
+            />
 
-        <Text style={styles.label}>Confirmar contraseña nueva</Text>
-        <InputContraseña
-          value={confirmarContraseñaNueva}
-          onChangeText={setConfirmarContraseñaNueva}
-          placeholder="Repite la contraseña nueva"
-        />
+            <Text style={styles.label}>Confirmar contraseña nueva</Text>
+            <InputContraseña
+              value={confirmarContraseñaNueva}
+              onChangeText={setConfirmarContraseñaNueva}
+              placeholder="Repite la contraseña nueva"
+            />
+          </View>
+        )}
 
         <TouchableOpacity style={styles.boton} onPress={guardarCambios} disabled={guardando}>
           {guardando ? (
@@ -325,10 +369,32 @@ export default function EditarPerfilScreen({ route, navigation }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f5f5' },
   scrollContent: { padding: 20, paddingBottom: 60 },
-  titulo: { fontSize: 24, fontWeight: 'bold', marginBottom: 8 },
+  titulo: { fontSize: 24, fontWeight: 'bold', marginBottom: 8, color: '#fff', textShadowColor: 'rgba(0,0,0,0.35)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
   seccionTitulo: { fontSize: 16, fontWeight: 'bold', color: '#1E90FF', marginTop: 8, marginBottom: 4, textTransform: 'uppercase' },
   seccionTitulo2: { fontSize: 14, fontWeight: 'bold', color: '#1E90FF', marginTop: 28, marginBottom: 4, textTransform: 'uppercase' },
   ayudaTexto: { fontSize: 12, color: '#888', marginBottom: 4 },
+  // ACORDEÓN (2026-08-28, a pedido del usuario): encabezados tipo Ajustes de Android/Samsung —
+  // tarjeta blanca siempre visible con título + flecha, que se rota/cambia al abrir. El contenido
+  // (accordionContenido) es una tarjeta blanca aparte, debajo, que solo se renderiza si esa
+  // sección está abierta (ver seccionAbierta en el componente).
+  accordionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    marginTop: 10,
+  },
+  accordionHeaderTexto: { fontSize: 15, fontWeight: 'bold', color: '#222' },
+  accordionFlecha: { fontSize: 20, color: '#999', fontWeight: '600' },
+  accordionContenido: {
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    padding: 16,
+    marginTop: 2,
+  },
   label: { fontSize: 13, fontWeight: '600', color: '#333', marginBottom: 6, marginTop: 16 },
   input: {
     backgroundColor: '#fff',
