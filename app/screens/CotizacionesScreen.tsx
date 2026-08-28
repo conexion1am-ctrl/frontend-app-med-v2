@@ -71,6 +71,22 @@ export default function CotizacionesScreen({ route }) {
   const [nombreNuevaPlantilla, setNombreNuevaPlantilla] = useState('');
   const [guardandoPlantilla, setGuardandoPlantilla] = useState(false);
 
+  // Editar plantilla existente (2026-08-28, a pedido del usuario): antes solo se podía crear o
+  // eliminar una plantilla — para actualizar los ítems de una ya guardada (ej. agregar un mueble
+  // nuevo a "Llano Azul 114 m2") tocaba borrarla y crearla de cero. Reutiliza el mismo diseño de
+  // ítems/condiciones de pago que la edición de cotizaciones, pero solo con los campos que sí
+  // tiene una plantilla (sin ciudad/propietario/proyecto/firmante, que son de la cotización).
+  const [modalEditarPlantillaVisible, setModalEditarPlantillaVisible] = useState(false);
+  const [editandoPlantilla, setEditandoPlantilla] = useState(null);
+  const [editPlantillaNombre, setEditPlantillaNombre] = useState('');
+  const [editPlantillaItems, setEditPlantillaItems] = useState([{ descripcion: '', cantidad: '', valor: '', seccion: '' }]);
+  const [editPlantillaDescuento, setEditPlantillaDescuento] = useState('');
+  const [editPlantillaSaludo, setEditPlantillaSaludo] = useState(SALUDO_DEFECTO);
+  const [editPlantillaParrafoContexto, setEditPlantillaParrafoContexto] = useState(PARRAFO_CONTEXTO_DEFECTO);
+  const [editPlantillaCondicionesPago, setEditPlantillaCondicionesPago] = useState(condicionesPagoDefecto());
+  const [editPlantillaTiempoEntrega, setEditPlantillaTiempoEntrega] = useState(TIEMPO_ENTREGA_DEFECTO);
+  const [guardandoEdicionPlantilla, setGuardandoEdicionPlantilla] = useState(false);
+
   const [menuCotizacion, setMenuCotizacion] = useState(null);
   const [modalEditarVisible, setModalEditarVisible] = useState(false);
   const [editandoCotizacion, setEditandoCotizacion] = useState(null);
@@ -226,6 +242,86 @@ export default function CotizacionesScreen({ route }) {
         },
       },
     ]);
+  };
+
+  // Abre el editor de una plantilla existente (2026-08-28): precarga todos sus campos, igual que
+  // aplicarPlantilla, pero guardando en el estado separado editPlantilla* en vez de en el
+  // formulario de Nueva Cotización — así editar una plantilla no interfiere con una cotización
+  // que se esté armando al mismo tiempo.
+  const abrirEditarPlantilla = (plantilla) => {
+    setModalPlantillasVisible(false);
+    setEditandoPlantilla(plantilla);
+    setEditPlantillaNombre(plantilla.nombre);
+    setEditPlantillaItems(
+      plantilla.items.map((i) => ({ ...i, cantidad: i.cantidad != null ? normalizarNumero(i.cantidad) : '', valor: normalizarNumero(i.valor) }))
+    );
+    setEditPlantillaDescuento(plantilla.descuento ? normalizarNumero(plantilla.descuento) : '');
+    setEditPlantillaSaludo(plantilla.saludo || SALUDO_DEFECTO);
+    setEditPlantillaParrafoContexto(plantilla.parrafo_contexto || PARRAFO_CONTEXTO_DEFECTO);
+    setEditPlantillaCondicionesPago(
+      plantilla.condiciones_pago && plantilla.condiciones_pago.length
+        ? plantilla.condiciones_pago.map((c) => ({ porcentaje: String(c.porcentaje ?? ''), descripcion: c.descripcion || '' }))
+        : condicionesPagoDefecto()
+    );
+    setEditPlantillaTiempoEntrega(plantilla.tiempo_entrega || TIEMPO_ENTREGA_DEFECTO);
+    setModalEditarPlantillaVisible(true);
+  };
+
+  const actualizarEditPlantillaItem = (index, campo, valor) => {
+    const nuevos = [...editPlantillaItems];
+    nuevos[index][campo] = valor;
+    setEditPlantillaItems(nuevos);
+  };
+  const agregarEditPlantillaItem = () => setEditPlantillaItems([...editPlantillaItems, { descripcion: '', cantidad: '', valor: '', seccion: '' }]);
+  const quitarEditPlantillaItem = (index) => {
+    if (editPlantillaItems.length === 1) return;
+    setEditPlantillaItems(editPlantillaItems.filter((_, i) => i !== index));
+  };
+
+  const actualizarEditPlantillaCondicionPago = (index, campo, valor) => {
+    const nuevas = [...editPlantillaCondicionesPago];
+    nuevas[index][campo] = valor;
+    setEditPlantillaCondicionesPago(nuevas);
+  };
+  const agregarEditPlantillaCondicionPago = () => setEditPlantillaCondicionesPago([...editPlantillaCondicionesPago, { porcentaje: '', descripcion: '' }]);
+  const quitarEditPlantillaCondicionPago = (index) => {
+    if (editPlantillaCondicionesPago.length === 1) return;
+    setEditPlantillaCondicionesPago(editPlantillaCondicionesPago.filter((_, i) => i !== index));
+  };
+
+  const subtotalEditPlantilla = editPlantillaItems.reduce((sum, item) => sum + (parseFloat(item.valor) || 0), 0);
+  const totalEditPlantilla = subtotalEditPlantilla - (parseFloat(editPlantillaDescuento) || 0);
+
+  const guardarEdicionPlantilla = async () => {
+    if (!editPlantillaNombre.trim()) {
+      Alert.alert('Campo obligatorio', 'Ponle un nombre a la plantilla.');
+      return;
+    }
+    const itemsValidos = editPlantillaItems.filter((i) => i.descripcion.trim() && i.valor);
+    if (itemsValidos.length === 0) {
+      Alert.alert('Campos incompletos', 'Agrega al menos un ítem con descripción y valor.');
+      return;
+    }
+    setGuardandoEdicionPlantilla(true);
+    try {
+      await api.put(`/cotizaciones/plantillas/${editandoPlantilla.id}`, {
+        nombre: editPlantillaNombre,
+        saludo: editPlantillaSaludo,
+        parrafo_contexto: editPlantillaParrafoContexto,
+        condiciones_pago: editPlantillaCondicionesPago.filter((c) => c.porcentaje || c.descripcion),
+        tiempo_entrega: editPlantillaTiempoEntrega,
+        items: itemsValidos,
+        descuento: editPlantillaDescuento || 0,
+      });
+      Alert.alert('¡Listo!', 'Plantilla actualizada exitosamente.');
+      setModalEditarPlantillaVisible(false);
+      cargarDatos();
+    } catch (error) {
+      console.error('Error actualizando plantilla:', error);
+      Alert.alert('Error', 'No se pudo actualizar la plantilla.');
+    } finally {
+      setGuardandoEdicionPlantilla(false);
+    }
   };
 
   // Filtra clientes por nombre o nombre de proyecto para el buscador del modal de Nueva
@@ -849,16 +945,20 @@ export default function CotizacionesScreen({ route }) {
           <View style={[styles.menuBox, { paddingBottom: Math.max(insets.bottom, 20) + 14 }]}>
             <Text style={styles.menuTitulo}>Elige una plantilla</Text>
             {plantillas.map((plantilla) => (
-              <TouchableOpacity
-                key={plantilla.id}
-                style={styles.menuOpcion}
-                onPress={() => aplicarPlantilla(plantilla)}
-                onLongPress={() => eliminarPlantilla(plantilla)}
-              >
-                <Text style={styles.menuOpcionTexto}>{plantilla.nombre}</Text>
-              </TouchableOpacity>
+              <View key={plantilla.id} style={styles.filaPlantilla}>
+                <TouchableOpacity
+                  style={styles.menuOpcionPlantilla}
+                  onPress={() => aplicarPlantilla(plantilla)}
+                  onLongPress={() => eliminarPlantilla(plantilla)}
+                >
+                  <Text style={styles.menuOpcionTexto}>{plantilla.nombre}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.botonEditarPlantilla} onPress={() => abrirEditarPlantilla(plantilla)}>
+                  <Text style={styles.botonEditarPlantillaTexto}>✏️</Text>
+                </TouchableOpacity>
+              </View>
             ))}
-            <Text style={styles.menuNotaTexto}>Mantén presionada una plantilla para eliminarla</Text>
+            <Text style={styles.menuNotaTexto}>Toca ✏️ para editarla o mantenla presionada para eliminarla</Text>
             <TouchableOpacity style={styles.menuOpcion} onPress={() => setModalPlantillasVisible(false)}>
               <Text style={[styles.menuOpcionTexto, { color: '#888' }]}>Cancelar</Text>
             </TouchableOpacity>
@@ -1022,6 +1122,126 @@ export default function CotizacionesScreen({ route }) {
         </KeyboardAvoidingView>
       </Modal>
 
+      {/* MODAL: Editar plantilla (2026-08-28) */}
+      <Modal visible={modalEditarPlantillaVisible} animationType="slide">
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <ScrollView style={styles.modalContainer} contentContainerStyle={{ paddingTop: Math.max(insets.top, 20), paddingHorizontal: 20, paddingBottom: Math.max(insets.bottom, 60) }}>
+            <Text style={styles.modalTitulo}>Editar Plantilla</Text>
+
+            <Text style={styles.label}>Nombre de la plantilla</Text>
+            <TextInput style={styles.input} value={editPlantillaNombre} onChangeText={setEditPlantillaNombre} placeholder="Ej: Llano Azul 114 m2" placeholderTextColor="#999" />
+
+            <Text style={styles.label}>Saludo</Text>
+            <TextInput style={styles.input} value={editPlantillaSaludo} onChangeText={setEditPlantillaSaludo} placeholder="Ej: Cordial Saludo:" placeholderTextColor="#999" />
+
+            <Text style={styles.label}>Párrafo de contexto</Text>
+            <TextInput style={[styles.input, styles.inputMultilinea]} value={editPlantillaParrafoContexto} onChangeText={setEditPlantillaParrafoContexto} multiline placeholderTextColor="#999" />
+
+            <Text style={styles.label}>Ítems de la plantilla *</Text>
+            {editPlantillaItems.map((item, index) => (
+              <View key={index} style={styles.itemBloque}>
+                <View style={styles.itemSeccionBotones}>
+                  <TouchableOpacity
+                    style={[styles.itemSeccionBoton, item.seccion === 'Obra blanca' && styles.itemSeccionBotonSeleccionado]}
+                    onPress={() => actualizarEditPlantillaItem(index, 'seccion', item.seccion === 'Obra blanca' ? '' : 'Obra blanca')}
+                  >
+                    <Text style={[styles.itemSeccionBotonTexto, item.seccion === 'Obra blanca' && styles.itemSeccionBotonTextoSeleccionado]}>Obra blanca</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.itemSeccionBoton, item.seccion === 'Carpintería' && styles.itemSeccionBotonSeleccionado]}
+                    onPress={() => actualizarEditPlantillaItem(index, 'seccion', item.seccion === 'Carpintería' ? '' : 'Carpintería')}
+                  >
+                    <Text style={[styles.itemSeccionBotonTexto, item.seccion === 'Carpintería' && styles.itemSeccionBotonTextoSeleccionado]}>Carpintería</Text>
+                  </TouchableOpacity>
+                </View>
+                <TextInput
+                  style={[styles.input, styles.inputDescripcionItem]}
+                  value={item.descripcion}
+                  onChangeText={(texto) => actualizarEditPlantillaItem(index, 'descripcion', texto)}
+                  placeholder="Descripción"
+                  placeholderTextColor="#999"
+                  multiline
+                />
+                <View style={styles.itemFila}>
+                  <TextInput
+                    style={[styles.input, { flex: 0.7 }]}
+                    value={item.cantidad}
+                    onChangeText={(texto) => actualizarEditPlantillaItem(index, 'cantidad', texto.replace(/[^0-9.]/g, ''))}
+                    placeholder="Cant."
+                    placeholderTextColor="#999"
+                    keyboardType="numeric"
+                  />
+                  <InputMoneda
+                    style={[styles.input, styles.inputValorItem]}
+                    value={item.valor}
+                    onChangeValor={(texto) => actualizarEditPlantillaItem(index, 'valor', texto)}
+                    placeholder="Valor"
+                  />
+                  {editPlantillaItems.length > 1 && (
+                    <TouchableOpacity onPress={() => quitarEditPlantillaItem(index)} style={styles.botonQuitarItem}>
+                      <Text style={styles.botonQuitarItemTexto}>✕</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
+            ))}
+
+            <TouchableOpacity style={styles.botonAgregarItem} onPress={agregarEditPlantillaItem}>
+              <Text style={styles.botonAgregarItemTexto}>+ Agregar ítem</Text>
+            </TouchableOpacity>
+
+            <Text style={styles.label}>Descuento (opcional)</Text>
+            <InputMoneda
+              style={styles.input}
+              value={editPlantillaDescuento}
+              onChangeValor={(texto) => setEditPlantillaDescuento(texto)}
+              placeholder="Ej: 1680000"
+            />
+
+            <Text style={styles.totalTexto}>Total: {formatearMoneda(totalEditPlantilla)}</Text>
+
+            <Text style={styles.label}>Condiciones de pago</Text>
+            <Text style={styles.notaTexto}>{PARRAFO_CONDICIONES_PAGO}</Text>
+            {editPlantillaCondicionesPago.map((cond, index) => (
+              <View key={index} style={styles.filaCondicionPago}>
+                <TextInput
+                  style={[styles.input, styles.inputPorcentaje]}
+                  value={cond.porcentaje}
+                  onChangeText={(texto) => actualizarEditPlantillaCondicionPago(index, 'porcentaje', texto.replace(/[^0-9]/g, ''))}
+                  placeholder="%"
+                  placeholderTextColor="#999"
+                  keyboardType="numeric"
+                />
+                <TextInput
+                  style={[styles.input, styles.inputDescripcionCondicion]}
+                  value={cond.descripcion}
+                  onChangeText={(texto) => actualizarEditPlantillaCondicionPago(index, 'descripcion', texto)}
+                  placeholder="Descripción"
+                  placeholderTextColor="#999"
+                />
+                <TouchableOpacity onPress={() => quitarEditPlantillaCondicionPago(index)}>
+                  <Text style={styles.botonQuitarItem}>✕</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+            <TouchableOpacity style={styles.botonAgregarItem} onPress={agregarEditPlantillaCondicionPago}>
+              <Text style={styles.botonAgregarItemTexto}>+ Agregar condición</Text>
+            </TouchableOpacity>
+
+            <Text style={styles.label}>Tiempo de entrega</Text>
+            <TextInput style={styles.input} value={editPlantillaTiempoEntrega} onChangeText={setEditPlantillaTiempoEntrega} placeholderTextColor="#999" />
+
+            <TouchableOpacity style={styles.botonGuardar} onPress={guardarEdicionPlantilla} disabled={guardandoEdicionPlantilla}>
+              {guardandoEdicionPlantilla ? <ActivityIndicator color="#fff" /> : <Text style={styles.botonAgregarTexto}>GUARDAR CAMBIOS</Text>}
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.botonCancelar} onPress={() => setModalEditarPlantillaVisible(false)}>
+              <Text style={styles.botonCancelarTexto}>Cancelar</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </Modal>
+
     </View>
   );
 }
@@ -1141,6 +1361,10 @@ const styles = StyleSheet.create({
   menuOpcion: { paddingVertical: 14, borderTopWidth: 1, borderTopColor: '#f0f0f0' },
   menuOpcionTexto: { fontSize: 16, color: '#333', textAlign: 'center' },
   menuNotaTexto: { fontSize: 13, color: '#999', textAlign: 'center', paddingVertical: 14 },
+  filaPlantilla: { flexDirection: 'row', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#f0f0f0' },
+  menuOpcionPlantilla: { flex: 1, paddingVertical: 14 },
+  botonEditarPlantilla: { paddingHorizontal: 12, paddingVertical: 14 },
+  botonEditarPlantillaTexto: { fontSize: 18 },
   botonPlantilla: { backgroundColor: '#eef4ff', borderRadius: 10, padding: 14, alignItems: 'center', marginBottom: 18 },
   botonPlantillaTexto: { color: '#2255aa', fontWeight: 'bold', fontSize: 14 },
   botonGuardarPlantilla: { alignItems: 'center', marginTop: 14, padding: 10 },
