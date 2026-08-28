@@ -336,7 +336,7 @@ export default function ClientesScreen({ route }) {
             <Text style={styles.label}>Cédula (opcional)</Text>
             <TextInput style={styles.input} value={cedula} onChangeText={setCedula} placeholder="Ej: 1.234.567.891" placeholderTextColor="#999" keyboardType="number-pad" />
 
-            <Text style={styles.label}>Metros cuadrados (opcional)</Text>
+            <Text style={styles.label}>Área (m²) (opcional)</Text>
             <TextInput style={styles.input} value={mts2} onChangeText={setMts2} placeholder="Ej: 180" placeholderTextColor="#999" keyboardType="number-pad" />
 
             <Text style={styles.label}>Dirección (opcional)</Text>
@@ -383,7 +383,7 @@ export default function ClientesScreen({ route }) {
             <Text style={styles.label}>Cédula (opcional)</Text>
             <TextInput style={styles.input} value={editCedula} onChangeText={setEditCedula} placeholder="Ej: 1.234.567.891" placeholderTextColor="#999" keyboardType="number-pad" />
 
-            <Text style={styles.label}>Metros cuadrados (opcional)</Text>
+            <Text style={styles.label}>Área (m²) (opcional)</Text>
             <TextInput style={styles.input} value={editMts2} onChangeText={setEditMts2} placeholder="Ej: 180" placeholderTextColor="#999" keyboardType="number-pad" />
 
             <Text style={styles.label}>Dirección (opcional)</Text>
