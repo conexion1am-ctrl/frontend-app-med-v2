@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import EncabezadoLogo from '../components/EncabezadoLogo';
+import { temaDesdeColor } from '../utils/temas';
 
 // Pantalla "Revisar y editar documento" del contrato (2026-08-25, a pedido del usuario): antes el
 // PDF del contrato se generaba automático y en silencio al aceptar la cotización, con TODO el
@@ -17,6 +18,8 @@ import EncabezadoLogo from '../components/EncabezadoLogo';
 export default function RevisarContratoScreen({ route, navigation }) {
   const { empresa, contratoId } = route.params;
   const insets = useSafeAreaInsets();
+  const colorEmpresa = empresa?.color_hex || '#1E90FF';
+  const tema = temaDesdeColor(colorEmpresa);
 
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
@@ -196,7 +199,7 @@ export default function RevisarContratoScreen({ route, navigation }) {
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <EncabezadoLogo empresa={empresa} />
-      <ScrollView style={styles.container} contentContainerStyle={{ padding: 20, paddingBottom: 40 }}>
+      <ScrollView style={[styles.container, { backgroundColor: tema.claro }]} contentContainerStyle={{ padding: 20, paddingBottom: 40 }}>
         <Text style={styles.titulo}>Revisar y editar documento</Text>
         <Text style={styles.subtitulo}>
           Todo el texto es editable, incluidas las cláusulas legales. Los cambios solo quedan en el PDF cuando lo generes.

@@ -6,10 +6,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import EncabezadoLogo from '../components/EncabezadoLogo';
 import { permisosDe, tieneAccesoAFicha } from '../utils/roles';
 import { obtenerMensajesSinLeer, areaTieneSinLeer, actualizarBadge } from '../utils/mensajesSinLeer';
+import { temaDesdeColor } from '../utils/temas';
 
 export default function DetalleProyectoScreen({ route, navigation }) {
   const { empresa, proyecto, usuario } = route.params;
   const insets = useSafeAreaInsets();
+  const colorEmpresa = empresa.color_hex || '#1E90FF';
+  const tema = temaDesdeColor(colorEmpresa);
   const puedeGestionar = permisosDe(empresa).gestionarProyectos;
   const [detalle, setDetalle] = useState(null);
   const [areas, setAreas] = useState([]);
@@ -187,7 +190,7 @@ export default function DetalleProyectoScreen({ route, navigation }) {
   return (
     <View style={{ flex: 1 }}>
       <EncabezadoLogo empresa={empresa} />
-      <ScrollView style={[styles.container, { backgroundColor: empresa.color_hex || '#1E90FF' }]} contentContainerStyle={styles.scrollContent}>
+      <ScrollView style={[styles.container, { backgroundColor: tema.claro }]} contentContainerStyle={styles.scrollContent}>
         <Text style={styles.nombre}>{detalle.nombre}</Text>
         {detalle.direccion ? (
           <View style={styles.direccionFila}>
@@ -401,7 +404,7 @@ const styles = StyleSheet.create({
   areaOpcionTexto: { fontSize: 13, color: '#555' },
   areaOpcionTextoSeleccionado: { color: '#fff', fontWeight: '600' },
   modalBotonesFooter: { paddingHorizontal: 20, paddingBottom: 20 },
-  notaTexto: { fontSize: 12, color: '#eee', marginBottom: 8, fontStyle: 'italic' },
+  notaTexto: { fontSize: 12, color: '#888', marginBottom: 8, fontStyle: 'italic' },
   menuOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
   menuBox: { backgroundColor: '#fff', borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 20, paddingBottom: 36 },
   menuTitulo: { fontSize: 15, fontWeight: 'bold', color: '#888', marginBottom: 12, textAlign: 'center' },

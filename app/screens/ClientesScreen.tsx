@@ -5,10 +5,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import EncabezadoLogo from '../components/EncabezadoLogo';
 import InputCelular, { detectarPaisPorDispositivo, PAISES } from '../components/InputCelular';
 import { permisosDe } from '../utils/roles';
+import { temaDesdeColor } from '../utils/temas';
 
 export default function ClientesScreen({ route }) {
   const { empresa, usuario } = route.params;
   const insets = useSafeAreaInsets();
+  const colorEmpresa = empresa.color_hex || '#1E90FF';
+  const tema = temaDesdeColor(colorEmpresa);
   const permisos = permisosDe(empresa);
   const [clientes, setClientes] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -239,7 +242,7 @@ export default function ClientesScreen({ route }) {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: empresa.color_hex || '#1E90FF' }]}>
+    <View style={[styles.container, { backgroundColor: tema.claro }]}>
       <EncabezadoLogo empresa={empresa} />
       <View style={styles.buscadorContainer}>
         <TextInput

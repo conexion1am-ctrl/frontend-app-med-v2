@@ -1,13 +1,18 @@
 import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import EncabezadoLogo from '../components/EncabezadoLogo';
+import { temaDesdeColor } from '../utils/temas';
 
 export default function BienvenidaScreen({ route, navigation }) {
   const { empresa, usuario } = route.params;
   const colorEmpresa = empresa.color_hex || '#1E90FF';
+  // Esta pantalla se queda en el tono FUERTE del tema (tema.base, igual a colorEmpresa) a
+  // propósito: es la bienvenida inicial, mismo criterio de "franja de acento" que EncabezadoLogo.
+  // Por eso el texto sigue blanco con sombra (sombreadoTexto) — NO se cambia a tema.oscuro aquí.
+  const tema = temaDesdeColor(colorEmpresa);
 
   return (
-    <View style={[styles.center, { backgroundColor: colorEmpresa }]}>
+    <View style={[styles.center, { backgroundColor: tema.base }]}>
       <EncabezadoLogo empresa={empresa} />
       <Text style={styles.bienvenidaTitulo}>¡Bienvenido a C&D Manager!</Text>
       <Text style={styles.bienvenidaEmpresa}>{empresa.nombre}</Text>

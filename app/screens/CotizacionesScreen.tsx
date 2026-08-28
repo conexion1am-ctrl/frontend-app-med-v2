@@ -6,6 +6,7 @@ import EncabezadoLogo from '../components/EncabezadoLogo';
 import InputMoneda from '../components/InputMoneda';
 import { compartirPdfDocumento, descargarPdfDocumento, generarPdfDocumento } from '../utils/generarPdfCotizacion';
 import { esGerencia } from '../utils/roles';
+import { temaDesdeColor } from '../utils/temas';
 
 const formatearMoneda = (valor) => {
   const numero = parseFloat(valor) || 0;
@@ -33,6 +34,8 @@ export default function CotizacionesScreen({ route }) {
   const { empresa, usuario } = route.params;
   const puedeEliminarCotizaciones = esGerencia(empresa);
   const insets = useSafeAreaInsets();
+  const colorEmpresa = empresa.color_hex || '#1E90FF';
+  const tema = temaDesdeColor(colorEmpresa);
   const [cotizaciones, setCotizaciones] = useState([]);
   const [clientes, setClientes] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -568,7 +571,7 @@ export default function CotizacionesScreen({ route }) {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: empresa.color_hex || '#1E90FF' }]}>
+    <View style={[styles.container, { backgroundColor: tema.claro }]}>
       <EncabezadoLogo empresa={empresa} />
       <View style={styles.buscadorContainer}>
         <TextInput

@@ -5,6 +5,7 @@ import { ActivityIndicator, Alert, BackHandler, KeyboardAvoidingView, Linking, M
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import EncabezadoLogo from '../components/EncabezadoLogo';
 import InputMoneda from '../components/InputMoneda';
+import { temaDesdeColor } from '../utils/temas';
 
 const formatearMoneda = (valor) => {
   const numero = parseFloat(valor) || 0;
@@ -49,6 +50,8 @@ const ETIQUETAS_TIPO_COSTO = { materiales: 'Materiales', mano_obra: 'Mano de obr
 export default function EstadisticasScreen({ route }) {
   const { empresa } = route.params;
   const insets = useSafeAreaInsets();
+  const colorEmpresa = empresa.color_hex || '#1E90FF';
+  const tema = temaDesdeColor(colorEmpresa);
   const [proyectos, setProyectos] = useState([]);
   const [proyectoSeleccionado, setProyectoSeleccionado] = useState(null);
   const [estadisticas, setEstadisticas] = useState(null);
@@ -412,7 +415,7 @@ export default function EstadisticasScreen({ route }) {
   // Pantalla 1: elegir proyecto
   if (!proyectoSeleccionado) {
     return (
-      <View style={[styles.container, { backgroundColor: empresa.color_hex || '#1E90FF' }]}>
+      <View style={[styles.container, { backgroundColor: tema.claro }]}>
         <EncabezadoLogo empresa={empresa} />
         <ScrollView contentContainerStyle={styles.scrollContent}>
           <Text style={styles.seccionTitulo}>Elige un proyecto para ver sus estadísticas</Text>
@@ -463,7 +466,7 @@ export default function EstadisticasScreen({ route }) {
 
   // Pantalla 2: estadísticas del proyecto elegido
   return (
-    <View style={[styles.container, { backgroundColor: empresa.color_hex || '#1E90FF' }]}>
+    <View style={[styles.container, { backgroundColor: tema.claro }]}>
       <EncabezadoLogo empresa={empresa} />
       <TouchableOpacity
         style={styles.botonVolver}

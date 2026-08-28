@@ -4,6 +4,7 @@ import { ActivityIndicator, Alert, Linking, Modal, ScrollView, StyleSheet, Text,
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import EncabezadoLogo from '../components/EncabezadoLogo';
 import { esGerencia } from '../utils/roles';
+import { temaDesdeColor } from '../utils/temas';
 
 const formatearMoneda = (valor) => {
   const numero = parseFloat(valor) || 0;
@@ -23,6 +24,8 @@ export default function ContratosScreen({ route, navigation }) {
   const { empresa, usuario } = route.params;
   const insets = useSafeAreaInsets();
   const puedeEliminarContratos = esGerencia(empresa);
+  const colorEmpresa = empresa.color_hex || '#1E90FF';
+  const tema = temaDesdeColor(colorEmpresa);
   const [contratos, setContratos] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [menuContrato, setMenuContrato] = useState(null);
@@ -150,7 +153,7 @@ export default function ContratosScreen({ route, navigation }) {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: empresa.color_hex || '#1E90FF' }]}>
+    <View style={[styles.container, { backgroundColor: tema.claro }]}>
       <EncabezadoLogo empresa={empresa} />
       <View style={styles.buscadorContainer}>
         <TextInput

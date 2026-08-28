@@ -20,8 +20,23 @@ export default function EncabezadoLogo({ empresa, usuario, completo = false }) {
   const insets = useSafeAreaInsets();
   if (!empresa) return null;
 
+  // ACENTO DE TEMA (2026-08-27, fase 2, a pedido del usuario): antes este componente era
+  // transparente y dejaba ver el color plano de fondo de la pantalla detrás. Ahora, si la
+  // pantalla le pasa el tono "base" del tema (empresa.color_hex), este encabezado pinta su
+  // propio fondo con ese tono y esquinas redondeadas abajo — se ve como una franja/tarjeta de
+  // acento en la parte de arriba, en vez de fundirse con el resto de la pantalla. Si ninguna
+  // pantalla pasa colorAcento (código viejo sin actualizar), sigue siendo transparente como
+  // siempre — cambio 100% aditivo, no rompe ninguna pantalla que no se haya tocado todavía.
+  const colorAcento = empresa.color_hex || null;
+
   return (
-    <View style={[styles.contenedor, { paddingTop: Math.max(insets.top, 16) }]}>
+    <View
+      style={[
+        styles.contenedor,
+        { paddingTop: Math.max(insets.top, 16) },
+        colorAcento && { backgroundColor: colorAcento, borderBottomLeftRadius: 24, borderBottomRightRadius: 24 },
+      ]}
+    >
       {empresa.logo_url ? (
         <Image source={{ uri: empresa.logo_url }} style={styles.logo} />
       ) : (
@@ -57,7 +72,7 @@ const sombreadoTexto = {
 const styles = StyleSheet.create({
   contenedor: {
     alignItems: 'center',
-    paddingBottom: 12,
+    paddingBottom: 20,
   },
   logo: {
     width: 64,

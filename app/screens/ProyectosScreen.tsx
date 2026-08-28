@@ -6,10 +6,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import EncabezadoLogo from '../components/EncabezadoLogo';
 import { esAccesoReducido, esGerencia, permisosDe, puedeVerClienteEnProyectos } from '../utils/roles';
 import { obtenerMensajesSinLeer, proyectoTieneSinLeer, actualizarBadge } from '../utils/mensajesSinLeer';
+import { temaDesdeColor } from '../utils/temas';
 
 export default function ProyectosScreen({ route, navigation }) {
   const { empresa, usuario } = route.params;
   const insets = useSafeAreaInsets();
+  const colorEmpresa = empresa.color_hex || '#1E90FF';
+  const tema = temaDesdeColor(colorEmpresa);
   const accesoReducido = esAccesoReducido(empresa);
   const puedeGestionar = permisosDe(empresa).gestionarProyectos;
   const puedeEliminar = esGerencia(empresa);
@@ -198,7 +201,7 @@ export default function ProyectosScreen({ route, navigation }) {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: empresa.color_hex || '#1E90FF' }]}>
+    <View style={[styles.container, { backgroundColor: tema.claro }]}>
       <EncabezadoLogo empresa={empresa} />
       <View style={styles.buscadorContainer}>
         <TextInput

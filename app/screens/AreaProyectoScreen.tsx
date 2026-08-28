@@ -18,6 +18,7 @@ import ImagenZoom from '../components/ImagenZoom';
 import Visor3D from '../components/Visor3D';
 import { gerenciaRequiereContactoPrevio, pestanasAreaProyecto, permisosDe } from '../utils/roles';
 import { obtenerMensajesSinLeer, personaTieneSinLeer, actualizarBadge } from '../utils/mensajesSinLeer';
+import { temaDesdeColor } from '../utils/temas';
 
 // Fecha + hora en la hora local del celular (no UTC), para que "8:32 PM" coincida con el reloj
 // real del usuario. Se usa como pie de página en fotos de avance, planos 3D y mensajes de chat.
@@ -81,6 +82,8 @@ function BurbujaAudio({ uri }) {
 export default function AreaProyectoScreen({ route }) {
   const { empresa, proyecto, area, usuario } = route.params;
   const insets = useSafeAreaInsets();
+  const colorEmpresa = empresa.color_hex || '#1E90FF';
+  const tema = temaDesdeColor(colorEmpresa);
 
   const permisos = permisosDe(empresa);
   const pestanasVisibles = pestanasAreaProyecto(empresa); // ['equipo', 'fotos', 'planos3d'] o subconjunto
@@ -832,7 +835,7 @@ export default function AreaProyectoScreen({ route }) {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: empresa.color_hex || '#1E90FF' }]}>
+    <View style={[styles.container, { backgroundColor: tema.claro }]}>
       <EncabezadoLogo empresa={empresa} />
 
       <View style={styles.tabsContainer}>
@@ -1250,7 +1253,7 @@ export default function AreaProyectoScreen({ route }) {
         onRequestClose={cerrarChat}
       >
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={80}>
-          <View style={styles.chatModalContainer}>
+          <View style={[styles.chatModalContainer, { backgroundColor: tema.claro }]}>
             {/* paddingTop dinámico: en Android con edgeToEdgeEnabled el paddingTop fijo del estilo no alcanza para esquivar la barra de estado */}
             <View style={[styles.chatHeader, { paddingTop: Math.max(insets.top, Platform.OS === 'ios' ? 50 : 16) }]}>
               <TouchableOpacity onPress={cerrarChat}>
@@ -1268,13 +1271,18 @@ export default function AreaProyectoScreen({ route }) {
                 keyExtractor={(item) => item.id.toString()}
                 style={styles.chatLista}
                 contentContainerStyle={{ padding: 16 }}
-                renderItem={({ item }) => (
+                renderItem={({ item }) => {
+                  // Acento de tema (2026-08-27, fase 2): burbuja propia con el tono "base" del
+                  // tema de la empresa y texto blanco; la burbuja del otro se mantiene blanca,
+                  // solo cambia el nombre del autor a tema.oscuro en vez del azul fijo de antes.
+                  const esPropio = item.usuario_id === usuario.id;
+                  return (
                   <TouchableOpacity
-                    activeOpacity={item.usuario_id === usuario.id ? 0.6 : 1}
-                    onLongPress={() => item.usuario_id === usuario.id && setMenuMensaje(item)}
-                    style={styles.mensajeCard}
+                    activeOpacity={esPropio ? 0.6 : 1}
+                    onLongPress={() => esPropio && setMenuMensaje(item)}
+                    style={[styles.mensajeCard, esPropio && { backgroundColor: tema.base, borderColor: tema.base }]}
                   >
-                    <Text style={styles.mensajeAutor}>{item.usuario_nombre}</Text>
+                    <Text style={[styles.mensajeAutor, esPropio ? { color: '#fff' } : { color: tema.oscuro }]}>{item.usuario_nombre}</Text>
                     {item.archivos?.map((archivo) =>
                       archivo.tipo_archivo === 'imagen' ? (
                         <TouchableOpacity key={archivo.id} onPress={() => setFotoAmpliada({ foto_url: archivo.url_archivo, usuario_nombre: item.usuario_nombre, created_at: item.created_at })}>
@@ -1288,10 +1296,11 @@ export default function AreaProyectoScreen({ route }) {
                         </TouchableOpacity>
                       )
                     )}
-                    {!!item.contenido && <Text style={styles.mensajeTexto}>{item.contenido}</Text>}
-                    <Text style={styles.mensajeHora}>{formatearFechaHora(item.created_at)}</Text>
+                    {!!item.contenido && <Text style={[styles.mensajeTexto, esPropio && { color: '#fff' }]}>{item.contenido}</Text>}
+                    <Text style={[styles.mensajeHora, esPropio && { color: 'rgba(255,255,255,0.8)' }]}>{formatearFechaHora(item.created_at)}</Text>
                   </TouchableOpacity>
-                )}
+                  );
+                }}
                 ListEmptyComponent={<Text style={styles.vacioTexto}>Sin mensajes todavía. Escribe el primero.</Text>}
               />
             )}

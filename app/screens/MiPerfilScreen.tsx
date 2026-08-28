@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import EncabezadoLogo from '../components/EncabezadoLogo';
 import InputContraseña from '../components/InputContraseña';
+import { temaDesdeColor } from '../utils/temas';
 
 // Convierte "2026-08-15" a "15-08-26" (formato de fecha estándar de la app)
 const formatearFechaDdMmAa = (fecha) => {
@@ -29,6 +30,8 @@ const estadoArl = (fechaVencimientoIso) => {
 // acceso a los datos de la empresa (logo, color, nombre) como sí lo tiene EditarPerfilScreen.
 export default function MiPerfilScreen({ route, navigation }) {
   const { empresa, usuario } = route.params;
+  const colorEmpresa = empresa.color_hex || '#1E90FF';
+  const tema = temaDesdeColor(colorEmpresa);
   const [datos, setDatos] = useState(null);
   const [cargando, setCargando] = useState(true);
 
@@ -95,9 +98,9 @@ export default function MiPerfilScreen({ route, navigation }) {
   const estado = estadoArl(datos.arl_vencimiento);
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: tema.claro }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <EncabezadoLogo empresa={empresa} />
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView style={{ backgroundColor: tema.claro }} contentContainerStyle={styles.scrollContent}>
         <Text style={styles.seccionTitulo}>Mis datos</Text>
         <View style={styles.tarjeta}>
           <Text style={styles.label}>Nombre</Text>

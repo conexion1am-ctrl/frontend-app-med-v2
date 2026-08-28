@@ -10,6 +10,7 @@ import { storage } from '../../firebaseConfig';
 import EncabezadoLogo from '../components/EncabezadoLogo';
 import InputCelular, { detectarPaisPorDispositivo, PAISES } from '../components/InputCelular';
 import { esGerencia, permisosDe } from '../utils/roles';
+import { temaDesdeColor } from '../utils/temas';
 
 // Quita mayúsculas y acentos para poder comparar/filtrar texto sin importar cómo se escribió
 const textoNormalizado = (t) => (t || '').toString().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
@@ -43,6 +44,8 @@ export default function GrupoTrabajoScreen({ route }) {
   const insets = useSafeAreaInsets();
   const permisos = permisosDe(empresa);
   const puedeGestionarGerencia = esGerencia(empresa);
+  const colorEmpresa = empresa.color_hex || '#1E90FF';
+  const tema = temaDesdeColor(colorEmpresa);
   const [personal, setPersonal] = useState([]);
   const [areas, setAreas] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -549,7 +552,7 @@ export default function GrupoTrabajoScreen({ route }) {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: empresa.color_hex || '#1E90FF' }]}>
+    <View style={[styles.container, { backgroundColor: tema.claro }]}>
       <EncabezadoLogo empresa={empresa} />
       <View style={styles.buscadorContainer}>
         <TextInput
