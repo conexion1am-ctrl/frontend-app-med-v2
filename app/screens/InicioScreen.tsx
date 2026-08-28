@@ -4,6 +4,7 @@ import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'rea
 import EncabezadoLogo from '../components/EncabezadoLogo';
 import { setNavigationGlobal } from '../utils/navigationGlobal';
 import { esAccesoReducido, permisosDe, usaPerfilCompleto } from '../utils/roles';
+import { temaDesdeColor } from '../utils/temas';
 
 // Arma el menú de Inicio según los permisos del área del usuario. Cada botón se muestra
 // solo si el permiso correspondiente está en true (o, para "editar_perfil", solo si tiene
@@ -35,6 +36,7 @@ function construirBotones(empresa) {
 export default function InicioScreen({ route, navigation }) {
   const { empresa, usuario } = route.params;
   const colorEmpresa = empresa.color_hex || '#1E90FF';
+  const tema = temaDesdeColor(colorEmpresa);
   const BOTONES_INICIO = construirBotones(empresa);
 
   useEffect(() => {
@@ -86,10 +88,10 @@ export default function InicioScreen({ route, navigation }) {
         {BOTONES_INICIO.map((boton) => (
           <TouchableOpacity
             key={boton.id}
-            style={styles.inicioBoton}
+            style={[styles.inicioBoton, { backgroundColor: tema.claro }]}
             onPress={() => manejarBoton(boton)}
           >
-            <Text style={styles.inicioBotonTexto}>{boton.titulo}</Text>
+            <Text style={[styles.inicioBotonTexto, { color: tema.oscuro }]}>{boton.titulo}</Text>
           </TouchableOpacity>
         ))}
 
@@ -109,11 +111,10 @@ const styles = StyleSheet.create({
   inicioContainer: { flex: 1, paddingTop: 20 },
   inicioBotones: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 40, gap: 14 },
   inicioBoton: {
-    backgroundColor: 'rgba(255,255,255,0.95)',
     borderRadius: 12,
     padding: 18,
   },
-  inicioBotonTexto: { fontSize: 17, fontWeight: '600', color: '#333' },
+  inicioBotonTexto: { fontSize: 17, fontWeight: '600' },
   botonCerrarSesion: {
     backgroundColor: 'rgba(0,0,0,0.15)',
     borderRadius: 12,
