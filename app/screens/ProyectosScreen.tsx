@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import EncabezadoLogo from '../components/EncabezadoLogo';
-import { esAccesoReducido, esGerencia, permisosDe, puedeVerClienteEnProyectos } from '../utils/roles';
+import { esAccesoReducido, permisosDe, puedeEliminarProyectos, puedeVerClienteEnProyectos } from '../utils/roles';
 import { obtenerMensajesSinLeer, proyectoTieneSinLeer, actualizarBadge } from '../utils/mensajesSinLeer';
 import { temaDesdeColor } from '../utils/temas';
 
@@ -15,7 +15,7 @@ export default function ProyectosScreen({ route, navigation }) {
   const tema = temaDesdeColor(colorEmpresa);
   const accesoReducido = esAccesoReducido(empresa);
   const puedeGestionar = permisosDe(empresa).gestionarProyectos;
-  const puedeEliminar = esGerencia(empresa);
+  const puedeEliminar = puedeEliminarProyectos(empresa);
   // Solo Gerencia y Área Administrativa ven a qué cliente pertenece cada proyecto en esta
   // lista (a pedido explícito del usuario) — el resto de áreas, aunque tengan acceso a
   // Proyectos, no deben ver ese dato acá.

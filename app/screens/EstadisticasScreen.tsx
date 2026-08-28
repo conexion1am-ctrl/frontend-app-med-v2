@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import EncabezadoLogo from '../components/EncabezadoLogo';
 import InputMoneda from '../components/InputMoneda';
 import { temaDesdeColor } from '../utils/temas';
+import { esGerencia } from '../utils/roles';
 
 const formatearMoneda = (valor) => {
   const numero = parseFloat(valor) || 0;
@@ -48,7 +49,7 @@ const fechaHoyDdMmAa = () => {
 const ETIQUETAS_TIPO_COSTO = { materiales: 'Materiales', mano_obra: 'Mano de obra', imprevistos: 'Imprevistos' };
 
 export default function EstadisticasScreen({ route }) {
-  const { empresa } = route.params;
+  const { empresa, usuario } = route.params;
   const insets = useSafeAreaInsets();
   const colorEmpresa = empresa.color_hex || '#1E90FF';
   const tema = temaDesdeColor(colorEmpresa);
@@ -90,7 +91,9 @@ export default function EstadisticasScreen({ route }) {
   const descargarEstadoFinanciero = async (proyecto) => {
     setGenerandoExcel(true);
     try {
-      const res = await api.get(`/estadisticas/${proyecto.id}/excel`);
+      // empresa_id va como query param porque, si el proyecto ya fue eliminado, el backend no
+      // puede llegar a la empresa vía JOIN a la tabla proyectos (ver estadisticas.js).
+      const res = await api.get(`/estadisticas/${proyecto.id}/excel`, { params: { empresa_id: empresa.id } });
       Linking.openURL(res.data.url);
     } catch (error) {
       const mensaje = error.response?.data?.error || 'No se pudo generar el estado financiero.';
@@ -99,6 +102,37 @@ export default function EstadisticasScreen({ route }) {
     } finally {
       setGenerandoExcel(false);
     }
+  };
+
+  // Elimina la ficha COMPLETA de Estadísticas de un proyecto (2026-08-28, a pedido explícito del
+  // usuario): a diferencia de eliminar el proyecto (que NUNCA borra esta ficha), esto sí la borra
+  // para siempre — reservado exclusivamente a Gerencia.
+  const [eliminandoFicha, setEliminandoFicha] = useState(false);
+  const eliminarFichaEstadisticas = (proyecto) => {
+    Alert.alert(
+      'Eliminar estadísticas',
+      `¿Seguro que quieres eliminar por completo el registro financiero de "${proyecto.nombre}"? Esto borra costos, abonos e historial para siempre. Esta acción no se puede deshacer.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            setEliminandoFicha(true);
+            try {
+              await api.delete(`/estadisticas/${proyecto.id}`, { data: { usuario_id: usuario?.id, empresa_id: empresa.id } });
+              setProyectos((anteriores) => anteriores.filter((p) => p.id !== proyecto.id));
+            } catch (error) {
+              const mensaje = error.response?.data?.error || 'No se pudo eliminar la ficha de estadísticas.';
+              console.error('Error eliminando ficha de estadísticas:', error);
+              Alert.alert('Error', mensaje);
+            } finally {
+              setEliminandoFicha(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   // Categoría actualmente abierta (ej. "Carpintería"): cuando no es null, en vez del resumen
@@ -184,7 +218,9 @@ export default function EstadisticasScreen({ route }) {
   const cargarProyectos = async () => {
     setCargandoProyectos(true);
     try {
-      const res = await api.get(`/proyectos/listar/${empresa.id}`);
+      // Incluye tanto los proyectos activos como las fichas "huérfanas" (proyecto ya eliminado,
+      // pero su registro financiero se conserva siempre — ver estadisticas.js en el backend).
+      const res = await api.get(`/estadisticas/proyectos-lista/${empresa.id}`);
       setProyectos(res.data.proyectos);
     } catch (error) {
       console.error('Error cargando proyectos:', error);
@@ -430,14 +466,20 @@ export default function EstadisticasScreen({ route }) {
                 onLongPress={() => setMenuProyecto(proyecto)}
                 delayLongPress={350}
               >
-                <Text style={styles.proyectoNombre}>{proyecto.nombre}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.proyectoNombre}>{proyecto.nombre || 'Proyecto eliminado'}</Text>
+                  {proyecto.proyecto_eliminado ? (
+                    <Text style={styles.badgeEliminado}>Proyecto eliminado — solo consulta</Text>
+                  ) : null}
+                </View>
                 <Text style={styles.proyectoFlecha}>›</Text>
               </TouchableOpacity>
             ))
           )}
         </ScrollView>
 
-        {/* MENÚ: Descargar estado financiero, al mantener presionado un proyecto */}
+        {/* MENÚ: Descargar estado financiero (y, solo Gerencia, Eliminar estadísticas), al
+            mantener presionado un proyecto */}
         <Modal visible={!!menuProyecto} transparent animationType="fade" onRequestClose={() => setMenuProyecto(null)}>
           <TouchableOpacity style={styles.menuFondo} activeOpacity={1} onPress={() => setMenuProyecto(null)}>
             <View style={[styles.menuCaja, { paddingBottom: Math.max(insets.bottom, 20) }]}>
@@ -454,6 +496,21 @@ export default function EstadisticasScreen({ route }) {
                   {generandoExcel ? 'Generando...' : '📊 Descargar estado financiero (Excel)'}
                 </Text>
               </TouchableOpacity>
+              {esGerencia(empresa) && (
+                <TouchableOpacity
+                  style={styles.menuOpcion}
+                  disabled={eliminandoFicha}
+                  onPress={() => {
+                    const proyecto = menuProyecto;
+                    setMenuProyecto(null);
+                    eliminarFichaEstadisticas(proyecto);
+                  }}
+                >
+                  <Text style={[styles.menuOpcionTexto, { color: '#c62828' }]}>
+                    {eliminandoFicha ? 'Eliminando...' : '🗑️ Eliminar estadísticas'}
+                  </Text>
+                </TouchableOpacity>
+              )}
               <TouchableOpacity style={styles.menuOpcion} onPress={() => setMenuProyecto(null)}>
                 <Text style={styles.menuOpcionTexto}>Cancelar</Text>
               </TouchableOpacity>
@@ -478,7 +535,12 @@ export default function EstadisticasScreen({ route }) {
       </TouchableOpacity>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        <Text style={styles.tituloProyecto}>{proyectoSeleccionado.nombre}</Text>
+        <Text style={styles.tituloProyecto}>{proyectoSeleccionado.nombre || 'Proyecto eliminado'}</Text>
+        {estadisticas?.proyecto_eliminado ? (
+          <Text style={styles.badgeEliminadoGrande}>
+            Este proyecto fue eliminado. Estos datos son de solo consulta — no se pueden agregar nuevos costos o abonos.
+          </Text>
+        ) : null}
 
         {cargandoStats ? null : sinDatos ? null : categoriaAbierta && estadisticas ? (
           <>
@@ -505,7 +567,7 @@ export default function EstadisticasScreen({ route }) {
                       <TouchableOpacity
                         key={mov.id}
                         style={styles.abonoCard}
-                        onLongPress={() => abrirMenuMovimiento(mov)}
+                        onLongPress={() => !estadisticas.proyecto_eliminado && abrirMenuMovimiento(mov)}
                         delayLongPress={350}
                       >
                         <View style={{ flex: 1 }}>
@@ -576,17 +638,19 @@ export default function EstadisticasScreen({ route }) {
                 </View>
               </View>
 
-              <View style={styles.filaBotones}>
-                <TouchableOpacity style={styles.botonChicoAgregar} onPress={() => abrirModalCosto('materiales')}>
-                  <Text style={styles.botonChicoAgregarTexto}>+ Materiales</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.botonChicoAgregar} onPress={() => abrirModalCosto('mano_obra')}>
-                  <Text style={styles.botonChicoAgregarTexto}>+ Mano de obra</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.botonChicoAgregar} onPress={() => abrirModalCosto('imprevistos')}>
-                  <Text style={styles.botonChicoAgregarTexto}>+ Imprevistos</Text>
-                </TouchableOpacity>
-              </View>
+              {!estadisticas.proyecto_eliminado && (
+                <View style={styles.filaBotones}>
+                  <TouchableOpacity style={styles.botonChicoAgregar} onPress={() => abrirModalCosto('materiales')}>
+                    <Text style={styles.botonChicoAgregarTexto}>+ Materiales</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.botonChicoAgregar} onPress={() => abrirModalCosto('mano_obra')}>
+                    <Text style={styles.botonChicoAgregarTexto}>+ Mano de obra</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.botonChicoAgregar} onPress={() => abrirModalCosto('imprevistos')}>
+                    <Text style={styles.botonChicoAgregarTexto}>+ Imprevistos</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
 
               {estadisticas.resumen_por_categoria && estadisticas.resumen_por_categoria.length > 0 && (
                 <>
@@ -643,7 +707,7 @@ export default function EstadisticasScreen({ route }) {
                   <TouchableOpacity
                     key={abono.id}
                     style={styles.abonoCard}
-                    onLongPress={() => abrirMenuAbono(abono)}
+                    onLongPress={() => !estadisticas.proyecto_eliminado && abrirMenuAbono(abono)}
                     delayLongPress={350}
                   >
                     <Text style={styles.abonoValor}>{formatearMoneda(abono.valor)}</Text>
@@ -651,9 +715,11 @@ export default function EstadisticasScreen({ route }) {
                   </TouchableOpacity>
                 ))
               )}
-              <TouchableOpacity style={styles.botonSecundario} onPress={abrirModalAbono}>
-                <Text style={styles.botonSecundarioTexto}>+ Registrar abono</Text>
-              </TouchableOpacity>
+              {!estadisticas.proyecto_eliminado && (
+                <TouchableOpacity style={styles.botonSecundario} onPress={abrirModalAbono}>
+                  <Text style={styles.botonSecundarioTexto}>+ Registrar abono</Text>
+                </TouchableOpacity>
+              )}
             </>
           )
         )}
@@ -936,6 +1002,16 @@ const styles = StyleSheet.create({
   },
   proyectoNombre: { fontSize: 16, fontWeight: '600', color: '#222' },
   proyectoFlecha: { fontSize: 22, color: '#ccc' },
+  badgeEliminado: { fontSize: 12, color: '#c62828', marginTop: 4, fontWeight: '600' },
+  badgeEliminadoGrande: {
+    fontSize: 13,
+    color: '#c62828',
+    fontWeight: '600',
+    backgroundColor: '#fdecea',
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 14,
+  },
   botonVolver: { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 4 },
   botonVolverTexto: { color: '#1E90FF', fontSize: 14, fontWeight: '600' },
   tituloProyecto: { fontSize: 20, fontWeight: 'bold', color: '#222', marginBottom: 10 },

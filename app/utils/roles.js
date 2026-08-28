@@ -110,6 +110,15 @@ export function esGerencia(empresa) {
 // necesita ver/llamar/agregar clientes desde su propia pantalla de Clientes) — a pedido
 // explícito del usuario, el dato del cliente asociado a cada proyecto solo debe verse desde
 // Proyectos si el área es Gerencia o Administrativa, nadie más.
+// true para GERENCIA y AREA ADMINISTRATIVA (2026-08-28, a pedido del usuario): antes solo
+// Gerencia podía eliminar proyectos (ver esGerencia arriba); Administrativa pidió la misma
+// facultad. Se creó esta función aparte en vez de ampliar esGerencia porque esa función se usa
+// en otros puntos de la app con el sentido estricto de "solo Gerencia, nadie más" (por ejemplo
+// permisos de Editar Perfil de empresa), y no se debía tocar ese comportamiento.
+export function puedeEliminarProyectos(empresa) {
+  return empresa?.area_nombre === 'GERENCIA' || empresa?.area_nombre === 'AREA ADMINISTRATIVA';
+}
+
 export function puedeVerClienteEnProyectos(empresa) {
   return empresa?.area_nombre === 'GERENCIA' || empresa?.area_nombre === 'AREA ADMINISTRATIVA';
 }
