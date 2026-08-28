@@ -1,12 +1,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import * as Notifications from 'expo-notifications';
+import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { getNavigationGlobal } from './utils/navigationGlobal';
 import { registrarNotificacionesPush } from './utils/notificacionesPush';
+import { temaDesdeColor } from './utils/temas';
 import AreaProyectoScreen from './screens/AreaProyectoScreen';
 import BienvenidaScreen from './screens/BienvenidaScreen';
 import ClientesScreen from './screens/ClientesScreen';
@@ -27,6 +29,25 @@ import SeleccionarEmpresaScreen from './screens/SeleccionarEmpresaScreen';
 import SeleccionarModoScreen from './screens/SeleccionarModoScreen';
 
 const Stack = createNativeStackNavigator();
+
+// FIX (2026-08-27, a pedido del usuario): la barra superior nativa de estas pantallas (donde
+// React Navigation dibuja el título "Proyectos", "Clientes", etc. y la flecha de atrás) traía el
+// color por defecto de React Navigation — blanco/gris muy claro — sin relación con el tema de la
+// empresa. Sobre fondos claros, la barra de estado de Android (hora, batería, notificaciones)
+// también quedaba casi invisible encima de ese gris clarito. Esta función arma las "options" de
+// headerStyle/headerTintColor con el tono FUERTE del tema (empresa.color_hex, el mismo que ya usa
+// EncabezadoLogo) y texto/flecha en blanco — funciona bien porque los 8 temas tienen su tono
+// base oscuro o saturado. Si por algún motivo la pantalla no recibe "empresa" en sus params
+// (no debería pasar en estas rutas), cae a un azul por defecto en vez de romper.
+function opcionesHeaderTema({ route }) {
+  const colorEmpresa = route.params?.empresa?.color_hex || '#1E90FF';
+  const tema = temaDesdeColor(colorEmpresa);
+  return {
+    headerStyle: { backgroundColor: tema.base },
+    headerTintColor: '#fff',
+    headerTitleStyle: { color: '#fff' },
+  };
+}
 
 export default function App() {
   const [cargando, setCargando] = useState(true);
@@ -203,6 +224,10 @@ export default function App() {
   return (
     <SafeAreaProvider>
     <GestureHandlerRootView style={{ flex: 1 }}>
+    {/* FIX (2026-08-27): íconos de la barra de estado (hora, batería, notificaciones) fijos en
+        blanco — todos los tonos "base" de los 8 temas son oscuros/saturados, así que blanco
+        siempre contrasta bien encima, tanto en pantallas con header nativo como sin él. */}
+    <StatusBar style="light" />
     <Stack.Navigator initialRouteName={rutaInicial} screenOptions={{ headerShown: false }}>
       <Stack.Screen name="SeleccionarModo" component={SeleccionarModoScreen} />
       <Stack.Screen name="PerfilEmpresa" component={PerfilEmpresaScreen} />
@@ -215,53 +240,53 @@ export default function App() {
       <Stack.Screen
         name="EditarPerfil"
         component={EditarPerfilScreen}
-        options={{ headerShown: true, title: 'Editar Perfil' }}
+        options={(props) => ({ headerShown: true, title: 'Editar Perfil', ...opcionesHeaderTema(props) })}
       />
       <Stack.Screen
         name="GrupoTrabajo"
         component={GrupoTrabajoScreen}
-        options={{ headerShown: true, title: 'Grupo de Trabajo' }}
+        options={(props) => ({ headerShown: true, title: 'Grupo de Trabajo', ...opcionesHeaderTema(props) })}
       />
       <Stack.Screen
         name="Proyectos"
         component={ProyectosScreen}
-        options={{ headerShown: true, title: 'Proyectos' }}
+        options={(props) => ({ headerShown: true, title: 'Proyectos', ...opcionesHeaderTema(props) })}
       />
       <Stack.Screen
         name="DetalleProyecto"
         component={DetalleProyectoScreen}
-        options={{ headerShown: true, title: 'Proyecto' }}
+        options={(props) => ({ headerShown: true, title: 'Proyecto', ...opcionesHeaderTema(props) })}
       />
       <Stack.Screen
         name="AreaProyecto"
         component={AreaProyectoScreen}
         initialParams={rutaInicial === 'AreaProyecto' ? paramsIniciales : undefined}
-        options={({ route }) => ({ headerShown: true, title: route.params.area.nombre })}
+        options={(props) => ({ headerShown: true, title: props.route.params.area.nombre, ...opcionesHeaderTema(props) })}
       />
       <Stack.Screen
         name="Clientes"
         component={ClientesScreen}
-        options={{ headerShown: true, title: 'Clientes' }}
+        options={(props) => ({ headerShown: true, title: 'Clientes', ...opcionesHeaderTema(props) })}
       />
       <Stack.Screen
         name="Cotizaciones"
         component={CotizacionesScreen}
-        options={{ headerShown: true, title: 'Cotizaciones' }}
+        options={(props) => ({ headerShown: true, title: 'Cotizaciones', ...opcionesHeaderTema(props) })}
       />
       <Stack.Screen
         name="Contratos"
         component={ContratosScreen}
-        options={{ headerShown: true, title: 'Contratos' }}
+        options={(props) => ({ headerShown: true, title: 'Contratos', ...opcionesHeaderTema(props) })}
       />
       <Stack.Screen
         name="RevisarContrato"
         component={RevisarContratoScreen}
-        options={{ headerShown: true, title: 'Revisar Contrato' }}
+        options={(props) => ({ headerShown: true, title: 'Revisar Contrato', ...opcionesHeaderTema(props) })}
       />
       <Stack.Screen
         name="Estadisticas"
         component={EstadisticasScreen}
-        options={{ headerShown: true, title: 'Estadísticas' }}
+        options={(props) => ({ headerShown: true, title: 'Estadísticas', ...opcionesHeaderTema(props) })}
       />
     </Stack.Navigator>
     </GestureHandlerRootView>

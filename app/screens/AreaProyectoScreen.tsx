@@ -7,6 +7,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as MediaLibrary from 'expo-media-library';
 import * as Sharing from 'expo-sharing';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
+import { StatusBar } from 'expo-status-bar';
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Image, KeyboardAvoidingView, Linking, Modal, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -1252,14 +1253,21 @@ export default function AreaProyectoScreen({ route }) {
         hardwareAccelerated
         onRequestClose={cerrarChat}
       >
+        {/* FIX (2026-08-27): este Modal es statusBarTranslucent, así que la barra de estado se
+            pinta ENCIMA de él sin heredar el <StatusBar style="light" /> global de index.tsx —
+            Android volvía a decidir el color de los íconos según el tema del celular, y con
+            fondo blanco (chatHeader) los íconos claros del modo oscuro del celular se perdían
+            (bug reportado con captura). Este StatusBar local fuerza blanco mientras el chat está
+            abierto, igual que el resto de la app. */}
+        <StatusBar style="light" />
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={80}>
           <View style={[styles.chatModalContainer, { backgroundColor: tema.claro }]}>
             {/* paddingTop dinámico: en Android con edgeToEdgeEnabled el paddingTop fijo del estilo no alcanza para esquivar la barra de estado */}
-            <View style={[styles.chatHeader, { paddingTop: Math.max(insets.top, Platform.OS === 'ios' ? 50 : 16) }]}>
+            <View style={[styles.chatHeader, { backgroundColor: tema.base, paddingTop: Math.max(insets.top, Platform.OS === 'ios' ? 50 : 16) }]}>
               <TouchableOpacity onPress={cerrarChat}>
-                <Text style={styles.chatVolver}>‹ Volver</Text>
+                <Text style={[styles.chatVolver, { color: '#fff' }]}>‹ Volver</Text>
               </TouchableOpacity>
-              <Text style={styles.chatTitulo}>{chatAbierto?.nombre}</Text>
+              <Text style={[styles.chatTitulo, { color: '#fff' }]}>{chatAbierto?.nombre}</Text>
               <View style={{ width: 50 }} />
             </View>
 
