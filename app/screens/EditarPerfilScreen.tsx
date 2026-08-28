@@ -275,7 +275,7 @@ export default function EditarPerfilScreen({ route, navigation }) {
             <TextInput style={styles.input} value={bancoNumero} onChangeText={setBancoNumero} placeholder="Ej: 00000000000" placeholderTextColor="#999" keyboardType="number-pad" />
 
             <Text style={styles.label}>Titular de la cuenta</Text>
-            <TextInput style={styles.input} value={bancoTitular} onChangeText={setBancoTitular} placeholder="Ej: Inversiones Obra Blanca S.A.S" placeholderTextColor="#999" />
+            <TextInput style={styles.input} value={bancoTitular} onChangeText={setBancoTitular} placeholder="Ej: Empresa Ejemplo S.A.S" placeholderTextColor="#999" />
           </>
         )}
 
