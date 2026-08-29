@@ -233,7 +233,7 @@ export default function CotizacionesScreen({ route }) {
         style: 'destructive',
         onPress: async () => {
           try {
-            await api.delete(`/cotizaciones/plantillas/${plantilla.id}`);
+            await api.delete(`/cotizaciones/plantillas/${plantilla.id}`, { params: { empresa_id: empresa.id } });
             cargarDatos();
           } catch (error) {
             console.error('Error eliminando plantilla:', error);
@@ -305,6 +305,7 @@ export default function CotizacionesScreen({ route }) {
     setGuardandoEdicionPlantilla(true);
     try {
       await api.put(`/cotizaciones/plantillas/${editandoPlantilla.id}`, {
+        empresa_id: empresa.id,
         nombre: editPlantillaNombre,
         saludo: editPlantillaSaludo,
         parrafo_contexto: editPlantillaParrafoContexto,
